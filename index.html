@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>밤바다 모닥불</title>
+<title>크리스마스 밤바다 모닥불</title>
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -106,16 +106,25 @@ body.coarse #lookBtn { display: none; }
 #proneBtn { font-size: 12px; letter-spacing: -0.06em; }
 .act { width: 62px; height: 62px; border-radius: 50%; border: 2px solid rgba(255, 162, 87, 0.8); background: var(--panel); box-shadow: var(--shadow); font-family: var(--f-display); font-size: 15px; cursor: pointer; touch-action: manipulation; }
 .act:active { background: rgba(255, 138, 61, 0.35); }
+.act:disabled { opacity: 0.4; }
+#shotBtn { display: inline-flex; align-items: center; gap: 6px; }
+#shotBtn svg { width: 17px; height: 17px; flex: none; }
+#flash { position: fixed; inset: 0; z-index: 30; background: #fff; opacity: 0; pointer-events: none; }
+#flash.on { animation: shutter 0.32s ease-out; }
+@keyframes shutter { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+#shotToast { left: 50%; top: calc(env(safe-area-inset-top, 0px) + 14px); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); font-size: 13.5px; pointer-events: none; white-space: nowrap; z-index: 31; }
+#shotToast img { width: 72px; height: 45px; object-fit: cover; border-radius: 9px; display: block; background: var(--night); }
 body.coarse #log { width: min(380px, calc(100vw - 110px)); }
 #stick { position: fixed; z-index: 9; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; border: 2px solid var(--line); background: rgba(255,243,223,.1); pointer-events: none; }
 #knob { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(255,162,87,.6); border: 2px solid rgba(255,200,150,.9); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 560px) { #hint { top: calc(env(safe-area-inset-top, 0px) + 104px); max-width: calc(100vw - 24px); } #sendBtn { display: none; } .btn { padding: 9px 12px; font-size: 14.5px; } }
-@media (prefers-reduced-motion: reduce) { #hint, #log div { transition: none; } }
+@media (prefers-reduced-motion: reduce) { #hint, #log div { transition: none; } #flash.on { animation-duration: 0.12s; } }
 </style>
 </head>
 <body>
-<canvas id="scene" tabindex="0" aria-label="달밤 바닷가 모닥불 3D 화면"></canvas>
+<canvas id="scene" tabindex="0" aria-label="크리스마스 달밤 바닷가 모닥불 3D 화면"></canvas>
 
 <div id="badge" class="hud" hidden>
   <div class="row"><span id="dot"></span><span id="count">혼자 둘러보는 중입니다</span></div>
@@ -128,6 +137,7 @@ body.coarse #log { width: min(380px, calc(100vw - 110px)); }
 <div id="tools" class="hud" hidden>
   <button id="ctxBtn" class="btn" type="button" hidden>앉기</button>
   <button id="lookBtn" class="btn" type="button" aria-pressed="true">마우스 시점 켜짐</button>
+  <button id="shotBtn" class="btn" type="button" aria-label="사진 찍기 (P)" title="사진 찍기 (P)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>사진</button>
   <button id="lanternBtn" class="btn" type="button">풍등 날리기</button>
   <button id="fwBtn" class="btn" type="button">폭죽</button>
 </div>
@@ -147,13 +157,15 @@ body.coarse #log { width: min(380px, calc(100vw - 110px)); }
   <button id="jumpBtn" class="act big" type="button">점프</button>
 </div>
 <div id="stick" hidden><div id="knob"></div></div>
+<div id="flash" aria-hidden="true"></div>
+<div id="shotToast" class="hud" role="status" hidden><img alt=""><span></span></div>
 
 <div id="entry">
   <form class="card" id="entryForm" autocomplete="off">
-    <div class="eyebrow">함께 앉는 밤바다</div>
-    <h1>밤바다 모닥불</h1>
-    <p class="lead">달빛 아래 모래사장, 가운데에서 모닥불이 타고 있습니다.</p>
-    <p>이 링크를 연 사람들이 같은 바닷가에 모입니다. 통나무에 앉아 이야기하고, 장작을 넣고, 풍등과 폭죽을 함께 띄워 보세요.</p>
+    <div class="eyebrow">함께 보내는 성탄 밤</div>
+    <h1>크리스마스 밤바다 모닥불</h1>
+    <p class="lead">달빛 아래 모래사장, 장식 사이로 모닥불이 따뜻하게 타고 있습니다.</p>
+    <p>이 링크를 연 사람들이 같은 바닷가에 모입니다. 통나무에 앉아 이야기하고, 장작을 넣고, 밤바다에서 헤엄치고, 풍등과 폭죽을 함께 띄워 보세요.</p>
     <div class="field">
       <label for="nick">부를 이름 (선택)</label>
       <input id="nick" maxlength="20" placeholder="비워 두면 '나그네'로 보입니다" aria-describedby="nickErr">
@@ -169,14 +181,14 @@ body.coarse #log { width: min(380px, calc(100vw - 110px)); }
     </div>
     <div id="loadRow" class="load" hidden><div class="track"><div id="loadBar"></div></div><span id="loadTxt">바닷가 풍경을 불러오는 중…</span></div>
     <button id="enterBtn" type="submit">입장하기</button>
-    <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). Shift 달리기 · Q 대시 · Space 점프 · C 구르기 · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1 춤 · 2 환호 · 3 끄덕 · E 통나무에 앉기/장작 넣기입니다.</span></div>
+    <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). Shift 달리기 · Q 대시 · Space 점프 · C 구르기 · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1 춤 · 2 환호 · 3 끄덕 · E 통나무에 앉기/장작 넣기 · P 사진입니다. 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기).</span></div>
   </form>
 </div>
 
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 import { loadAvatarKit, createAvatar, CHARACTERS as KIT_CHARS } from './bf/kit/avatar.js';
-import { createController } from './bf/kit/controller.js';
+import { createController, TUNING as KIT_TUNING } from './bf/kit/controller.js';
 import { initNames, claimNick, signPresence, verifyPeer, myNick as claimedNick } from './bf/names.js';
 
 // ---------- small helpers ----------
@@ -221,7 +233,7 @@ scene.fog = new THREE.FogExp2('#2c3170', 0.0085);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1200);
 camera.rotation.order = 'YXZ';
 const MOON_DIR = new THREE.Vector3(0.25, 0.32, -1).normalize();
-const WATERLINE_Z = -14, WADE_Z = -15;
+const WATERLINE_Z = -14, SEA_Z = -40;   // still water y = 0 along the waterline; the sea is open to swimmers out to z = -40
 
 // ---------- lights (avatars and an unbaked fallback world) ----------
 const hemi = new THREE.HemisphereLight('#a9b2ff', '#4a3a52', 0.95);
@@ -232,12 +244,13 @@ let fireLightScale = 1;           // beach.json bakedFireScale (baked world alre
 // ---------- world data: beach.json when present, SPEC fallback otherwise ----------
 const W = {
   height: null, seats: [], blocks: [], fire: { x: 0, z: 0, y: 0 }, woodPile: { x: 2.6, z: 1.4 },
-  bounds: { x0: -38, x1: 38, z0: WADE_Z, z1: 28 }, materialMode: null, bakedFireScale: null, shoreline: null, source: 'fallback',
+  bounds: { x0: -38, x1: 38, z0: SEA_Z, z1: 28 }, landBounds: { x0: -38, x1: 38, z0: -13, z1: 28 }, materialMode: null, bakedFireScale: null, shoreline: null, source: 'fallback',
 };
-// SPEC slope: ~0 at the waterline (z = -14), ~0.4 at the fire, ~1.5 at z = 25, gentle dunes beyond; shelving under the water
+// SPEC slope: ~0 at the waterline (z = -14), ~0.4 at the fire, ~1.5 at z = 25, gentle dunes beyond; a seabed shelving to -3 m under the water
+// (beach.json already carries its own seabed out to z = -40, deepening to about -7 m)
 function slopeH(x, z) {
   let h;
-  if (z < WATERLINE_Z) h = (z - WATERLINE_Z) * 0.08;
+  if (z < WATERLINE_Z) h = Math.max(-3, (z - WATERLINE_Z) * 0.12);
   else if (z < 0) h = 0.4 * (z - WATERLINE_Z) / 14;
   else if (z < 25) h = 0.4 + 1.1 * z / 25;
   else h = 1.5 + (z - 25) * 0.18;
@@ -250,6 +263,7 @@ function heightAt(x, z) {
   const a = d[iz * n + ix], b = d[iz * n + ix + 1], c = d[(iz + 1) * n + ix], e = d[(iz + 1) * n + ix + 1];
   return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + e * tx) * tz;
 }
+const validBlock = (b) => b && ((b.type === 'circle' && [b.x, b.z, b.r].every(Number.isFinite)) || (b.type === 'box' && [b.x0, b.x1, b.z0, b.z1].every(Number.isFinite)));
 function parseWorld(j) {
   if (!j || typeof j !== 'object') return false;
   const h = j.height;
@@ -258,7 +272,8 @@ function parseWorld(j) {
     W.height = { x0: +h.x0, z0: +h.z0, dx: +h.dx, dz: +(h.dz || h.dx), nx: h.nx | 0, nz: h.nz | 0, data };
   }
   if (j.bounds && [j.bounds.x0, j.bounds.x1, j.bounds.z0, j.bounds.z1].every(Number.isFinite)) {
-    W.bounds = { x0: j.bounds.x0, x1: j.bounds.x1, z0: Math.min(j.bounds.z0, WADE_Z), z1: j.bounds.z1 };   // shallow water is walkable to z = -15
+    W.landBounds = { x0: j.bounds.x0, x1: j.bounds.x1, z0: j.bounds.z0, z1: j.bounds.z1 };
+    W.bounds = { x0: Math.max(j.bounds.x0, -38), x1: Math.min(j.bounds.x1, 38), z0: SEA_Z, z1: j.bounds.z1 };   // the sea is open to z = -40 (swimming), between the headlands
   }
   if (j.fire && Number.isFinite(j.fire.x) && Number.isFinite(j.fire.z)) {
     const g = heightAt(j.fire.x, j.fire.z), y = Number.isFinite(j.fire.y) ? j.fire.y : g;
@@ -275,9 +290,7 @@ function parseWorld(j) {
     }
     if (seats.length) W.seats = seats;
   }
-  if (Array.isArray(j.blocks)) {
-    W.blocks = j.blocks.filter((b) => b && ((b.type === 'circle' && [b.x, b.z, b.r].every(Number.isFinite)) || (b.type === 'box' && [b.x0, b.x1, b.z0, b.z1].every(Number.isFinite)))).slice(0, 2000);
-  }
+  if (Array.isArray(j.blocks)) W.blocks = j.blocks.filter(validBlock).slice(0, 2000);
   if (Array.isArray(j.shoreline)) {   // [[x, z], ...] sorted by x: where the sand meets the water (handed to ocean.js)
     const pts = j.shoreline.slice(0, 4000).filter((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])).map((p) => [p[0], p[1]]);
     if (pts.length >= 2 && pts.every((p, i) => i === 0 || p[0] >= pts[i - 1][0])) W.shoreline = pts;
@@ -290,17 +303,51 @@ function parseWorld(j) {
 
 // ---------- collision ----------
 const R_AV = 0.3;   // the kit controller tests blocked(x, z) at the avatar centre only: keep 0.3 m off logs, rocks and the fire ring
-function blocked(x, z) {
-  for (const b of W.blocks) {
+function hitBlocks(list, x, z) {
+  for (const b of list) {
     if (b.type === 'circle') { if ((x - b.x) ** 2 + (z - b.z) ** 2 < (b.r + R_AV) ** 2) return true; }
     else if (x > Math.min(b.x0, b.x1) - R_AV && x < Math.max(b.x0, b.x1) + R_AV && z > Math.min(b.z0, b.z1) - R_AV && z < Math.max(b.z0, b.z1) + R_AV) return true;
   }
   return false;
 }
+const blocked = (x, z) => hitBlocks(W.blocks, x, z) || hitBlocks(XM.blocks, x, z);   // beach.json + bf/xmas.js decorations
 function walkable(x, z) {
   const B = W.bounds;
-  return x >= B.x0 && x <= B.x1 && z >= Math.max(B.z0, WADE_Z) && z <= B.z1 && !blocked(x, z);
+  return x >= B.x0 && x <= B.x1 && z >= Math.max(B.z0, SEA_Z) && z <= B.z1 && !blocked(x, z);
 }
+
+// ---------- water surface: still level y = 0; with bf/ocean.js the same swell its vertex shader draws (vertical part; the
+// near-shore swash is left out: swimmers float from ~6 m off the shoreline). Fallback water is flat: a gentle bob instead. ----------
+const SWELLS = [[0.10, 26, 0.12, 0.0], [-0.30, 15, 0.06, 1.7], [0.42, 10, 0.035, 4.1]].map(([dx, L, A, ph]) => {
+  const n = Math.hypot(dx, 1), k = TAU / L; return { dx: dx / n, dz: 1 / n, k, c: Math.sqrt(9.8 / k), A, ph };
+});
+const SURF_SETS = [[7.3, 0.0, 1.0], [11.9, 0.37, 0.55]];   // breaker sets (period, phase, amplitude), as in ocean.js
+let simT = 0;                                              // = the t handed to ocean.update this frame
+const smooth = (a, b, x) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+function shoreZ(x) {
+  const S = W.shoreline; if (!S) return WATERLINE_Z;
+  if (x <= S[0][0]) return S[0][1];
+  for (let i = 1; i < S.length; i++) if (x <= S[i][0]) { const [xa, za] = S[i - 1], [xb, zb] = S[i]; return za + (zb - za) * ((x - xa) / ((xb - xa) || 1)); }
+  return S[S.length - 1][1];
+}
+function bumpAt(s, phi, amp) {
+  if (phi >= 0.6) return 0;
+  const sF = 16 * (1 - phi / 0.6), grow = smooth(16, 5, sF) * (1 - smooth(4, 1.2, sF)), q = (s - sF) / (s < sF ? 0.9 : 2.6);
+  return amp * 0.1 * grow * Math.exp(-q * q);
+}
+function waterY(x, z) {
+  if (!FX.real.ocean) return reduceMotion ? 0 : 0.035 * Math.sin(simT * 1.3 + x * 0.21 + z * 0.17);
+  const s = shoreZ(x) - z, m = smooth(4, 30, s) * (1 - smooth(110, 160, s));
+  let y = 0;
+  for (const w of SWELLS) y += w.A * m * Math.sin(w.k * (w.dx * x + w.dz * z - w.c * simT) + w.ph);
+  SURF_SETS.forEach((st, k) => {
+    const v = simT / st[0] + st[1] + 0.05 * Math.sin(x * 0.043 + 1.3 * k) + 0.025 * Math.sin(x * 0.13 + 2.1 * k);
+    y += bumpAt(s, v - Math.floor(v), st[2]);
+  });
+  return y;
+}
+const WATER = { level: 0, surface: waterY };
+const SWIM_SINK = KIT_TUNING.swimSink;
 
 // ---------- fallback world (shown until/unless bf/beach.glb loads) ----------
 const fb = { terrain: null, props: new THREE.Group(), sky: new THREE.Group(), water: null };
@@ -482,7 +529,8 @@ function buildFallbackLanterns() {
 }
 
 // ---------- effects: fallbacks now, the real modules replace them as they load ----------
-const FX = { sky: null, ocean: null, fire: null, lan: null, real: { sky: false, ocean: false, fire: false, lanterns: false, glb: false, json: false } };
+const FX = { sky: null, ocean: null, fire: null, lan: null, xmas: null, real: { sky: false, ocean: false, fire: false, lanterns: false, glb: false, json: false, xmas: false } };
+const XM = { mod: null, blocks: [], hats: 0 };   // bf/xmas.js (Christmas decorations, Santa hats); everything works without it
 function initFallbackWorld() {
   const f = fallbackSeats();
   if (!W.seats.length) W.seats = f.seats;
@@ -560,6 +608,16 @@ async function loadWorld() {
     const l = m.buildLanterns(THREE, scene, { quality: QUALITY });
     if (!l) return;
     FX.lan.dispose(); FX.lan = l; FX.real.lanterns = true;
+  });
+  mod('xmas.js', 'xmas', (m) => {   // decorations sit on the sand: hand it the beach bounds, not the swimming area
+    if (typeof m.buildXmas !== 'function') return;
+    const x = m.buildXmas(THREE, scene, { groundAt: heightAt, fire: { ...W.fire }, seats: W.seats.map((q) => ({ ...q })), woodPile: { ...W.woodPile },
+      bounds: { ...W.landBounds }, waterlineZ: WATERLINE_Z, quality: QUALITY, renderer });
+    if (!x) return;
+    FX.xmas = x; FX.real.xmas = true; XM.mod = x;
+    if (Array.isArray(x.blocks)) XM.blocks = x.blocks.filter(validBlock).slice(0, 500);
+    for (const rec of [meRec, ...others.values()]) if (rec) hatFor(rec.av);
+    if (meRec && blocked(me.x, me.z)) settleOnGround();
   });
   await Promise.all(jobs);
   worldReady = true;
@@ -686,7 +744,7 @@ canvas.addEventListener('mousemove', (e) => {   // locked: always; refused: hove
 $('lookBtn').addEventListener('click', () => setLook(lookMode === 'mouse' ? 'drag' : 'mouse'));
 for (const ev of ['focus', 'blur']) $('chatInput').addEventListener(ev, () => setTimeout(refreshLook, 0));
 // movement and action keys belong to the kit controller (Shift run, Q dash, Space jump, C roll, X sit, Z prone, V wave, 1/2/3 emotes);
-// the page keeps Enter (chat), Escape (leave the chat box) and E (sit on a log / add wood)
+// the page keeps Enter (chat), Escape (leave the chat box), E (sit on a log / add wood) and P (screenshot)
 window.addEventListener('keydown', (e) => {
   if (!entered) return;
   initAudio();
@@ -695,16 +753,18 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyM' && !e.repeat && !coarse) { setLook(lookMode === 'mouse' ? 'drag' : 'mouse'); return; }
   if (e.repeat) return;
   if (e.code === 'KeyE') interact();
+  else if (e.code === 'KeyP') takeShot();
 });
 
 let camLift = 0;
 function updateCamera(dt) {
   const k = 1 - Math.exp(-dt * 10);
   cam.tx += (me.x - cam.tx) * k; cam.tz += (me.z - cam.tz) * k;
-  const g = heightAt(me.x, me.z), st = meRec ? meRec.ctrl.state : null;
-  const baseY = mySeat ? mySeat.y + 1.0 : g + (st && st.act === 'prone' ? 0.9 : st && st.act === 'sit' ? 1.0 : 1.5);
-  cam.ty += (baseY - cam.ty) * (1 - Math.exp(-dt * 6));
-  const lift = st && !st.grounded ? clamp(me.y - g, 0, 4) * 0.7 : 0;   // follow jumps part of the way
+  const g = heightAt(me.x, me.z), st = meRec ? meRec.ctrl.state : null, swim = !!(st && st.swim === 2);
+  const baseY = mySeat ? mySeat.y + 1.0 : swim ? me.y + SWIM_SINK + 0.65 : g + (st && st.act === 'prone' ? 0.9 : st && st.act === 'sit' ? 1.0 : 1.5);
+  cam.ty += (baseY - cam.ty) * (1 - Math.exp(-dt * (swim ? 4 : 6)));
+  const floor = swim ? Math.max(g, waterY(me.x, me.z) - SWIM_SINK) : g;   // a leap out of the water lifts from the surface, not the seabed
+  const lift = st && !st.grounded ? clamp(me.y - floor, 0, 4) * 0.7 : 0;   // follow jumps part of the way
   camLift += (lift - camLift) * (1 - Math.exp(-dt * 8));
   const TY = cam.ty + camLift;
   const cp = Math.cos(cam.pitch), dx = Math.sin(cam.yaw) * cp, dy = Math.sin(cam.pitch), dz = Math.cos(cam.yaw) * cp;
@@ -714,8 +774,8 @@ function updateCamera(dt) {
     if (TY + dy * d < heightAt(px, pz) + 0.3) { allow = Math.max(0.8, d - 0.3); break; }
   }
   cam.cur += (allow - cam.cur) * (allow < cam.cur ? Math.min(1, dt * 18) : Math.min(1, dt * 3));
-  const d = cam.cur, cx = cam.tx + dx * d, cz = cam.tz + dz * d;
-  camera.position.set(cx, Math.max(heightAt(cx, cz) + 0.3, TY + dy * d), cz);
+  const d = cam.cur, cx = cam.tx + dx * d, cz = cam.tz + dz * d, gy = heightAt(cx, cz);
+  camera.position.set(cx, Math.max(gy + 0.3, gy < 0.05 ? waterY(cx, cz) + 0.35 : -Infinity, TY + dy * d), cz);   // never under the sand or the sea
   camera.lookAt(cam.tx, TY + 0.1 + Math.max(0, -cam.pitch) * 9, cam.tz);
   if (meRec) meRec.av.root.visible = entered && d > 0.9;
 }
@@ -763,10 +823,32 @@ function simpleAvatar(color) {   // only when bf/kit/ failed to load: a plain fi
 function makeAvatar(ch, color) {
   const av = kitState.ok ? createAvatar(ch, color) : simpleAvatar(color);
   av.root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) addFill(m); });
+  hatFor(av);
   return av;
 }
+// Santa hat from bf/xmas.js (brim radius 1 at its origin, +Y up): on the kit's head bone so it follows every animation,
+// brim ≈ 0.5 × head width (the narrower of width / depth: hair buns widen some heads), seated a little below the crown and
+// tipped back (the tip already droops toward -Z, the back of a Kenney head); a throwing makeHat() just leaves heads bare.
+// The hat is self-lit (no addFill) and shares the module's geometry: we never dispose hats, and never call xmas.dispose().
+const HAT_BRIM = 0.5, HAT_SINK = 0.16;
+function hatFor(av) {
+  if (!XM.mod || !av || av.hat || typeof XM.mod.makeHat !== 'function') return;
+  try {
+    const hat = XM.mod.makeHat(); if (!hat || !hat.isObject3D) return;
+    const hb = av.headBox;
+    if (av.head && hb) {   // bone space, model units (the avatar's scale comes from the model)
+      const w = Math.min(hb.max.x - hb.min.x, hb.max.z - hb.min.z);
+      hat.scale.setScalar(w * HAT_BRIM);
+      hat.position.set((hb.min.x + hb.max.x) / 2, hb.max.y - (hb.max.y - hb.min.y) * HAT_SINK, (hb.min.z + hb.max.z) / 2 - w * 0.05);
+      hat.rotation.set(-0.12, 0, 0.06);
+      av.head.add(hat);
+    } else { hat.scale.setScalar(0.2); hat.position.set(0, av.headY - 0.06, 0); hat.rotation.y = Math.PI; av.root.add(hat); }   // simple figure (no kit): root faces -Z
+    hat.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+    av.hat = hat; XM.hats++;
+  } catch (e) { console.warn('[bonfire] santa hat skipped:', e && e.message); }
+}
 function makeController(av, local, spawn) {
-  return createController({ avatar: av, groundY: heightAt, blocked: (x, z) => !walkable(x, z), input: local ? 'keyboard' : 'none', spawn, onAction: local ? onMyAction : null });
+  return createController({ avatar: av, groundY: heightAt, blocked: (x, z) => !walkable(x, z), input: local ? 'keyboard' : 'none', spawn, onAction: local ? onMyAction : null, water: WATER });
 }
 function onMyAction(act) {   // the kit started one of my actions: tell everyone now (the 10 Hz stream carries the motion)
   if (act === 'wave') waveEffects();
@@ -779,12 +861,13 @@ function stepLocal(dt) {
   if (mySeat && (s.act !== 'sit' || s.seat !== mySeat.id)) { mySeat = null; sendPresence(performance.now(), true); refreshCtx(); }   // moved / jumped / X: off the log
   return s.speed;
 }
-function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar }; }   // x y z r l a as t (s while on a log)
+function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar }; }   // x y z r l a as t (s while on a log, w in the water)
 function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the kit's applyNet
   const g = heightAt(x, z), o = { x, z };
-  const y = num(d.y, g - 1, g + 6); if (y !== null) o.y = y;
+  const y = num(d.y, g - 1, Math.max(g + 6, 2)); if (y !== null) o.y = y;   // swimmers float metres above a deep seabed
   const r = num(d.r, -7, 7); if (r !== null) o.r = r;
-  if (Number.isInteger(d.l) && d.l >= 0 && d.l <= 12) o.l = d.l;
+  if (Number.isInteger(d.l) && d.l >= 0 && d.l <= 14) o.l = d.l;
+  if (d.w === 1 || d.w === 2) o.w = d.w;   // 1 wading, 2 swimming
   if (typeof d.a === 'string' && ACT_CODES.has(d.a)) o.a = d.a;
   if (Number.isInteger(d.as) && d.as >= 0 && d.as <= 1e9) o.as = d.as;
   const t = num(d.t, 0, 1e6); if (t !== null) o.t = t;
@@ -796,7 +879,10 @@ function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the ki
   rec.ctrl.applyNet(o);
 }
 const POSTURE_HEAD = { sit: 0.66, prone: 0.42 };
-const avatarTagY = (rec, extra) => rec.av.headY * (POSTURE_HEAD[rec.ctrl.state.act] || 1) + extra;
+function avatarTagY(rec, extra) {
+  const st = rec.ctrl.state;
+  return rec.av.headY * (st.swim === 2 && st.grounded ? (st.speed > 0.3 ? 0.66 : 0.86) : (POSTURE_HEAD[st.act] || 1)) + extra;
+}
 
 // ---------- avatars: records, labels, bubbles ----------
 const NEUTRAL = '#8a7f72';
@@ -997,7 +1083,97 @@ function launchFirework() {
   return true;
 }
 
-// ---------- audio: waves, crackle by distance, pops, a soft chime for waves of the hand ----------
+// ---------- water effects: ripple rings + splash drops on the surface around swimmers and waders (mine and remote), pooled ----------
+const SWF = (() => {
+  const NR = coarse ? 16 : 28, ND = coarse ? 90 : 180;
+  const ringTex = canvasTex(128, 128, (g) => {
+    const gr = g.createRadialGradient(64, 64, 34, 64, 64, 63);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.9)'); gr.addColorStop(0.75, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  });
+  const dotTex = canvasTex(32, 32, (g) => { const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); });
+  const ringGeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
+  const rings = [];
+  for (let i = 0; i < NR; i++) {
+    const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ map: ringTex, color: '#d6e2ff', transparent: true, opacity: 0, depthWrite: false }));
+    m.visible = false; m.renderOrder = 2; scene.add(m); rings.push({ m, age: 0, life: 1, r0: 0.3, r1: 1, op: 0.5 });
+  }
+  let ri = 0;
+  const pos = new Float32Array(ND * 3).fill(-999), vel = new Float32Array(ND * 3), dlife = new Float32Array(ND);
+  const dgeo = new THREE.BufferGeometry(); dgeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const drops = new THREE.Points(dgeo, new THREE.PointsMaterial({ map: dotTex, color: '#e6eeff', size: 0.09, transparent: true, opacity: 0.85, depthWrite: false }));
+  drops.frustumCulled = false; drops.renderOrder = 2; scene.add(drops);
+  let di = 0, alive = 0;
+  function ring(x, z, r0, r1, life, op) {
+    const o = rings[ri]; ri = (ri + 1) % NR;
+    o.x = x; o.z = z; o.age = 0; o.life = life; o.r0 = r0; o.r1 = r1; o.op = op; o.m.visible = true;
+  }
+  function splash(x, z, n, sp) {
+    const y = waterY(x, z);
+    for (let k = 0; k < (coarse ? Math.ceil(n / 2) : n); k++) {
+      const i = di; di = (di + 1) % ND;
+      const a = Math.random() * TAU, h = (0.35 + Math.random() * 0.65) * sp;
+      pos[i * 3] = x + Math.cos(a) * 0.15; pos[i * 3 + 1] = y + 0.05; pos[i * 3 + 2] = z + Math.sin(a) * 0.15;
+      vel[i * 3] = Math.cos(a) * h * 0.45; vel[i * 3 + 1] = h; vel[i * 3 + 2] = Math.sin(a) * h * 0.45; dlife[i] = 1.6;
+    }
+    alive = 2;
+  }
+  function update(dt) {
+    for (const o of rings) {
+      if (!o.m.visible) continue;
+      o.age += dt; const u = o.age / o.life;
+      if (u >= 1) { o.m.visible = false; continue; }
+      const r = o.r0 + (o.r1 - o.r0) * (1 - (1 - u) * (1 - u));
+      o.m.scale.set(r, 1, r); o.m.position.set(o.x, waterY(o.x, o.z) + 0.04, o.z); o.m.material.opacity = o.op * (1 - u);
+    }
+    if (alive <= 0) return;
+    let any = false;
+    for (let i = 0; i < ND; i++) {
+      if (dlife[i] <= 0) continue;
+      dlife[i] -= dt; vel[i * 3 + 1] -= 9.8 * dt;
+      pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
+      if (dlife[i] <= 0 || (vel[i * 3 + 1] < 0 && pos[i * 3 + 1] < waterY(pos[i * 3], pos[i * 3 + 2]))) { dlife[i] = 0; pos[i * 3 + 1] = -999; } else any = true;
+    }
+    dgeo.attributes.position.needsUpdate = true;
+    if (!any) alive--;
+  }
+  return { ring, splash, update };
+})();
+// per avatar: big splash on entering deep water (my kit's splash counter; remote: landing in / reaching deep water),
+// a spray when leaping out, steady stroke ripples while swimming, small kicks while wading
+function swimFx(rec, dt, mine) {
+  const st = rec.ctrl.state, p = rec.av.root.position, f = rec.wfx || (rec.wfx = { sw: st.swim, air: !st.grounded, t: 0, n: st.splash, side: 1 });
+  let big = false;
+  if (mine) { big = st.splash > f.n; f.n = st.splash; }
+  else {
+    big = st.swim === 2 && st.grounded && (f.sw !== 2 || f.air);
+    if (big) { const t = performance.now(); if (t < (f.bigUntil || 0)) big = false; else f.bigUntil = t + 500; }   // per peer: a flapping packet stream can't spam splashes
+  }
+  if (st.swim === 2 && !st.grounded && !f.air) { SWF.splash(p.x, p.z, 12, 2.4); SWF.ring(p.x, p.z, 0.3, 1.4, 1.1, 0.55); if (mine) splashSound(0.12); }
+  f.sw = st.swim; f.air = !st.grounded;
+  if (big) {
+    SWF.splash(p.x, p.z, 26, 3.4); SWF.ring(p.x, p.z, 0.4, 2.2, 1.6, 0.7); SWF.ring(p.x, p.z, 0.2, 1.2, 1.1, 0.5);
+    if (mine || Math.hypot(p.x - me.x, p.z - me.z) < 14) splashSound(mine ? 0.22 : 0.12);
+  }
+  f.t -= dt;
+  if (f.t > 0 || !st.grounded) return;
+  if (st.swim === 2) {
+    const moving = st.speed > 0.4, sn = Math.sin(st.ry), cs = Math.cos(st.ry);
+    SWF.ring(p.x + sn * 0.3, p.z + cs * 0.3, 0.25, moving ? 1.3 : 0.9, moving ? 1.2 : 1.8, moving ? 0.45 : 0.3);
+    if (moving) {   // the hand entering the water ahead, alternating sides
+      f.side = -f.side;
+      SWF.splash(p.x - sn * 0.55 + cs * 0.25 * f.side, p.z - cs * 0.55 - sn * 0.25 * f.side, 4, 1.4);
+      if (mine) splashSound(0.04);
+    }
+    f.t = moving ? 0.55 / clamp(st.speed / KIT_TUNING.swim, 0.8, 2.2) : 1.4;
+  } else if (st.swim === 1 && st.speed > 0.6) {
+    SWF.ring(p.x, p.z, 0.2, 0.8, 0.9, 0.35); SWF.splash(p.x, p.z, 3, 1.1);
+    if (mine) splashSound(0.025);
+    f.t = 0.32;
+  } else f.t = 0.2;
+}
+
+// ---------- audio: waves, crackle by distance, pops, a soft chime for waves of the hand, water splashes ----------
 let actx = null, master = null, sfx = null, waveGain = null, crackle = null, noiseBuf = null;
 function getNoise(ctx) {
   if (noiseBuf) return noiseBuf;
@@ -1061,6 +1237,16 @@ function updateAudio(t) {
   waveGain.gain.setTargetAtTime(0.16 * wl * near, actx.currentTime, 0.25);
   const d = Math.hypot(me.x - W.fire.x, me.z - W.fire.z);
   if (crackle) { try { crackle.setLevel(Math.pow(clamp(1 - d / 16, 0, 1), 1.6) * clamp(0.45 + fuel * 0.45, 0, 1)); } catch (e) { crackle = null; } }
+}
+let whiteBuf = null;
+function splashSound(level) {   // soft procedural splash: a white-noise burst through a falling bandpass
+  if (!actx || actx.state !== 'running' || !evtOk('*', 'splash', 90)) return;
+  if (!whiteBuf) { whiteBuf = actx.createBuffer(1, actx.sampleRate * 0.6, actx.sampleRate); const d = whiteBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const t = actx.currentTime, src = actx.createBufferSource(), bp = actx.createBiquadFilter(), g = actx.createGain(), len = 0.12 + level * 1.4;
+  src.buffer = whiteBuf; src.playbackRate.value = 0.7 + Math.random() * 0.5;
+  bp.type = 'bandpass'; bp.Q.value = 0.9; bp.frequency.setValueAtTime(1500 + Math.random() * 900, t); bp.frequency.exponentialRampToValueAtTime(420, t + len);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(level, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  src.connect(bp); bp.connect(g); g.connect(sfx); src.start(t); src.stop(t + len + 0.05);
 }
 function chime(seed) {
   if (!actx || actx.state !== 'running' || !evtOk('*', 'chime', 250)) return;
@@ -1227,7 +1413,7 @@ function evtOk(key, kind, ms) {
   if (lastEvt.size > 1000) lastEvt.clear();
   lastEvt.set(k, now); return true;
 }
-const P_BOUNDS = { x0: -60, x1: 60, z0: -40, z1: 60 };
+const P_BOUNDS = { x0: -60, x1: 60, z0: SEA_Z, z1: 60 };
 let mqIn = 0, mqPresIn = 0;
 function onMqMessage(topic, payload) {
   mqIn++;
@@ -1341,7 +1527,7 @@ function sendPresence(now, full) {   // >= 10 Hz while anything changes, at once
   const urgent = full || mq.pend;
   if (now - mq.lastSent < (urgent ? 45 : 90)) { if (full) mq.pend = true; return; }
   const f = presenceFields(), seat = mySeat ? mySeat.id : null;
-  const sig = [f.x, f.y, f.z, f.r, f.l, f.as, f.s || '', seat || ''].join(',');
+  const sig = [f.x, f.y, f.z, f.r, f.l, f.as, f.s || '', f.w || 0, seat || ''].join(',');
   if (!urgent && sig === mq.lastSig && now - mq.lastSent < 1000) return;
   mq.lastSent = now; mq.lastSig = sig; mq.pend = false;
   const claimed = nickState === 'ok' ? claimedNick() : '';
@@ -1376,6 +1562,92 @@ $('emoteBtn').addEventListener('click', () => {   // one button cycles the emote
   emoteI = (emoteI + 1) % EMOTES.length;
   $('emoteBtn').textContent = EMOTES[emoteI][1]; $('emoteBtn').setAttribute('aria-label', '감정 표현: ' + EMOTES[emoteI][1]);
 });
+// ---------- screenshot (camera button / P): the 3D view only (HUD is DOM, name sprites hidden for the shot) composited on a 2D canvas
+// with nicknames drawn at their heads and a small caption. Rendered and read in the same task, so no preserveDrawingBuffer.
+// Saving: claude.ai downloads capability → phone share sheet → <a download>. ----------
+let dlCap = null;   // resolved once in the background: use() can take up to 10 s to answer null outside claude.ai, never wait on it
+(async () => {
+  try { const dl = (window.claude && typeof window.claude.use === 'function') ? await window.claude.use('downloads') : null; dlCap = dl && typeof dl.save === 'function' ? dl : null; } catch (e) { dlCap = null; }
+})();
+const pad2 = (n) => String(n).padStart(2, '0');
+let shotBusy = false, lastShot = null, toastTimer = 0, toastUrl = null;
+const shotV = new THREE.Vector3();
+function renderShot() {
+  const hidden = [];
+  for (const rec of [meRec, ...others.values()]) if (rec && rec.label && rec.label.visible) { rec.label.visible = false; hidden.push(rec.label); }
+  renderer.render(scene, camera);
+  const out = document.createElement('canvas'); out.width = canvas.width; out.height = canvas.height;
+  out.getContext('2d').drawImage(canvas, 0, 0);   // same task as the render: the drawing buffer is still intact
+  for (const l of hidden) l.visible = true;
+  return out;
+}
+function drawShotOverlay(out, when) {
+  const g = out.getContext('2d'), W2 = out.width, H2 = out.height, k = W2 / Math.max(1, canvas.clientWidth);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `600 ${Math.round(14 * k)}px "Gowun Dodum", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+  camera.updateMatrixWorld();
+  for (const rec of [meRec, ...others.values()]) {
+    if (!rec || !rec.av.root.visible) continue;
+    const name = rec === meRec ? myDisplayName() : (rec.name || DEFAULT_NAME);
+    rec.av.root.getWorldPosition(shotV); shotV.y += tagY(rec, 0.3);
+    shotV.applyMatrix4(camera.matrixWorldInverse); if (shotV.z > -0.2) continue;   // behind the camera
+    shotV.applyMatrix4(camera.projectionMatrix);
+    if (Math.abs(shotV.x) > 1 || Math.abs(shotV.y) > 1 || shotV.z > 1) continue;    // off screen
+    const x = (shotV.x + 1) / 2 * W2, y = (1 - shotV.y) / 2 * H2, w = g.measureText(name).width + 20 * k, h = 24 * k;
+    g.fillStyle = 'rgba(43,45,104,0.82)'; g.beginPath(); rrect(g, x - w / 2, y - h / 2, w, h, h / 2); g.fill();
+    g.fillStyle = '#fff3df'; g.fillText(name, x, y + k);
+  }
+  const cap = `크리스마스 밤바다 모닥불 · ${when.getFullYear()}.${pad2(when.getMonth() + 1)}.${pad2(when.getDate())}`;
+  g.font = `${Math.round(13 * k)}px "Jua", "Gowun Dodum", "Apple SD Gothic Neo", sans-serif`; g.textAlign = 'right'; g.textBaseline = 'alphabetic';
+  g.shadowColor = 'rgba(10,8,40,0.85)'; g.shadowBlur = 6 * k; g.fillStyle = 'rgba(255,243,223,0.92)';
+  g.fillText(cap, W2 - 14 * k, H2 - 12 * k); g.shadowBlur = 0;
+}
+function flashShutter() { const f = $('flash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); }
+function shotToast(blob, how) {
+  const el = $('shotToast'), img = el.querySelector('img');
+  if (toastUrl) { URL.revokeObjectURL(toastUrl); toastUrl = null; }
+  if (blob) { toastUrl = URL.createObjectURL(blob); img.src = toastUrl; img.hidden = false; } else img.hidden = true;
+  el.querySelector('span').textContent = { saved: '사진을 저장했습니다', downloaded: '사진을 저장했습니다', shared: '사진을 공유했습니다', declined: '사진을 찍었습니다', busy: '잠시 후 다시 저장해 주세요', fail: '사진을 찍지 못했습니다' }[how] || '사진을 찍었습니다';
+  el.hidden = false; clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; if (toastUrl) { URL.revokeObjectURL(toastUrl); toastUrl = null; } }, 2800);
+}
+async function saveShot(blob, filename) {
+  if (dlCap) {   // (a) inside a claude.ai artifact page: the viewer confirms; a decline stays quiet
+    try { await dlCap.save({ filename, data: blob }); return 'saved'; } catch (e) {
+      const c = e && e.code;
+      if (c === 'declined') return 'declined';
+      if (c === 'rate_limited') return 'busy';   // any other code: this view cannot save, try the next way
+    }
+  }
+  if (coarse && navigator.canShare && navigator.share) {   // (b) phones: the share sheet (Photos, messengers)
+    try {
+      const file = new File([blob], filename, { type: 'image/png' });
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: '크리스마스 밤바다 모닥불' }); return 'shared'; }
+    } catch (e) { if (e && e.name === 'AbortError') return 'declined'; }
+  }
+  const url = URL.createObjectURL(blob), a = document.createElement('a');   // (c) a plain download
+  a.href = url; a.download = filename; a.style.display = 'none'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  return 'downloaded';
+}
+async function takeShot() {
+  if (!entered || shotBusy) return false;
+  shotBusy = true; initAudio();
+  try {
+    const now = new Date(), out = renderShot();
+    drawShotOverlay(out, now); flashShutter();
+    const filename = `bonfire-xmas-${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}.png`;
+    const blob = await new Promise((res) => out.toBlob(res, 'image/png'));
+    if (!blob) throw new Error('empty capture');
+    lastShot = { blob, filename, w: out.width, h: out.height, saved: null };
+    lastShot.saved = await saveShot(blob, filename);
+    shotToast(blob, lastShot.saved);
+  } catch (e) { console.warn('[bonfire] screenshot failed:', e && e.message); shotToast(null, 'fail'); }
+  finally { shotBusy = false; }
+  return true;
+}
+$('shotBtn').addEventListener('click', () => { takeShot(); });
+
 // E / context button: stand up if seated; near the fire or the wood pile add wood; otherwise sit on the nearest free seat within 2 m
 function ctxKind() {
   if (!entered) return null;
@@ -1393,6 +1665,11 @@ function refreshCtx() {
   const k = ctxKind(), lab = CTX_LABEL[k] || '';
   if (lab === ctxShown) return;
   ctxShown = lab; $('ctxBtn').hidden = !lab; if (lab) $('ctxBtn').textContent = lab;
+}
+let swimUi = false;
+function refreshSwimUi() {   // in deep water: roll / prone / emotes need footing (the kit ignores them), so the phone buttons dim
+  const sw = meRec.ctrl.state.swim === 2; if (sw === swimUi) return;
+  swimUi = sw; for (const id of ['rollBtn', 'proneBtn', 'emoteBtn']) $(id).disabled = sw;
 }
 function interact() {
   const k = ctxKind();
@@ -1427,7 +1704,7 @@ document.body.classList.toggle('coarse', coarse);
     b.addEventListener('click', () => { myColor = r.hex; wrap.querySelectorAll('.robe').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); });
     wrap.appendChild(b);
   });
-  if (coarse) $('entryHelp').textContent = '화면 왼쪽을 엄지로 밀어 걷고(끝까지 밀면 달립니다), 오른쪽을 끌어 시점을 돌립니다. 두 손가락으로 거리를 조절하고, 오른쪽 버튼으로 대시·점프·구르기·엎드리기·춤을 합니다.';
+  if (coarse) $('entryHelp').textContent = '화면 왼쪽을 엄지로 밀어 걷고(끝까지 밀면 달립니다), 오른쪽을 끌어 시점을 돌립니다. 두 손가락으로 거리를 조절하고, 오른쪽 버튼으로 대시·점프·구르기·엎드리기·춤을 합니다. 바다로 걸어 들어가면 헤엄치고, 「사진」으로 지금 장면을 남깁니다.';
 }
 // unique nicknames: first come, first served; see bf/names.js for the honest limits
 const nickErr = $('nickErr'), enterBtn = $('enterBtn');
@@ -1496,12 +1773,12 @@ $('entryForm').addEventListener('submit', async (e) => {
   for (const id of ['badge', 'hint', 'log', 'bar', 'tools']) $(id).hidden = false;
   $('acts').hidden = !coarse;
   updateFireHud();
-  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무 가까이에서 「앉기」' : 'WASD 걷기 · Shift 달리기 · Q 대시 · Space 점프 · C 구르기 · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1·2·3 감정 · E 통나무/장작 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
+  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무 가까이에서 「앉기」 · 바다에서 수영 · 「사진」' : 'WASD 걷기 · Shift 달리기 · Q 대시 · Space 점프 · C 구르기 · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1·2·3 감정 · E 통나무/장작 · 바다에서 수영(Shift 빠르게 · Space 뛰어오르기) · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
   setTimeout(() => $('hint').classList.add('fade'), 9000);
   canvas.focus({ preventScroll: true });
   tryLock(); refreshLook();
   sendPresence(performance.now(), true);
-  logLine(null, '모닥불 곁으로 왔습니다. 통나무 가까이에서 E(또는 「앉기」)로 앉고, 불 옆에서 장작을 넣을 수 있습니다.', true);
+  logLine(null, '크리스마스 모닥불 곁으로 왔습니다. 통나무 가까이에서 E(또는 「앉기」)로 앉고, 불 옆에서 장작을 넣을 수 있습니다.', true);
 });
 
 // ---------- loop ----------
@@ -1522,7 +1799,10 @@ if (location.hostname === '127.0.0.1') {   // local test read-out only
     sit: (id) => (id ? sitOn(seatById(id)) : sitOn(nearestSeat(me.x, me.z, 2, true))),
     stand: () => standUp(), interact: () => interact(),
     wood: () => addWood(), lantern: () => launchLantern(), firework: () => launchFirework(), wave: () => doWave(),
-    heightAt,
+    heightAt, waterY, get tuning() { return KIT_TUNING; }, camPos: () => ({ x: camera.position.x, y: camera.position.y, z: camera.position.z }),
+    get xmas() { return { loaded: FX.real.xmas, hats: XM.hats, blocks: XM.blocks.length }; },
+    shot: () => takeShot(), get lastShot() { return lastShot && { size: lastShot.blob.size, type: lastShot.blob.type, filename: lastShot.filename, w: lastShot.w, h: lastShot.h, saved: lastShot.saved }; },
+    async lastShotData() { if (!lastShot) return null; const b = new Uint8Array(await lastShot.blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return btoa(s); },
     get diag() { return { mqIn, mqPresIn, brokers: mqLiveCount(), others: [...others.keys()], lastSent: mq ? Math.round(performance.now() - mq.lastSent) : null }; },
   };
 }
@@ -1532,6 +1812,7 @@ let lastPrune = 0;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime, now = performance.now();
   let mySpeed = 0;
+  simT = t;
   // fire fuel decays toward 0.5
   fuel = decayed(fuel, dt);
   if (Math.abs(fuel - lastFuelSet) > 0.004) { lastFuelSet = fuel; fxCall('fire', (f) => f.setFuel(fuel)); if (entered) updateFireHud(); }
@@ -1539,12 +1820,14 @@ function frame() {
     mySpeed = stepLocal(dt);
     sendPresence(now, false);
     refreshCtx();
+    refreshSwimUi();
   } else {
     cam.yaw = Math.sin(t * 0.1) * 0.35; cam.pitch = 0.1 + Math.sin(t * 0.07) * 0.05;
   }
   updateCamera(dt);
-  if (meRec) animTags(meRec, now);
-  for (const rec of others.values()) { rec.ctrl.update(dt); animTags(rec, now); }   // kit: 100 ms buffered interpolation + counter-driven actions
+  if (meRec) { animTags(meRec, now); swimFx(meRec, dt, true); }
+  for (const rec of others.values()) { rec.ctrl.update(dt); animTags(rec, now); swimFx(rec, dt, false); }   // kit: 100 ms buffered interpolation + counter-driven actions
+  SWF.update(dt);
   if (mq && now - lastPrune > 1000) { lastPrune = now; pruneMq(now); }
 
   fxCall('sky', (s) => s.update(dt, t));
@@ -1555,6 +1838,7 @@ function frame() {
     if (fireLightScale !== 1 && f.light && f.light.intensity !== lastLightSet) { f.light.intensity *= fireLightScale; lastLightSet = f.light.intensity; }
   });
   fxCall('lan', (l) => l.update(dt, t));
+  fxCall('xmas', (x) => x.update(dt, t, camera));
   updateAudio(t);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);

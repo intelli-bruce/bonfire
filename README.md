@@ -1,7 +1,6 @@
-# 밤바다 모닥불
+# 크리스마스 밤바다 모닥불
 
 달밤 바닷가 모닥불에 모여 앉는 three.js 가상 공간입니다.
 링크를 연 사람들이 같은 바닷가에서 서로 만납니다(공개 MQTT 중계).
 캐릭터는 Kenney Mini Characters, 소품 일부는 Kenney Nature Kit(둘 다 CC0)입니다.
-
-크리스마스판(눈·트리·수영·사진 찍기)은 [xmas/](https://intelli-bruce.github.io/bonfire/xmas/)에 있습니다. 원래 바닷가와는 따로 모입니다.
+눈 내리는 성탄 밤입니다. 바다에서 헤엄칠 수 있고, 「사진」 버튼이나 P키로 지금 장면을 저장합니다.

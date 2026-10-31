@@ -80,6 +80,21 @@ function buildTemplate(g) {
     let key = -1, cnt = 0; for (const [k, c] of hist) if (c > cnt) { cnt = c; key = k; }
     return key < 0 ? null : { cx: key % 8, cy: Math.floor(key / 8) };
   })();
+  // head extent in the head bone's own space (model units), from vertices weighted mostly to 'head': where hats sit
+  const headBox = (() => {
+    const mn = new T.Vector3(1e9, 1e9, 1e9), mx = new T.Vector3(-1e9, -1e9, -1e9), v = new T.Vector3();
+    j.nodes.forEach((n) => {
+      if (n.mesh === undefined || n.skin === undefined) return;
+      const sk = skins[n.skin], hi = sk.joints.findIndex((k) => cleanName(j.nodes[k].name) === 'head'); if (hi < 0) return;
+      const p = j.meshes[n.mesh].primitives[0], P = accessor(g, p.attributes.POSITION).arr, J = accessor(g, p.attributes.JOINTS_0).arr, W = accessor(g, p.attributes.WEIGHTS_0).arr;
+      for (let i = 0; i < P.length / 3; i++) {
+        let best = 0; for (let q = 1; q < 4; q++) if (W[i * 4 + q] > W[i * 4 + best]) best = q;
+        if (J[i * 4 + best] !== hi) continue;
+        v.set(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]).applyMatrix4(sk.inv[hi]); mn.min(v); mx.max(v);
+      }
+    });
+    return mn.x < mx.x ? { min: mn, max: mx } : null;
+  })();
   // head top in model units (for labels)
   let top = 0;
   for (const geo of geos) { const pa = geo.attributes.position; for (let i = 0; i < pa.count; i++) top = Math.max(top, pa.getY(i)); }
@@ -119,7 +134,7 @@ function buildTemplate(g) {
     });
     return scene;
   }
-  return { instantiate, clips, accentCell, top, imageUri: j.images && j.images[0] && j.images[0].uri };
+  return { instantiate, clips, accentCell, top, headBox, imageUri: j.images && j.images[0] && j.images[0].uri };
 }
 
 // ---------------------------------------------------------------- authored clips (same 7-bone rig as the Kenney set)
@@ -221,6 +236,22 @@ function authoredClips() {
     { t: 0.75, torso: [0, 0, 0], head: [6, 0, 0], 'arm-left': [-30, 0, -20], 'arm-right': [-30, 0, 20], 'leg-left': [0, 0, 0], 'leg-right': [0, 0, 0], rp: [0, -0.025, 0], rs: [1.05, 0.92, 1.05] },
     { t: 1, torso: [0, 16, 6], head: [0, -10, 8], 'arm-left': [-20, 0, 40], 'arm-right': [-20, 0, 15], 'leg-left': [-15, 0, 4], 'leg-right': [5, 0, 0], rp: [0.02, 0, 0], rs: [1, 1, 1] },
   ]));
+  // swimming (not ground-fitted: the controller floats the root at the water line minus TUNING.swimSink).
+  // swim: front crawl, body pitched forward about the belly, arms windmill half a cycle apart, flutter kick at twice the rate
+  const sw = (t, al, ar, ll, lr, roll) => ({ t, root: [62, roll, 0], 'arm-left': [al, 0, -78], 'arm-right': [ar, 0, 78], 'leg-left': [ll, 0, 4], 'leg-right': [lr, 0, -4] });
+  C.push(makeClip('swim', 1.1, [
+    { ...sw(0, 0, -180, -18, 14, 8), rp: [0, -0.03, 0], torso: [4, 0, 0], head: [-40, 0, 0] },
+    { ...sw(0.25, -90, -270, 14, -18, 0), head: [-40, 14, 0] },
+    { ...sw(0.5, -180, -360, -18, 14, -8), head: [-40, 0, 0] },
+    { ...sw(0.75, -270, -450, 14, -18, 0), head: [-40, -14, 0] },
+    { ...sw(1, -360, -540, -18, 14, 8), head: [-40, 0, 0] },
+  ], [0, 0.3, 0]));
+  // tread: nearly upright, hands sculling out and in, legs cycling, a small bob
+  C.push(makeClip('tread', 1.6, [
+    { t: 0, root: [14, 0, 0], torso: [0, 0, 0], head: [-10, 0, 0], 'arm-left': [-20, -25, -72], 'arm-right': [-20, 25, 72], 'leg-left': [-35, 0, 6], 'leg-right': [5, 0, -6], rp: [0, 0, 0] },
+    { t: 0.5, root: [12, 0, 2], head: [-8, 0, -3], 'arm-left': [-20, 25, -64], 'arm-right': [-20, -25, 64], 'leg-left': [5, 0, 6], 'leg-right': [-35, 0, -6], rp: [0, 0.012, 0] },
+    { t: 1, root: [14, 0, 0], head: [-10, 0, 0], 'arm-left': [-20, -25, -72], 'arm-right': [-20, 25, 72], 'leg-left': [-35, 0, 6], 'leg-right': [5, 0, -6], rp: [0, 0, 0] },
+  ], [0, 0.3, 0]));
   return C;
 }
 // Ground fit: lift/lower the root per key so the lowest skinned vertex touches y = 0 (roll: every key; postures: one offset)
@@ -252,6 +283,7 @@ const MAP = {
   prone: { clip: 'prone', loop: true }, crawl: { clip: 'crawl', loop: true },
   wave: { clip: 'wave', loop: false }, cheer: { clip: 'cheer', loop: false }, dance: { clip: 'dance', loop: true },
   nod: { clip: 'emote-yes', loop: true },
+  swim: { clip: 'swim', loop: true }, tread: { clip: 'tread', loop: true },
 };
 const LOCO = new Set(['walk', 'run', 'crawl']);   // phase-synchronised loops
 
@@ -377,6 +409,7 @@ export function createAvatar(charId, accentHex) {
   const av = {
     root, model, mixer, shadow, charId: id, scale: KIT.scale,
     headY: tmpl.top * KIT.scale,
+    head: model.getObjectByName('head') || null, headBox: tmpl.headBox,   // head bone + its vertex extent (bone space), for hats
     play, update,
     get state() { return curName; },
     weightOf: (name) => { const a = acts.get(name); return a ? (live.get(a) || 0) : 0; },
