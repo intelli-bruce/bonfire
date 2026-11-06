@@ -119,6 +119,10 @@ body.coarse #log { width: min(380px, calc(100vw - 110px)); }
 #stick { position: fixed; z-index: 9; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; border: 2px solid var(--line); background: rgba(255,243,223,.1); pointer-events: none; }
 #knob { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(255,162,87,.6); border: 2px solid rgba(255,200,150,.9); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#uw { position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0; transition: opacity 0.25s;
+  background: radial-gradient(ellipse at 50% -10%, rgba(130, 255, 225, 0.26), transparent 58%), radial-gradient(ellipse at 50% 55%, transparent 38%, rgba(2, 38, 58, 0.55) 100%), rgba(8, 112, 120, 0.3); }
+body.under #uw { opacity: 1; }
+#acts .cast { grid-column: 1 / span 2; width: 100%; height: 46px; border-radius: 999px; font-size: 14px; border-color: rgba(150, 230, 255, 0.85); }
 @media (max-width: 560px) { #hint { top: calc(env(safe-area-inset-top, 0px) + 104px); max-width: calc(100vw - 24px); } #sendBtn { display: none; } .btn { padding: 9px 12px; font-size: 14.5px; } }
 @media (prefers-reduced-motion: reduce) { #hint, #log div { transition: none; } #flash.on { animation-duration: 0.12s; } }
 </style>
@@ -150,15 +154,17 @@ body.coarse #log { width: min(380px, calc(100vw - 110px)); }
   <button id="waveBtn" class="btn" type="button">손 흔들기</button>
 </div>
 <div id="acts" class="hud" hidden>
+  <button id="castBtn" class="act cast" type="button" title="낚싯대 던지기·감기 (R · 마우스 왼쪽 클릭)" hidden>낚싯대 던지기</button>
   <button id="emoteBtn" class="act small" type="button" aria-label="감정 표현: 춤" title="감정 표현 (1·2·3)">춤</button>
   <button id="proneBtn" class="act small" type="button" title="엎드리기 (Z)">엎드리기</button>
   <button id="rollBtn" class="act" type="button" title="구르기 (C) · 점프 중이면 멀리 날며 구르기">구르기</button>
   <button id="dashBtn" class="act" type="button" title="대시 (Q)">대시</button>
-  <button id="punchBtn" class="act" type="button" title="때리기 (마우스 왼쪽 클릭 · F)">때리기</button>
+  <button id="punchBtn" class="act" type="button" title="내려찍기 (마우스 왼쪽 클릭 · F)">내려찍기</button>
   <button id="jumpBtn" class="act big" type="button" title="점프 (Space) · 공중에서 한 번 더">점프</button>
 </div>
 <div id="stick" hidden><div id="knob"></div></div>
 <div id="flash" aria-hidden="true"></div>
+<div id="uw" aria-hidden="true"></div>
 <div id="shotToast" class="hud" role="status" hidden><img alt=""><span></span></div>
 
 <div id="entry">
@@ -182,7 +188,7 @@ body.coarse #log { width: min(380px, calc(100vw - 110px)); }
     </div>
     <div id="loadRow" class="load" hidden><div class="track"><div id="loadBar"></div></div><span id="loadTxt">바닷가 풍경을 불러오는 중…</span></div>
     <button id="enterBtn" type="submit">입장하기</button>
-    <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 때리기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1 춤 · 2 환호 · 3 끄덕 · E 통나무에 앉기/장작 넣기 · P 사진입니다. 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기).</span></div>
+    <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 위에서 아래로 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1 춤 · 2 환호 · 3 끄덕 · E 통나무·낚시 의자에 앉기/장작 넣기/사다리 오르기 · R 낚싯대 던지기·감기 · P 사진입니다. 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기 · C 꾹 눌러 잠수, 놓으면 떠오름). 바닷가 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 판자의 의자에 앉으면 낚시를 할 수 있습니다.</span></div>
   </form>
 </div>
 
@@ -191,6 +197,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 import { loadAvatarKit, createAvatar, CHARACTERS as KIT_CHARS } from './bf/kit/avatar.js';
 import { createController, TUNING as KIT_TUNING } from './bf/kit/controller.js';
 import { initNames, claimNick, signPresence, verifyPeer, myNick as claimedNick } from './bf/names.js';
+import { buildPier, createAngler, deckTop as pierDeck, PIER } from './bf/pier.js';
 
 // ---------- small helpers ----------
 const TAU = Math.PI * 2;
@@ -234,7 +241,7 @@ scene.fog = new THREE.FogExp2('#2c3170', 0.0085);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1200);
 camera.rotation.order = 'YXZ';
 const MOON_DIR = new THREE.Vector3(0.25, 0.32, -1).normalize();
-const WATERLINE_Z = -14, SEA_Z = -40;   // still water y = 0 along the waterline; the sea is open to swimmers out to z = -40
+const WATERLINE_Z = -14, SEA_Z = -88;   // still water y = 0 along the waterline; the sea is open to swimmers out to z = -88 (a flat basin about 9 m deep from z = -48 on)
 
 // ---------- lights (avatars and an unbaked fallback world) ----------
 const hemi = new THREE.HemisphereLight('#a9b2ff', '#4a3a52', 0.95);
@@ -262,8 +269,11 @@ function heightAt(x, z) {
   const fx = clamp((x - H.x0) / H.dx, 0, H.nx - 1), fz = clamp((z - H.z0) / H.dz, 0, H.nz - 1);
   const ix = Math.min(Math.floor(fx), H.nx - 2), iz = Math.min(Math.floor(fz), H.nz - 2), tx = fx - ix, tz = fz - iz, d = H.data, n = H.nx;
   const a = d[iz * n + ix], b = d[iz * n + ix + 1], c = d[(iz + 1) * n + ix], e = d[(iz + 1) * n + ix + 1];
-  return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + e * tx) * tz;
+  const h = (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + e * tx) * tz;
+  if (z < H.z0) { const u = clamp((H.z0 - z) / 8, 0, 1); return h + (BASIN_Y - h) * u * u * (3 - 2 * u); }   // beyond the baked grid (z < -40): the seabed settles into the flat basin of the glb
+  return h;
 }
+const BASIN_Y = -9.0;
 const validBlock = (b) => b && ((b.type === 'circle' && [b.x, b.z, b.r].every(Number.isFinite)) || (b.type === 'box' && [b.x0, b.x1, b.z0, b.z1].every(Number.isFinite)));
 function parseWorld(j) {
   if (!j || typeof j !== 'object') return false;
@@ -311,10 +321,19 @@ function hitBlocks(list, x, z) {
   }
   return false;
 }
-const blocked = (x, z) => hitBlocks(W.blocks, x, z) || hitBlocks(XM.blocks, x, z);   // beach.json + bf/xmas.js decorations
+const blocked = (x, z) => hitBlocks(W.blocks, x, z) || hitBlocks(XM.blocks, x, z) || hitBlocks(PR.blocks, x, z);   // beach.json + bf/xmas.js decorations + bf/pier.js posts and chairs
 function walkable(x, z) {
-  const B = W.bounds;
-  return x >= B.x0 && x <= B.x1 && z >= Math.max(B.z0, SEA_Z) && z <= B.z1 && !blocked(x, z);
+  const B = W.bounds, wide = z < -46;   // out beyond the headlands the open sea is wider
+  return x >= (wide ? -44 : B.x0) && x <= (wide ? 44 : B.x1) && z >= Math.max(B.z0, SEA_Z) && z <= B.z1 && !blocked(x, z);
+}
+// the pier: planks count as ground only for someone standing on them (y >= deck - 0.45), never for a swimmer under them
+const PR = { on: false, mod: null, blocks: [], ladders: [] };
+function groundY3(x, z, y) {
+  const g = heightAt(x, z);
+  if (!PR.on) return g;
+  const d = pierDeck(x, z);
+  if (d === null) return g;
+  return y === undefined || y >= d - 0.45 ? Math.max(g, d) : g;
 }
 
 // ---------- water surface: still level y = 0; with bf/ocean.js the same swell its vertex shader draws (vertical part; the
@@ -575,6 +594,7 @@ async function loadWorld() {
       }
     } catch (e) { /* keep the fallback world */ }
   }
+  initPier();
   const jobs = [];
   if (has('beach.glb')) { glbLoading = true; glbStart = performance.now(); $('loadRow').hidden = false; setLoadProgress(0, 0); jobs.push(loadGlb()); } else glbDone();
   const mod = (file, key, build) => {
@@ -592,6 +612,7 @@ async function loadWorld() {
     if (typeof m.buildOcean !== 'function') return;
     const oo = { renderer, moonDir: MOON_DIR.clone(), waterlineZ: WATERLINE_Z, quality: QUALITY, firePos: new THREE.Vector3(W.fire.x, W.fire.y + 0.9, W.fire.z) };
     if (W.shoreline) oo.shoreline = W.shoreline;
+    oo.seabed = seabedGrid();   // real depth: clear water over the seabed
     const o = m.buildOcean(THREE, scene, oo);
     if (!o) return;
     FX.ocean.dispose(); FX.ocean = o; FX.real.ocean = true;
@@ -624,6 +645,19 @@ async function loadWorld() {
   worldReady = true;
 }
 let worldReady = false;
+function seabedGrid() {   // ground height on a 1 m grid under the whole sea (x -64..64, z -92..-1), for the ocean's depth colouring
+  const x0 = -64, z0 = -92, dx = 1, nx = 129, nz = 92, data = new Float32Array(nx * nz);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) data[j * nx + i] = heightAt(x0 + i * dx, z0 + j * dx);
+  return { x0, z0, dx, nx, nz, data };
+}
+function initPier() {   // bf/pier.js: pier, fishing deck, chairs. Needs heightAt (beach.json) for the pilings; everything works without it
+  if (PR.on) return;
+  try {
+    const p = buildPier(THREE, scene, { groundAt: heightAt, quality: QUALITY });
+    PR.mod = p; PR.blocks = p.blocks.filter(validBlock); PR.ladders = p.ladders; PR.on = true;
+    for (const st of p.seats) if (!W.seats.some((q) => q.id === st.id)) W.seats.push(st);
+  } catch (e) { console.warn('[bonfire] pier skipped:', e && e.message); }
+}
 async function loadGlb() {
   try {
     const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
@@ -678,7 +712,7 @@ function settleOnGround() {
 }
 const feedStick = () => { if (meRec) meRec.ctrl.setStick(joy.x, joy.y); };   // x right, y down; |v| >= 0.92 runs
 
-function orbit(dx, dy, s) { cam.yaw -= dx * s; cam.pitch = clamp(cam.pitch + dy * s * 0.85, -0.5, 1.15); }
+function orbit(dx, dy, s) { cam.yaw -= dx * s; cam.pitch = clamp(cam.pitch + dy * s * 0.85, mySeat ? -1.0 : -0.5, 1.15); }   // seated: a wider look-up for the sky and the moon
 function setStick(show, x, y) { const s = $('stick'); s.hidden = !show; if (show) { s.style.left = x + 'px'; s.style.top = y + 'px'; } }
 canvas.addEventListener('pointerdown', (e) => {
   initAudio();
@@ -687,7 +721,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'touch' && lookMode === 'mouse') {   // mouse look: a click while unlocked only re-locks; nothing else happens
     const looking = lockedNow() || lockFails > 0;   // looking around already (locked, or hover look after a refusal): a left click is a punch
     if (!lockedNow() && lockFails < 3) tryLock();
-    if (e.button === 0 && looking) myAct('punch');
+    if (e.button === 0 && looking) leftAct();
     return;
   }
   if (e.pointerType === 'touch') {
@@ -714,7 +748,7 @@ function endPointer(e) {
   if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; feedStick(); setStick(false); }
   if (touches.delete(e.pointerId)) pinchD = 0;
   if (e.pointerType !== 'touch') {
-    if (mouseDrag && e.type === 'pointerup' && mouseDrag.btn === 0 && lookMode === 'drag' && mouseDrag.moved < 6 && performance.now() - mouseDrag.t < 350) myAct('punch');   // drag look: a click that did not drag is a punch
+    if (mouseDrag && e.type === 'pointerup' && mouseDrag.btn === 0 && lookMode === 'drag' && mouseDrag.moved < 6 && performance.now() - mouseDrag.t < 350) leftAct();   // drag look: a click that did not drag is a punch
     mouseDrag = null;
   }
 }
@@ -756,35 +790,52 @@ window.addEventListener('keydown', (e) => {
   if (!entered) return;
   initAudio();
   if (typing()) { if (e.key === 'Escape') { document.activeElement.blur(); tryLock(); refreshLook(); } return; }
+  if (e.code === 'KeyF' && mySeat && mySeat.fish) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) castRod(); return; }   // on a fishing chair F is the rod, not a chop (this handler runs before the kit's)
   if (e.key === 'Enter') { const ci = $('chatInput'); if (!ci.disabled) { e.preventDefault(); if (lockedNow()) document.exitPointerLock(); ci.focus(); refreshLook(); } return; }
   if (e.code === 'KeyM' && !e.repeat && !coarse) { setLook(lookMode === 'mouse' ? 'drag' : 'mouse'); return; }
   if (e.repeat) return;
   if (e.code === 'KeyE') interact();
   else if (e.code === 'KeyP') takeShot();
+  else if (e.code === 'KeyR') castRod();
 });
 
-let camLift = 0;
+let camLift = 0, camUnder = 0, uwOn = false;
+const UW_FOG = { color: new THREE.Color('#0b6a70'), density: 0.045, bg: new THREE.Color('#0b5f66') };
+let fogNorm = null;
+function setUnderwater(on) {   // the camera is below the surface: emerald haze (fog + background + a screen tint), the ocean's underside ceiling
+  if (on === uwOn) return; uwOn = on;
+  document.body.classList.toggle('under', on);
+  if (!fogNorm) fogNorm = { color: scene.fog.color.clone(), density: scene.fog.density, bg: scene.background.clone() };
+  scene.fog.color.copy(on ? UW_FOG.color : fogNorm.color); scene.fog.density = on ? UW_FOG.density : fogNorm.density; scene.background.copy(on ? UW_FOG.bg : fogNorm.bg);
+  for (const o of scene.children) if (/^sky-/.test(o.name)) o.visible = !on;   // the sky dome paints the whole background first: under the surface only the water haze shows
+  fb.sky.visible = !on;
+}
 function updateCamera(dt) {
   const k = 1 - Math.exp(-dt * 10);
   cam.tx += (me.x - cam.tx) * k; cam.tz += (me.z - cam.tz) * k;
-  const g = heightAt(me.x, me.z), st = meRec ? meRec.ctrl.state : null, swim = !!(st && st.swim === 2);
-  const baseY = mySeat ? mySeat.y + 1.0 : swim ? me.y + SWIM_SINK + 0.65 : g + (st && st.act === 'prone' ? 0.9 : st && st.act === 'sit' ? 1.0 : 1.5);
-  cam.ty += (baseY - cam.ty) * (1 - Math.exp(-dt * (swim ? 4 : 6)));
-  const floor = swim ? Math.max(g, waterY(me.x, me.z) - SWIM_SINK) : g;   // a leap out of the water lifts from the surface, not the seabed
+  const st = meRec ? meRec.ctrl.state : null, g = groundY3(me.x, me.z, me.y), swim = !!(st && st.swim === 2), dive = swim ? st.dive : 0;
+  const gw = Math.max(g, waterY(me.x, me.z));   // in the air over the sea (a dive off the pier) the view stays above the surface, not the seabed
+  const baseY = mySeat ? mySeat.y + 1.0 : swim ? me.y + SWIM_SINK + 0.65 : gw + (st && st.act === 'prone' ? 0.9 : st && st.act === 'sit' ? 1.0 : 1.5);
+  cam.ty += (baseY - cam.ty) * (1 - Math.exp(-dt * (swim ? (dive > 0.3 ? 7 : 4) : 6)));
+  camUnder += ((dive > 0.25 ? 1 : 0) - camUnder) * (1 - Math.exp(-dt * 6));   // diving: the camera may follow me under the surface
+  const floor = swim ? Math.max(g, waterY(me.x, me.z) - SWIM_SINK) : gw;   // a leap out of the water lifts from the surface, not the seabed
   const lift = st && !st.grounded ? clamp(me.y - floor, 0, 4) * 0.7 : 0;   // follow jumps part of the way
   camLift += (lift - camLift) * (1 - Math.exp(-dt * 8));
   const TY = cam.ty + camLift;
   const cp = Math.cos(cam.pitch), dx = Math.sin(cam.yaw) * cp, dy = Math.sin(cam.pitch), dz = Math.cos(cam.yaw) * cp;
   let allow = cam.dist;
-  for (let d = 0.3; d <= cam.dist + 1e-6; d += 0.25) {   // keep the whole boom above the sand (+0.3 m)
+  for (let d = 0.3; d <= cam.dist + 1e-6; d += 0.25) {   // keep the whole boom above the sand / the planks (+0.3 m)
     const px = cam.tx + dx * d, pz = cam.tz + dz * d;
-    if (TY + dy * d < heightAt(px, pz) + 0.3) { allow = Math.max(0.8, d - 0.3); break; }
+    if (TY + dy * d < groundY3(px, pz, me.y) + 0.3) { allow = Math.max(0.8, d - 0.3); break; }
   }
   cam.cur += (allow - cam.cur) * (allow < cam.cur ? Math.min(1, dt * 18) : Math.min(1, dt * 3));
-  const d = cam.cur, cx = cam.tx + dx * d, cz = cam.tz + dz * d, gy = heightAt(cx, cz);
-  camera.position.set(cx, Math.max(gy + 0.3, gy < 0.05 ? waterY(cx, cz) + 0.35 : -Infinity, TY + dy * d), cz);   // never under the sand or the sea
+  const d = cam.cur, cx = cam.tx + dx * d, cz = cam.tz + dz * d, gy = groundY3(cx, cz, me.y);
+  camera.position.set(cx, Math.max(gy + 0.3, gy < 0.05 && camUnder < 0.5 ? waterY(cx, cz) + 0.35 : -Infinity, TY + dy * d), cz);   // never under the sand; under the sea only while diving
   camera.lookAt(cam.tx, TY + 0.1 + Math.max(0, -cam.pitch) * 9, cam.tz);
   if (meRec) meRec.av.root.visible = entered && d > 0.9;
+  const wy = waterY(camera.position.x, camera.position.z), under = camera.position.y < wy - (uwOn ? 0.0 : 0.04) && gy < wy;
+  setUnderwater(under);
+  fxCall('ocean', (o) => o.under && o.under(camera, under ? wy : null));
 }
 
 // ---------- avatar adapter: the ONLY code that knows bf/kit/ (Kenney Mini Characters + the kit's responsive controller) ----------
@@ -857,7 +908,7 @@ function hatFor(av) {
 function makeController(av, local, spawn) {
   let ctrl = null;
   ctrl = createController({
-    avatar: av, groundY: heightAt, blocked: (x, z) => !walkable(x, z), input: local ? 'keyboard' : 'none', spawn, onAction: local ? onMyAction : null, water: WATER,
+    avatar: av, groundY: groundY3, blocked: (x, z) => !walkable(x, z), input: local ? 'keyboard' : 'none', spawn, onAction: local ? onMyAction : null, water: WATER,
     onStrike: local ? strikeNow : null,
     onRemoteAct: local ? null : (act) => fxAct(av, ctrl && ctrl.state, act, false),   // a remote avatar's action starts on the delayed timeline: its dust / sound / swing
   });
@@ -869,18 +920,19 @@ function onMyAction(act) {   // the kit started one of my actions: tell everyone
   sendPresence(performance.now(), true);
 }
 function myAct(a) { initAudio(); return entered && meRec ? meRec.ctrl.press(a) : false; }
+const leftAct = () => (mySeat && mySeat.fish ? castRod() : myAct('punch'));   // left click / the chop button: a chop, or (on a fishing chair) the rod
 function stepLocal(dt) {
   const c = meRec.ctrl; c.update(dt, cam.yaw);
   const s = c.state; me.x = s.x; me.z = s.z; me.ry = s.ry; me.y = s.y;
-  if (mySeat && (s.act !== 'sit' || s.seat !== mySeat.id)) { mySeat = null; sendPresence(performance.now(), true); refreshCtx(); }   // moved / jumped / X: off the log
+  if (mySeat && (s.act !== 'sit' || s.seat !== mySeat.id)) { mySeat = null; fishStop(); sendPresence(performance.now(), true); refreshCtx(); }   // moved / jumped / X: off the log
   return s.speed;
 }
 function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar }; }   // x y z r l a as t (s while on a log, w in the water)
 function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the kit's applyNet
-  const g = heightAt(x, z), o = { x, z };
-  const y = num(d.y, g - 1, Math.max(g + 6, 2)); if (y !== null) o.y = y;   // swimmers float metres above a deep seabed
+  const g = groundY3(x, z, undefined), o = { x, z };
+  const y = num(d.y, Math.min(g, heightAt(x, z)) - 1, Math.max(g + 6, 2)); if (y !== null) o.y = y;   // swimmers float metres above a deep seabed (a diver is between the surface and the seabed)
   const r = num(d.r, -7, 7); if (r !== null) o.r = r;
-  if (Number.isInteger(d.l) && d.l >= 0 && d.l <= 14) o.l = d.l;
+  if (Number.isInteger(d.l) && d.l >= 0 && d.l <= 16) o.l = d.l;
   if (d.w === 1 || d.w === 2) o.w = d.w;   // 1 wading, 2 swimming
   if (typeof d.a === 'string' && ACT_CODES.has(d.a)) o.a = d.a;
   if (Number.isInteger(d.as) && d.as >= 0 && d.as <= 1e9) o.as = d.as;
@@ -955,6 +1007,7 @@ function upsertPeer(p, x, z, ry) {
   return rec;
 }
 function rebuildAvatar(rec, ch) {   // remote only (my own character is fixed once I enter)
+  if (rec.angler) { rec.angler.dispose(); rec.angler = null; rec.fInit = false; }   // the rod hangs on the old avatar: syncFish builds it again
   const old = rec.av, st = rec.ctrl.state, av = makeAvatar(ch, rec.color);
   av.root.visible = old.root.visible;
   for (const s of [rec.label, rec.bubble]) if (s) av.root.add(s);
@@ -972,7 +1025,7 @@ function setLabel(rec, name) {
 }
 function removePeer(peer) {
   const rec = others.get(peer); if (!rec) return;
-  disposeSprite(rec.label); disposeSprite(rec.bubble); rec.ctrl.dispose(); rec.av.dispose(); others.delete(peer);
+  disposeSprite(rec.label); disposeSprite(rec.bubble); if (rec.angler) rec.angler.dispose(); rec.ctrl.dispose(); rec.av.dispose(); others.delete(peer);
 }
 function showBubble(rec, text) {
   if (!rec) return;
@@ -1019,15 +1072,83 @@ function sitOn(s) {
   if (!entered || !s || !seatFree(s) || !meRec || !meRec.ctrl.state.grounded) return false;
   mySeat = s; mySeatT = Date.now(); cam.yaw = s.ry;
   meRec.ctrl.sitAt(s.x, s.y, s.z, s.ry, s.id);   // the kit's 'sit' action sends my presence (seat + st) at once
+  if (s.fish) fishStart();
   refreshCtx();
   return true;
 }
 function standUp(reason) {
   if (!mySeat) return;
-  mySeat = null;
+  mySeat = null; fishStop();
   if (meRec) { meRec.ctrl.standUp(); const st = meRec.ctrl.state; me.x = st.x; me.z = st.z; }   // the kit steps off the log to a free spot
   if (reason === 'taken') logLine(null, '먼저 앉은 분이 있어 자리에서 일어났습니다.', true);
   sendPresence(performance.now(), true); refreshCtx();
+}
+
+// ---------- fishing: sit on a fishing chair on the pier (E); R / left click / 「낚싯대 던지기」 casts the float out where the camera looks
+// (within 75 degrees of the chair's facing), again reels it in. Others see the rod, the line and the float through two presence fields (fc: cast
+// counter, fx/fz: where the float lies); a new counter plays the cast, a missing target reels in. Look around freely with the camera while seated.
+const FISH = { fc: 0, out: false, tx: 0, tz: 0, cd: 0, poseK: 0 };
+function anglerFor(rec) {
+  if (!rec.angler) rec.angler = createAngler(THREE, scene, rec.av.root, { waterY, onLand: fishLand, onRing: (x, z) => SWF.ring(x, z, 0.12, 0.75, 1.6, 0.4) });
+  return rec.angler;
+}
+function fishLand(x, z) {   // the float touches down: a small plop
+  SWF.splash(x, z, 9, 1.7); SWF.ring(x, z, 0.2, 1.2, 1.3, 0.6);
+  if (Math.hypot(x - me.x, z - me.z) < 30) splashSound(0.05);
+}
+const fishing = () => !!(mySeat && mySeat.fish);
+const FISH_OUT = new Set(['wind', 'fly', 'float']);
+function fishStart() {
+  const a = anglerFor(meRec); a.show(true);
+  meRec.ctrl.setPose('fishSit'); cam.dist = 3.4; cam.cur = 3.4; cam.pitch = 0.08; FISH.out = false;
+  refreshFishUi();
+  logLine(null, '낚시 의자에 앉았습니다. R 키(또는 「낚싯대 던지기」)로 찌를 멀리 던지고, 마우스로 풍경을 둘러보세요.', true);
+}
+function fishStop() {
+  if (!meRec) return;
+  if (meRec.angler) meRec.angler.show(false);
+  meRec.ctrl.setPose(null); FISH.out = false; meRec.castAt = 0; refreshFishUi();
+}
+function fishTarget() {
+  const base = mySeat.ry, a = clamp(wrapA(cam.yaw - base), -1.3, 1.3), yaw = base + a, dist = 13 + Math.random() * 5;
+  let tx = clamp(mySeat.x - Math.sin(yaw) * dist, -56, 56), tz = clamp(mySeat.z - Math.cos(yaw) * dist, SEA_Z + 3, -17);
+  const H = PIER.head;   // never land the float on the pier head: slide it out beyond its east end
+  if (tx > H.x0 - 1.5 && tx < H.x1 + 1.2 && tz > H.z0 - 1.5 && tz < H.z1 + 1.5) tx = H.x1 + 1.6 + Math.random() * 2.5;
+  return { tx, tz };
+}
+function castRod() {
+  if (!entered || !meRec || !fishing()) return false;
+  const now = performance.now(); if (now < FISH.cd) return false; FISH.cd = now + 900;
+  initAudio();
+  const a = anglerFor(meRec);
+  if (FISH_OUT.has(a.state)) { a.reel(); FISH.out = false; logLine(null, '낚싯줄을 감았습니다.', true); }
+  else {
+    const { tx, tz } = fishTarget();
+    FISH.fc = (FISH.fc + 1) % 1000000; FISH.tx = tx; FISH.tz = tz; FISH.out = true;
+    a.show(true); a.cast(tx, tz); meRec.ctrl.setPose('fishCast', ++FISH.poseK); meRec.castAt = now;
+    logLine(null, '낚싯대를 던졌습니다. 찌가 물결 따라 떠 있습니다. (다시 R: 감기)', true);
+  }
+  sendPresence(now, true); refreshFishUi();
+  return true;
+}
+let castLabel = '';
+function refreshFishUi() {
+  const on = fishing(), b = $('castBtn');
+  if (b.hidden === on) b.hidden = !on;
+  const lab = on && meRec && meRec.angler && FISH_OUT.has(meRec.angler.state) ? '낚싯대 감기' : '낚싯대 던지기';
+  if (lab !== castLabel) { castLabel = lab; b.textContent = lab; }
+}
+$('castBtn').addEventListener('click', castRod);
+function syncFish(rec, d, now) {   // a remote avatar on a fishing chair: rod in hand, float where fx/fz say
+  const seat = rec.seat ? seatById(rec.seat) : null;
+  if (!seat || !seat.fish) { if (rec.angler && rec.angler.rodVisible) { rec.angler.show(false); rec.ctrl.setPose(null); rec.fInit = false; } return; }
+  const a = anglerFor(rec);
+  if (!a.rodVisible) { a.show(true); rec.ctrl.setPose('fishSit'); }
+  const fx = num(d.fx, P_BOUNDS.x0, P_BOUNDS.x1), fz = num(d.fz, P_BOUNDS.z0, -12), fc = Number.isInteger(d.fc) && d.fc >= 0 && d.fc <= 1e9 ? d.fc : null;
+  const s = rec.ctrl.state, out = fx !== null && fz !== null && fc !== null && Math.hypot(fx - s.x, fz - s.z) < 26;
+  if (!rec.fInit) { rec.fInit = true; rec.fc = out ? fc : -1; if (out) a.place(fx, fz); return; }   // first sight: a float already out just lies there
+  if (out) { if (fc !== rec.fc) { rec.fc = fc; a.cast(fx, fz); rec.ctrl.setPose('fishCast', (rec.poseK = (rec.poseK || 0) + 1)); rec.castAt = now; } }
+  else if (FISH_OUT.has(a.state)) a.reel();
 }
 
 // ---------- fire fuel (shared): +0.25 per log, max 1.6, decays 0.01/s toward 0.5; retained fire {fuel, t} for late joiners ----------
@@ -1115,7 +1236,7 @@ const SWF = (() => {
   let ri = 0;
   const pos = new Float32Array(ND * 3).fill(-999), vel = new Float32Array(ND * 3), dlife = new Float32Array(ND);
   const dgeo = new THREE.BufferGeometry(); dgeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const drops = new THREE.Points(dgeo, new THREE.PointsMaterial({ map: dotTex, color: '#e6eeff', size: 0.09, transparent: true, opacity: 0.85, depthWrite: false }));
+  const drops = new THREE.Points(dgeo, new THREE.PointsMaterial({ map: dotTex, color: '#f0f6ff', size: 0.15, transparent: true, opacity: 0.95, depthWrite: false }));
   drops.frustumCulled = false; drops.renderOrder = 2; scene.add(drops);
   let di = 0, alive = 0;
   function ring(x, z, r0, r1, life, op) {
@@ -1153,10 +1274,14 @@ const SWF = (() => {
   }
   return { ring, splash, update };
 })();
+function plungeFx(x, z, pw) {   // pw: impact speed (m/s); 0 = walked in
+  SWF.splash(x, z, 26 + Math.round(pw * 4.5), 3.4 + pw * 0.3); SWF.ring(x, z, 0.4, 2.2 + pw * 0.12, 1.6, 0.7); SWF.ring(x, z, 0.2, 1.2, 1.1, 0.5);
+  if (pw > 3) { PUFF.crown(x, waterY(x, z), z, coarse ? 10 : 22); SWF.ring(x, z, 0.7, 3.8 + pw * 0.15, 2.1, 0.55); setTimeout(() => SWF.ring(x, z, 0.3, 2.8, 1.5, 0.4), 160); }
+}
 // per avatar: big splash on entering deep water (my kit's splash counter; remote: landing in / reaching deep water),
 // a spray when leaping out, steady stroke ripples while swimming, small kicks while wading
 function swimFx(rec, dt, mine) {
-  const st = rec.ctrl.state, p = rec.av.root.position, f = rec.wfx || (rec.wfx = { sw: st.swim, air: !st.grounded, t: 0, n: st.splash, side: 1 });
+  const st = rec.ctrl.state, p = rec.av.root.position, f = rec.wfx || (rec.wfx = { sw: st.swim, air: !st.grounded, t: 0, n: st.splash, side: 1, bt: 0 });
   let big = false;
   if (mine) { big = st.splash > f.n; f.n = st.splash; }
   else {
@@ -1165,9 +1290,15 @@ function swimFx(rec, dt, mine) {
   }
   if (st.swim === 2 && !st.grounded && !f.air) { SWF.splash(p.x, p.z, 12, 2.4); SWF.ring(p.x, p.z, 0.3, 1.4, 1.1, 0.55); if (mine) splashSound(0.12); }
   f.sw = st.swim; f.air = !st.grounded;
-  if (big) {
-    SWF.splash(p.x, p.z, 26, 3.4); SWF.ring(p.x, p.z, 0.4, 2.2, 1.6, 0.7); SWF.ring(p.x, p.z, 0.2, 1.2, 1.1, 0.5);
-    if (mine || Math.hypot(p.x - me.x, p.z - me.z) < 14) splashSound(mine ? 0.22 : 0.12);
+  if (big) {   // a dive or a fall in throws a crown, a tall spray and wide ripples; walking in only a small one
+    const pw = mine ? clamp(st.plunge || 0, 0, 12) : (f.air ? 6.5 : 0);
+    plungeFx(p.x, p.z, pw);
+    if (mine || Math.hypot(p.x - me.x, p.z - me.z) < 14) splashSound(mine ? 0.22 + pw * 0.02 : 0.12 + pw * 0.01);
+  }
+  const wyy = waterY(p.x, p.z);
+  if (p.y < wyy - 0.5 && st.swim === 2) {   // submerged: a stream of bubbles from the mouth
+    f.bt = (f.bt || 0) - dt;
+    if (f.bt <= 0) { f.bt = 0.14 + Math.random() * 0.2; PUFF.bubble(p.x - Math.sin(st.ry) * 0.2, p.y + 0.95, p.z - Math.cos(st.ry) * 0.2, wyy); }
   }
   f.t -= dt;
   if (f.t > 0 || !st.grounded) return;
@@ -1191,7 +1322,7 @@ function swimFx(rec, dt, mine) {
 // PUFF: pooled billboard puffs (dust: normal blending; sparks: additive) + a few flat rings. Everything is cosmetic and local;
 // remote avatars trigger it from the kit's delayed action events (onRemoteAct), so it lines up with what they are seen doing.
 const PUFF = (() => {
-  const N = coarse ? 44 : 100, NR = 6, DUST = '#b4adc8', rnd = Math.random;
+  const N = coarse ? 64 : 150, NR = 6, DUST = '#b4adc8', rnd = Math.random;
   const tex = canvasTex(64, 64, (g) => {
     const gr = g.createRadialGradient(32, 32, 0, 32, 32, 31);
     gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
@@ -1219,6 +1350,13 @@ const PUFF = (() => {
   }
   function poof(x, y, z, n) {   // a small round puff of dust at the feet
     for (let i = 0; i < n; i++) { const a = rnd() * TAU, sp = 0.8 + rnd() * 1.6; emit(x + Math.cos(a) * 0.2, y + 0.05, z + Math.sin(a) * 0.2, Math.cos(a) * sp, 0.2 + rnd() * 0.6, Math.sin(a) * sp, 0.4 + rnd() * 0.3, 0.22, 0.8 + rnd() * 0.3, 0.5, DUST, false, 3); }
+  }
+  function bubble(x, y, z, top) {   // an air bubble rising from a diver; it dies at the surface (top)
+    const vy = 0.9 + rnd() * 0.6;
+    emit(x + (rnd() - 0.5) * 0.3, y, z + (rnd() - 0.5) * 0.3, (rnd() - 0.5) * 0.2, vy, (rnd() - 0.5) * 0.2, clamp((top - y) / vy, 0.15, 2.6), 0.10 + rnd() * 0.05, 0.2 + rnd() * 0.1, 0.8, '#d4faff', false, 0.15);
+  }
+  function crown(x, y, z, n) {   // a splash crown on the surface: white puffs thrown up and out
+    for (let i = 0; i < n; i++) { const a = rnd() * TAU, sp = 0.8 + rnd() * 2.2; emit(x + Math.cos(a) * 0.25, y + 0.05, z + Math.sin(a) * 0.25, Math.cos(a) * sp, 3.2 + rnd() * 3.6, Math.sin(a) * sp, 0.8 + rnd() * 0.6, 0.35, 1.1 + rnd() * 0.8, 0.95, '#f2fbff', false, 1.2); }
   }
   function spark(x, y, z) {   // hit: a bright flash and a few flying sparks
     emit(x, y, z, 0, 0, 0, 0.16, 0.5, 1.5, 0.95, '#fff1c2', true, 1);
@@ -1255,7 +1393,7 @@ const PUFF = (() => {
       o.m.scale.set(r, 1, r); o.m.material.opacity = 0.7 * (1 - u);
     }
   }
-  return { dash, trail: (x, y, z, ry) => dash(x, y, z, ry, 2), poof, spark, ring, update };
+  return { dash, trail: (x, y, z, ry) => dash(x, y, z, ry, 2), poof, spark, ring, bubble, crown, update };
 })();
 // an action of an avatar starts (mine: right now; remote: on the kit's delayed timeline)
 function fxAct(av, st, act, mine) {
@@ -1264,7 +1402,13 @@ function fxAct(av, st, act, mine) {
   if (act === 'djump') { if (!wet) { PUFF.ring(p.x, p.y + 0.05, p.z); PUFF.poof(p.x, p.y + 0.05, p.z, 4); } }
   else if (act === 'dash') { if (!wet) PUFF.dash(p.x, p.y, p.z, st.ry, coarse ? 5 : 9); }
   else if (act === 'roll' || act === 'leap') { if (!wet && p.y - heightAt(p.x, p.z) < 0.6) PUFF.poof(p.x, p.y + 0.05, p.z, 3); }
-  else if (act === 'punch' || act === 'punchL') swingSound(mine ? 1 : clamp(1 - d / 16, 0, 1));
+  else if (act === 'punch' || act === 'punchL') {
+    swingSound(mine ? 1 : clamp(1 - d / 16, 0, 1));
+    if (!wet && p.y - groundY3(p.x, p.z, p.y + 0.3) < 0.6) {   // the arm comes down in front of the avatar: a small puff of dust where it lands
+      const cx = p.x - Math.sin(st.ry) * 0.9, cz = p.z - Math.cos(st.ry) * 0.9, cy = p.y;
+      setTimeout(() => { if (waterY(cx, cz) - heightAt(cx, cz) < 0.1) PUFF.poof(cx, groundY3(cx, cz, cy + 0.3), cz, 3); }, KIT_TUNING.punchHit * 1000);
+    }
+  }
 }
 // per frame, per avatar: a dust stream behind a dashing runner, a few puffs under a rolling one (on the ground only)
 function moveFx(rec, dt) {
@@ -1636,6 +1780,7 @@ function onMqMessage(topic, payload) {
     }
     rec.seat = seat && st !== null && st > 0 ? seat.id : null; rec.st = rec.seat ? st : 0;
     if (mySeat && rec.seat === mySeat.id && beats(rec.st, id, mySeatT, myId)) standUp('taken');
+    syncFish(rec, d, now);
     // a name shows only after its signed claim checks out (names.js); otherwise '나그네'. One verify per (nick, np, ns).
     const np = typeof d.np === 'string' ? d.np.slice(0, 64) : '', ns = typeof d.ns === 'string' ? d.ns.slice(0, 200) : '';
     const vkey = rec.nick && np && ns ? rec.nick + '|' + np + '|' + ns : '';
@@ -1716,12 +1861,14 @@ function sendPresence(now, full) {   // >= 10 Hz while anything changes, at once
   const fast = ma === 'dash' || ma === 'roll' || ma === 'leap' || now < (mq.boostUntil || 0);   // quick moves and a fresh knock-back: stream smoothly (~16/s)
   if (now - mq.lastSent < (urgent ? 45 : fast ? 60 : 90)) { if (full) mq.pend = true; return; }
   const f = presenceFields(), seat = mySeat ? mySeat.id : null;
-  const sig = [f.x, f.y, f.z, f.r, f.l, f.as, f.s || '', f.w || 0, seat || ''].join(',');
+  const fishOut = FISH.out && fishing();
+  const sig = [f.x, f.y, f.z, f.r, f.l, f.as, f.s || '', f.w || 0, seat || '', fishOut ? FISH.fc : ''].join(',');
   if (!urgent && !fast && sig === mq.lastSig && now - mq.lastSent < 1000) return;
   mq.lastSent = now; mq.lastSig = sig; mq.pend = false;
   const claimed = nickState === 'ok' ? claimedNick() : '';
   const body = { id: myId, ...f, color: myColor, nick: claimed || null, seat, st: mySeat ? mySeatT : 0, ts: Date.now() };
   if (claimed && mySig) { body.np = mySig.np; body.ns = mySig.ns; }
+  if (fishOut) { body.fc = FISH.fc; body.fx = r2(FISH.tx); body.fz = r2(FISH.tz); }
   mqPub('p/' + myId, body);
 }
 
@@ -1743,7 +1890,11 @@ const doWave = () => myAct('wave');
 waveBtn.addEventListener('click', doWave);
 $('lanternBtn').addEventListener('click', launchLantern);
 $('fwBtn').addEventListener('click', launchFirework);
-for (const [id, a] of [['dashBtn', 'dash'], ['jumpBtn', 'jump'], ['rollBtn', 'roll'], ['proneBtn', 'prone'], ['punchBtn', 'punch']]) $(id).addEventListener('click', () => myAct(a));
+for (const [id, a] of [['dashBtn', 'dash'], ['jumpBtn', 'jump'], ['rollBtn', 'roll'], ['proneBtn', 'prone']]) $(id).addEventListener('click', () => myAct(a));
+$('punchBtn').addEventListener('click', () => leftAct());
+// in deep water the roll button becomes 「잠수」: hold it to sink, let go to float up (key C does the same; Space swims up)
+for (const ev of ['pointerdown']) $('rollBtn').addEventListener(ev, () => { if (meRec && meRec.ctrl.state.swim === 2) meRec.ctrl.setDive(true); });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('rollBtn').addEventListener(ev, () => { if (meRec) meRec.ctrl.setDive(false); });
 $('acts').addEventListener('mousedown', (e) => e.preventDefault());   // a click must not leave a button focused (Space would press it again)
 const EMOTES = [['dance', '춤'], ['cheer', '환호'], ['nod', '끄덕']];
 let emoteI = 0;
@@ -1839,9 +1990,16 @@ async function takeShot() {
 $('shotBtn').addEventListener('click', () => { takeShot(); });
 
 // E / context button: stand up if seated; near the fire or the wood pile add wood; otherwise sit on the nearest free seat within 2 m
+function nearLadder() {   // swimming within reach of a pier ladder
+  if (!PR.on || !meRec) return null;
+  const s = meRec.ctrl.state; if (!s.swim || !s.grounded) return null;
+  for (const l of PR.ladders) if (Math.hypot(l.x - me.x, l.z - me.z) < 1.5) return l;
+  return null;
+}
 function ctxKind() {
   if (!entered) return null;
   if (mySeat) return 'stand';
+  if (nearLadder()) return 'climb';
   if (nearFire()) return 'wood';
   const seat = nearestSeat(me.x, me.z, 2, true), dp = pileDist();   // seat vs wood pile: the nearer one wins
   if (seat && (dp >= 1.4 || Math.hypot(seat.x - me.x, seat.z - me.z) < dp)) return 'sit';
@@ -1849,7 +2007,7 @@ function ctxKind() {
   if (nearestSeat(me.x, me.z, 2, false)) return 'full';
   return null;
 }
-const CTX_LABEL = { stand: '일어서기', wood: '장작 넣기', sit: '앉기' };
+const CTX_LABEL = { stand: '일어서기', wood: '장작 넣기', sit: '앉기', climb: '부두로 올라가기' };
 let ctxShown = '';
 function refreshCtx() {
   const k = ctxKind(), lab = CTX_LABEL[k] || '';
@@ -1859,13 +2017,15 @@ function refreshCtx() {
 let swimUi = false;
 function refreshSwimUi() {   // in deep water: roll / prone / emotes need footing (the kit ignores them), so the phone buttons dim
   const sw = meRec.ctrl.state.swim === 2; if (sw === swimUi) return;
-  swimUi = sw; for (const id of ['rollBtn', 'proneBtn', 'emoteBtn', 'punchBtn']) $(id).disabled = sw;
+  swimUi = sw; for (const id of ['proneBtn', 'emoteBtn', 'punchBtn']) $(id).disabled = sw;
+  $('rollBtn').textContent = sw ? '잠수' : '구르기'; $('rollBtn').title = sw ? '잠수 (C 꾹) · 놓으면 떠오름 · Space 위로' : '구르기 (C) · 점프 중이면 멀리 날며 구르기'; if (!sw && meRec) meRec.ctrl.setDive(false);
 }
 function interact() {
   const k = ctxKind();
   if (k === 'stand') standUp();
   else if (k === 'wood') addWood();
   else if (k === 'sit') sitOn(nearestSeat(me.x, me.z, 2, true));
+  else if (k === 'climb') { const l = nearLadder(); if (l) { meRec.ctrl.climbTo(l.tx, l.ty, l.tz, l.ry); cam.yaw = l.ry; sendPresence(performance.now(), true); logLine(null, '사다리로 부두에 올라왔습니다.', true); } }
   else if (k === 'full') logLine(null, '가까운 자리에 이미 다른 분이 앉아 있습니다.', true);
 }
 $('ctxBtn').addEventListener('click', interact);
@@ -1894,7 +2054,7 @@ document.body.classList.toggle('coarse', coarse);
     b.addEventListener('click', () => { myColor = r.hex; wrap.querySelectorAll('.robe').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); });
     wrap.appendChild(b);
   });
-  if (coarse) $('entryHelp').textContent = '화면 왼쪽을 엄지로 밀어 걷고(끝까지 밀면 달립니다), 오른쪽을 끌어 시점을 돌립니다. 두 손가락으로 거리를 조절하고, 오른쪽 버튼으로 때리기·대시·점프(공중에서 한 번 더)·구르기·엎드리기·춤을 합니다. 바다로 걸어 들어가면 헤엄치고, 「사진」으로 지금 장면을 남깁니다.';
+  if (coarse) $('entryHelp').textContent = '화면 왼쪽을 엄지로 밀어 걷고(끝까지 밀면 달립니다), 오른쪽을 끌어 시점을 돌립니다. 두 손가락으로 거리를 조절하고, 오른쪽 버튼으로 내려찍기·대시·점프(공중에서 한 번 더)·구르기·엎드리기·춤을 합니다. 바다로 걸어 들어가면 헤엄치고(구르기 버튼이 「잠수」로 바뀝니다. 꾹 누르면 가라앉고 놓으면 떠오릅니다), 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 의자에 앉으면 「낚싯대 던지기」로 낚시를 합니다. 「사진」으로 지금 장면을 남깁니다.';
 }
 // unique nicknames: first come, first served; see bf/names.js for the honest limits
 const nickErr = $('nickErr'), enterBtn = $('enterBtn');
@@ -1963,7 +2123,7 @@ $('entryForm').addEventListener('submit', async (e) => {
   for (const id of ['badge', 'hint', 'log', 'bar', 'tools']) $(id).hidden = false;
   $('acts').hidden = false;   // the action buttons are for the desktop too (keys and mouse still work)
   updateFireHud();
-  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무 가까이에서 「앉기」 · 바다에서 수영 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 때리기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기 · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1·2·3 감정 · E 통나무/장작 · 바다에서 수영(Shift 빠르게 · Space 뛰어오르기) · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
+  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무·낚시 의자 가까이에서 「앉기」 · 바다에서 수영, 「잠수」 꾹 누르면 가라앉음 · 부두 끝에서 점프하면 다이빙 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(물속에선 꾹 눌러 잠수) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1·2·3 감정 · E 통나무/장작/낚시 의자/사다리 · R 낚싯대 · 부두 끝에서 점프하면 다이빙 · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
   setTimeout(() => $('hint').classList.add('fade'), 9000);
   canvas.focus({ preventScroll: true });
   tryLock(); refreshLook();
@@ -1991,6 +2151,10 @@ if (location.hostname === '127.0.0.1') {   // local test read-out only
     wood: () => addWood(), lantern: () => launchLantern(), firework: () => launchFirework(), wave: () => doWave(),
     heightAt, waterY, get tuning() { return KIT_TUNING; }, camPos: () => ({ x: camera.position.x, y: camera.position.y, z: camera.position.z }),
     get xmas() { return { loaded: FX.real.xmas, hats: XM.hats, blocks: XM.blocks.length }; },
+    get pier() { return { on: PR.on, blocks: PR.blocks.length, ladders: PR.ladders, seats: W.seats.filter((q) => q.fish) }; },
+    get fish() { return { ...FISH, state: meRec && meRec.angler ? meRec.angler.state : null, float: meRec && meRec.angler ? meRec.angler.floatPos.toArray() : null, seat: mySeat && mySeat.id }; },
+    walkable, blocked, plungeFx, get under() { return { on: uwOn, camUnder, camY: camera.position.y }; }, groundY3, deck: pierDeck, cast: () => castRod(), dive: (on) => meRec && meRec.ctrl.setDive(on),
+    setCam(yaw, pitch, dist) { cam.yaw = yaw; cam.pitch = pitch; cam.dist = dist; cam.cur = dist; },
     shot: () => takeShot(), get lastShot() { return lastShot && { size: lastShot.blob.size, type: lastShot.blob.type, filename: lastShot.filename, w: lastShot.w, h: lastShot.h, saved: lastShot.saved }; },
     async lastShotData() { if (!lastShot) return null; const b = new Uint8Array(await lastShot.blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return btoa(s); },
     get diag() { return { mqIn, mqPresIn, brokers: mqLiveCount(), others: [...others.keys()], lastSent: mq ? Math.round(performance.now() - mq.lastSent) : null }; },
@@ -2018,6 +2182,13 @@ function frame() {
   if (meRec) { animTags(meRec, now); swimFx(meRec, dt, true); moveFx(meRec, dt); hitFx(meRec, dt); }
   for (const rec of others.values()) { rec.ctrl.update(dt); animTags(rec, now); swimFx(rec, dt, false); moveFx(rec, dt); hitFx(rec, dt); }   // kit: 100 ms buffered interpolation + counter-driven actions
   SWF.update(dt); PUFF.update(dt);
+  if (PR.mod) PR.mod.update(dt, t);
+  for (const rec of [meRec, ...others.values()]) {
+    if (!rec || !rec.angler) continue;
+    rec.angler.update(dt, t);
+    if (rec.castAt && now - rec.castAt > 1150) { rec.castAt = 0; if (rec.angler.rodVisible) rec.ctrl.setPose('fishSit'); }   // the cast clip is over: back to the seated pose
+  }
+  if (entered) refreshFishUi();
   if (mq && now - lastPrune > 1000) { lastPrune = now; pruneMq(now); }
 
   fxCall('sky', (s) => s.update(dt, t));
