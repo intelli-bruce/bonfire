@@ -1,7 +1,7 @@
 // bf/kit/controller.js — responsive avatar controller: fixed-step physics, buffered actions, animation selection,
 // compact presence payload (netState) and remote reproduction (applyNet) with the cathedral counter rule.
 // Optional water ({ level, surface(x, z) }): wading in the shallows, swimming at the surface once it gets deep.
-// Combat feel: punch (alternating hands, onStrike at the contact frame), knock(dx, dz) (a hit: shove + small hop), a second jump in the air,
+// Combat feel: overhead chop (alternating hands, onStrike at the contact frame), knock(dx, dz) (a hit: shove + small hop), a second jump in the air,
 // a flying roll out of a jump, rolls that chain almost back to back, and a dash that sprints leaned forward.
 // No THREE import: works on avatar.root (an Object3D) and plain numbers.
 import { SIT_HIP } from './avatar.js';
@@ -19,7 +19,7 @@ export const TUNING = {
   rollDist: 2.2, rollDur: 0.28, rollLock: 0.05, rollChain: 0.2, rollCooldown: 0,   // the next roll may start rollChain s into this one (was 0.33 s lock + 0.15 s cooldown)
   airRollV0: 13, airRollV1: 8.5, airRollLift: 3.2, airRollGravity: 14,             // roll out of a jump: launched far along the heading, once per jump
   airJumps: 1, doubleJumpV: 6.4, doubleJumpGap: 0.1,                              // extra jumps in the air
-  punchDur: 0.3, punchCooldown: 0.22, punchHit: 0.1, punchMove: 0.6,              // contact frame at punchHit; walking speed factor while punching
+  punchDur: 0.46, punchCooldown: 0.34, punchHit: 0.23, punchMove: 0.5,            // overhead chop: arm up, then down; contact frame at punchHit; walking speed factor while chopping
   knockSpeed: 5.4, knockHop: 3.4,
   landDur: 0.1, proneIn: 0.3, proneOut: 0.28,
   waveDur: 1.6, cheerDur: 1.2, nodDur: 1.33,
@@ -27,6 +27,9 @@ export const TUNING = {
   // water (depth = still level - ground): wade from wadeIn, swim from swimIn (back on foot below swimOut); swimSink: root below the surface
   wadeIn: 0.12, wadeSlow: 0.55, swimIn: 0.8, swimOut: 0.62, swimSink: 0.6,
   swim: 2.2, swimFast: 3.5, swimAccel: 12, swimDecel: 6, swimTurn: 8, swimJumpV: 4.6, swimDashDist: 2.2,
+  // diving: hold to sink (diveSink m/s), let go to float up (diveRise m/s); max depth below the surface; feet stay diveClear above the seabed;
+  // a jump or fall into the sea plunges by (impact speed - plungeV0) * plungeK, at most plungeMax
+  diveSink: 2.0, diveRise: 2.6, diveSurge: 5.0, diveMax: 6.5, diveClear: 0.55, plungeV0: 2.5, plungeK: 1.0, plungeMax: 6.5, plungeDrag: 9,
   netDelay: 100,            // remote interpolation buffer (ms)
 };
 const P = TUNING;
@@ -55,7 +58,8 @@ export function createController({
     act: null, actT: 0, actDur: 0, dir: 0, vEnd: 0, v0: 0,
     seat: null, airDashUsed: false, lastGround: 0, jumpedAt: -9, dashEnd: -9, dashGround: false,
     dashReady: 0, rollReady: 0, time: 0, counter: 0, lastCode: '', key: 0,
-    swim: 0, splash: 0,                         // water state (0 land, 1 wading, 2 swimming); splash counts entries into deep water
+    swim: 0, splash: 0, plunge: 0,              // water state (0 land, 1 wading, 2 swimming); splash counts entries into deep water; plunge = impact speed of the last entry from the air
+    dive: 0, diveV: 0, plungeV: 0, plungeFresh: false, diveKey: false, diveBtn: false,   // metres below the swim surface, its rate, plunge speed (decays), hold-to-sink (key C / button)
     airJumps: 0, airRoll: false, rollAir: false, punchReady: 0, punchSide: 0, struck: true,
   };
   const prev = { x: s.x, y: s.y, z: s.z };
@@ -63,24 +67,30 @@ export function createController({
   let acc = 0, buffered = null, lastLanded = -9, airPeak = s.y;
   const keys = new Set();
   let stick = { x: 0, y: 0, on: false };
-  let camYawLast = 0, leanCur = 0;
+  let camYawLast = 0, leanCur = 0, poseName = null, poseKey = 0;   // poseName: page-chosen seated pose (fishing)
   // remote mode
   let remote = false, samples = [], events = [], offs = null, rAs, rL = 0, rSeat = null, rLastT = -1, rWrap = 0, rSpeed = 0, rPrevPos = null, rAir = false, rW = 0;
 
   // ------------------------------------------------------------ water
-  const depthAt = (x, z) => (water ? water.level - groundY(x, z) : 0);
-  // what the body rests on: the ground, or (deep enough to swim) the swell surface minus swimSink
+  // groundY(x, z, y): y = the body height, so a pier deck counts only for someone standing on it (not for a swimmer under it)
+  const depthAt = (x, z) => (water ? water.level - groundY(x, z, s.y) : 0);
+  // what the body rests on: the ground, or (deep enough to swim) the swell surface minus swimSink (and minus the dive depth)
   function floorAt(x, z) {
-    const g = groundY(x, z); if (!water) return g;
-    return water.level - g >= (s.swim === 2 ? P.swimOut : P.swimIn) ? Math.max(g, water.surface(x, z) - P.swimSink) : g;
+    const g = groundY(x, z, s.y); if (!water) return g;
+    if (water.level - g >= (s.swim === 2 ? P.swimOut : P.swimIn)) {
+      const top = water.surface(x, z) - P.swimSink;
+      return Math.max(g + (s.dive > 0.05 ? P.diveClear : 0), top - s.dive, g);
+    }
+    return g;
   }
   function updateWater() {
     if (!water) return;
     const d = depthAt(s.x, s.z), was = s.swim;
     if (!s.grounded) return;                             // in the air nothing changes (a leap out of the water stays a swimmer) until touch-down
     s.swim = d >= (was === 2 ? P.swimOut : P.swimIn) ? 2 : d > P.wadeIn ? 1 : 0;
+    if (s.swim !== 2) { s.dive = 0; s.diveV = 0; s.plungeV = 0; }
     if (s.swim === 2 && was !== 2) {
-      s.splash++;
+      s.splash++; if (!s.plungeFresh) s.plunge = 0; s.plungeFresh = false;   // plunge = impact speed only when this entry came from the air
       if (s.act && s.act !== 'dash' && s.act !== 'wave') { s.act = null; s.key++; }   // postures, rolls, emotes end in deep water
       const sp = Math.hypot(s.vx, s.vz); if (sp > P.swimFast) { s.vx *= P.swimFast / sp; s.vz *= P.swimFast / sp; }
     }
@@ -93,13 +103,14 @@ export function createController({
   function onKeyDown(e) {
     if (typing(e)) return;
     if (MOVE.has(e.code)) { keys.add(e.code); if (e.code.startsWith('Arrow')) e.preventDefault(); return; }
+    if (e.code === 'KeyC') s.diveKey = true;                  // hold C in deep water to dive (C is the roll everywhere else)
     const a = KEYMAP[e.code]; if (!a) return;
     if (e.code === 'Space') e.preventDefault();
     if (e.repeat) return;
     press(a);
   }
-  function onKeyUp(e) { keys.delete(e.code); }
-  function onBlur() { keys.clear(); }
+  function onKeyUp(e) { keys.delete(e.code); if (e.code === 'KeyC') s.diveKey = false; }
+  function onBlur() { keys.clear(); s.diveKey = false; }
   if (input === 'keyboard') {
     keyTarget.addEventListener('keydown', onKeyDown); keyTarget.addEventListener('keyup', onKeyUp); window.addEventListener('blur', onBlur);
   }
@@ -138,7 +149,7 @@ export function createController({
     if (remote) return false;
     if (s.swim === 2 && NO_SWIM.has(a)) return false;      // not buffered either: nothing fires on the way out of the water
     lastMove = moveInput(camYawLast);
-    if (a === 'punch') s.punchDir = camYawLast;   // a punch goes where the camera looks
+    if (a === 'punch') s.punchDir = camYawLast;   // a chop goes where the camera looks
     const ok = tryStart(a);
     if (!ok) {
       const lock = locked();
@@ -167,6 +178,7 @@ export function createController({
         setAct('leap'); bump('leap'); return true;
       }
       if (locked() > 0) return false;
+      if (s.swim === 2 && s.grounded && s.dive > 0.35) { s.plungeV = 0; s.diveV = -P.diveSurge; return true; }   // under water Space = swim up (no buoyancy wait)
       if (!canJumpNow()) {
         // second jump in the air (not in deep water; a short gap after the first so a double tap is not both at once)
         if (s.swim === 2 || s.grounded || s.airJumps >= P.airJumps || s.time - s.jumpedAt < P.doubleJumpGap) return false;
@@ -247,7 +259,7 @@ export function createController({
         }
         if (done) break;
       }
-      s.y = groundY(s.x, s.z);
+      s.y = groundY(s.x, s.z, s.y);
       prev.x = s.x; prev.y = s.y; prev.z = s.z;
       vis.ox = vx0 - s.x; vis.oy = vy0 - s.y; vis.oz = vz0 - s.z;
     }
@@ -257,9 +269,9 @@ export function createController({
   // ------------------------------------------------------------ physics
   function moveH(dx, dz) {
     const nx = s.x + dx; let hit = false;
-    if (dx) { if (blocked(nx, s.z) || groundY(nx, s.z) > s.y + P.stepUp) { s.vx = 0; hit = true; } else s.x = nx; }
+    if (dx) { if (blocked(nx, s.z) || groundY(nx, s.z, s.y) > s.y + P.stepUp) { s.vx = 0; hit = true; } else s.x = nx; }
     const nz = s.z + dz;
-    if (dz) { if (blocked(s.x, nz) || groundY(s.x, nz) > s.y + P.stepUp) { s.vz = 0; hit = true; } else s.z = nz; }
+    if (dz) { if (blocked(s.x, nz) || groundY(s.x, nz, s.y) > s.y + P.stepUp) { s.vz = 0; hit = true; } else s.z = nz; }
     return hit;
   }
   function approach(tx, tz, accel, decel, h) {
@@ -328,6 +340,15 @@ export function createController({
       } else { const k = Math.max(0, 1 - P.airDrag * h); s.vx *= k; s.vz *= k; }
     }
     if (s.act === 'sit' && s.seat) { s.speed = 0; return; }   // seated: pinned
+    // diving: sink while held, float up (buoyancy) otherwise; only in deep water on a swimmer's footing
+    if (s.swim === 2 && s.grounded) {
+      if (s.plungeV > 0) { s.dive = Math.min(P.diveMax, s.dive + s.plungeV * h); s.diveV = s.plungeV; s.plungeV = Math.max(0, s.plungeV - P.plungeDrag * h); }   // the momentum of a dive in
+      else if (s.diveV < 0) { s.dive = Math.max(0, s.dive + s.diveV * h); s.diveV = Math.min(0, s.diveV + 9 * h); }                                          // surge up (Space)
+      else if (s.diveKey || s.diveBtn) { s.dive = Math.min(P.diveMax, s.dive + P.diveSink * h); s.diveV = P.diveSink; }
+      else { s.diveV = 0; if (s.dive > 0) s.dive = Math.max(0, s.dive - P.diveRise * h); }
+      const room = Math.max(0, water.surface(s.x, s.z) - P.swimSink - (groundY(s.x, s.z, s.y) + P.diveClear));   // never into the seabed
+      if (s.dive > room) { s.dive = room; if (s.diveV > 0) s.diveV = 0; }
+    }
     // integrate
     moveH(s.vx * h, s.vz * h);
     const g = floorAt(s.x, s.z);
@@ -341,8 +362,12 @@ export function createController({
       const grav = s.act === 'dash' && !s.dashGround ? 0 : (s.act === 'leap' ? P.leapGravity : (s.act === 'roll' && s.rollAir ? P.airRollGravity : P.gravity));
       s.vy -= grav * h; s.y += s.vy * h; airPeak = Math.max(airPeak, s.y);
       if (s.y <= g && s.vy <= 0) {
+        const vHit = -s.vy;
         s.y = g; s.vy = 0; s.grounded = true; s.lastGround = s.time; s.airDashUsed = false; lastLanded = s.time; s.rollAir = false;
-        if (water && depthAt(s.x, s.z) >= P.swimOut && (s.swim === 2 || depthAt(s.x, s.z) >= P.swimIn)) { s.swim = 0; if (s.act === 'leap') s.act = null; }   // splash-down: updateWater counts it
+        if (water && depthAt(s.x, s.z) >= P.swimOut && (s.swim === 2 || depthAt(s.x, s.z) >= P.swimIn)) {   // splash-down: updateWater counts it
+          const wasSwim = s.swim === 2; s.swim = 0; if (s.act === 'leap') s.act = null;
+          if (!wasSwim) { s.plunge = vHit; s.plungeFresh = true; s.plungeV = Math.min(P.plungeMax, Math.max(0, vHit - P.plungeV0) * P.plungeK); }   // a dive from the pier goes under, then buoyancy floats you up
+        }
         else if (s.act === 'leap' || s.act === null) { setAct('land', P.landDur); }
         else if (s.act === 'dash') { s.dashGround = true; }
       }
@@ -355,24 +380,27 @@ export function createController({
   const wadeK = () => (s.swim === 1 ? 1 - (1 - P.wadeSlow) * Math.min(1, Math.max(0, (depthAt(s.x, s.z) - P.wadeIn) / (P.swimIn - P.wadeIn))) : 1);
 
   // ------------------------------------------------------------ animation selection
+  // airborne over deep water after a jump or a fall off the pier / the beach (not a leap out of the sea): the diving pose
+  const overDeep = () => !!water && s.swim !== 2 && (s.act === null || s.act === 'jump') && s.y - water.level < 4 && depthAt(s.x, s.z) >= P.swimIn - 0.1;
   function locoCode() {
     const a = s.act;
-    if (s.swim === 2 && s.grounded) return a === 'dash' || s.speed > 0.3 ? 14 : 13;
+    if (s.swim === 2 && s.grounded) return s.dive > 0.3 && s.diveV > 0.4 ? 15 : (a === 'dash' || s.speed > 0.3 ? 14 : 13);
     if (a === 'sit') return s.seat ? 7 : 6;
     if (a === 'prone' || a === 'proneIn') return s.speed > 0.15 && a === 'prone' ? 9 : 8;
     if (a === 'dance') return 10;
     if (a === 'dash') return 11;
     if (a === 'roll') return 12;
     if (a === 'leap') return 5;
-    if (!s.grounded) return s.vy > 0.3 ? 3 : 4;
+    if (!s.grounded) return overDeep() ? 16 : (s.vy > 0.3 ? 3 : 4);
     if (s.speed > 3.9) return 2;
     if (s.speed > 0.15) return 1;
     return 0;
   }
   function animFor(l, act, speed, key) {
     // l: posture code; act: one-shot ('dash','roll','wave','cheer','nod','land','jump') currently playing or null
-    if (l === 13 || l === 14) {                          // in the water: strokes; a dash is a fast burst of them
+    if (l === 13 || l === 14 || l === 15) {              // in the water: strokes; a dash is a fast burst of them; 15 = sinking head first
       if (act === 'dash') return ['swim', { fade: 0.08, timeScale: 2.4 }];
+      if (l === 15) return ['diveDown', { fade: 0.18 }];
       if (act === 'wave') return ['wave', { fade: 0.15, key }];
       return l === 14 ? ['swim', { fade: 0.2, timeScale: Math.min(1.8, Math.max(0.7, speed / P.swim)) }] : ['tread', { fade: 0.25 }];
     }
@@ -392,6 +420,7 @@ export function createController({
       case 3: return ['jump', { fade: 0.06, key }];
       case 4: return ['fall', { fade: 0.15 }];
       case 5: return ['leap', { fade: 0.08, key }];
+      case 16: return ['diveJump', { fade: 0.1 }];
       case 6: return ['sitGround', { fade: 0.22 }];
       case 7: return ['sit', { fade: 0.22 }];
       case 8: return ['prone', { fade: 0.28 }];
@@ -412,6 +441,7 @@ export function createController({
     if (s.act === 'land') one = 'land';
     let pick = animFor(l, one, s.speed, s.key);
     if (!pick) pick = animFor(l, null, s.speed, s.key);   // moving landing: keep locomotion
+    if (poseName && s.act === 'sit' && s.seat) pick = [poseName, { fade: 0.2, key: poseKey }];   // seated on a fishing chair: the page picks the pose
     avatar.play(pick[0], pick[1]);
   }
 
@@ -439,7 +469,7 @@ export function createController({
     avatar.root.position.set(x, y, z); avatar.root.rotation.y = yaw;
     leanCur += (lean - leanCur) * (1 - Math.exp(-dt * 16));   // sprint tilt: the whole model pivots about the feet (model X, root frame)
     if (avatar.model && avatar.model.rotation) avatar.model.rotation.x = Math.abs(leanCur) < 0.002 ? 0 : leanCur;
-    const g = groundY(x, z), hgt = Math.max(0, y - g), sh = avatar.shadow;
+    const g = groundY(x, z, y + 0.3), hgt = Math.max(0, y - g), sh = avatar.shadow;
     if (sh) sh.visible = !swimming;                       // no blob shadow on the seabed
     if (sh && !swimming) { sh.position.y = g - y + 0.02; const k = Math.max(0.35, 1 - hgt * 0.35); sh.scale.set(0.95 * k, 1, 0.95 * k); }
   }
@@ -519,7 +549,7 @@ export function createController({
     while (events.length && events[0].t <= rt) { const e = events.shift(); rAct = e.act; rActT = 0; rKey++; if (onRemoteAct) { try { onRemoteAct(e.act); } catch (err) { /* effects must not break the avatar */ } } }
     if (events.length > 8) events.splice(0, events.length - 8);
     if (rAct) { rActT += dt; const d = ONE_SHOT_DUR()[rAct]; if (d && rActT >= d + 0.02) rAct = null; if ((rAct === 'jump' || rAct === 'djump') && (rActT > 0.5 || (rActT > 0.12 && rL !== 3))) rAct = null; if (rAct === 'leap' && rL !== 5 && rActT > 0.15) rAct = null; }
-    const air = rL === 3 || rL === 4 || rL === 5;
+    const air = rL === 3 || rL === 4 || rL === 5 || rL === 16;
     if (rAir && !air && rL <= 2 && rSpeed < 1.2) { rAct = 'land'; rActT = 0; rKey++; }
     if (rAct === 'land' && rActT > P.landDur) rAct = null;
     rAir = air;
@@ -536,6 +566,7 @@ export function createController({
     let pick = animFor(l, one, rSpeed, rKey);
     if (!pick) pick = animFor(l, null, rSpeed, rKey);
     // remote locomotion uses the interpolated speed
+    if (poseName && rL === 7) pick = [poseName, { fade: 0.2, key: poseKey }];
     avatar.play(pick[0], pick[1]);
     avatar.update(dt);
   }
@@ -546,7 +577,7 @@ export function createController({
   }
 
   const api = {
-    get state() { return { x: s.x, y: s.y, z: s.z, ry: s.ry, speed: s.speed, act: s.act, grounded: s.grounded, seat: remote ? rSeat : (s.seat && s.seat.id), counter: s.counter, swim: s.swim, splash: s.splash }; },
+    get state() { return { x: s.x, y: s.y, z: s.z, ry: s.ry, speed: s.speed, act: s.act, grounded: s.grounded, seat: remote ? rSeat : (s.seat && s.seat.id), counter: s.counter, swim: s.swim, splash: s.splash, plunge: s.plunge, dive: s.dive, diveV: s.diveV }; },
     update, press, sitAt, standUp, netState, applyNet, dispose,
     // a hit on me: shove along (dx, dz) with a small hop (halved and flat in deep water); ends whatever I was doing
     knock(dx, dz, power = 1) {
@@ -561,7 +592,18 @@ export function createController({
       return true;
     },
     setStick(x, y) { stick = { x: x || 0, y: y || 0, on: !!(x || y) }; },   // joystick: x right, y down (screen); |v| ≥ 0.92 runs
-    teleport(x, z, ry) { s.x = prev.x = x; s.z = prev.z = z; s.swim = 0; s.y = prev.y = floorAt(x, z); updateWater(); if (ry !== undefined) s.ry = vis.yaw = ry; s.vx = s.vz = s.vy = 0; },
+    teleport(x, z, ry) { s.x = prev.x = x; s.z = prev.z = z; s.swim = 0; s.dive = s.diveV = s.plungeV = 0; s.y = 99; s.y = prev.y = floorAt(x, z); updateWater(); if (ry !== undefined) s.ry = vis.yaw = ry; s.vx = s.vz = s.vy = 0; },   // y = 99 first: probe from above, so a deck counts
+    // seated pose override (e.g. 'fishSit' / 'fishCast'); a new key restarts a one-shot
+    setPose(name, key) { poseName = name || null; poseKey = key === undefined ? poseKey + 1 : key; },
+    setDive(on) { if (!remote) s.diveBtn = !!on; },   // hold-to-sink for a touch button (key C does the same)
+    // climb out of the sea onto a deck at (x, y, z): the body slides there visually
+    climbTo(x, y, z, ry) {
+      if (remote) return;
+      const vx0 = s.x + vis.ox, vy0 = s.y + vis.oy, vz0 = s.z + vis.oz;
+      s.x = prev.x = x; s.y = prev.y = y; s.z = prev.z = z; s.vx = s.vy = s.vz = 0; s.grounded = true; s.swim = 0; s.dive = s.diveV = s.plungeV = 0; s.act = null; s.key++;
+      if (ry !== undefined) s.ry = ry;
+      vis.ox = vx0 - s.x; vis.oy = vy0 - s.y; vis.oz = vz0 - s.z;
+    },
     get isRemote() { return remote; },
     _s: s,
   };

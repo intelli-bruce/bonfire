@@ -1,11 +1,14 @@
-// bf/ocean.js — cosy stylized sea for "밤바다 모닥불": clean colour bands (turquoise shallows → teal → indigo deep),
+// bf/ocean.js — cosy stylized sea for "밤바다 모닥불": clear emerald water (real depth from the seabed height grid: you see the sand
+// through the shallows, glowing emerald near the shore, teal further out, only the deep basin goes dark), plus an underwater mode,
 // soft toon foam rings that roll in and swash up/down the beach near waterlineZ, a sparkly moon path made of
 // twinkling 4-point glints, gentle swell to the horizon at y = 0, faint warm firelight on near foam.
 //
 // API: buildOcean(THREE, scene, { renderer, moonDir, waterlineZ = -14, shoreline, quality:'high'|'low', firePos })
 //   shoreline (optional): [[x, z], ...] sorted by x, the y = 0 water edge (beach.json); foam/swash follow it,
 //   clamped outside its x range. Absent → straight edge at waterlineZ.
-//        -> { update(dt, t, camera), waveSoundLevel() /* 0..1, peaks when a breaker crashes */, dispose() }
+//   seabed (optional): { x0, z0, dx, nx, nz, data: Float32Array(nx * nz) } ground height (data[iz * nx + ix], x = x0 + ix * dx, z = z0 + iz * dx);
+//   gives the real water depth for colour and transparency. Absent → the old assumed beach slope.
+//        -> { update(dt, t, camera), waveSoundLevel() /* 0..1, peaks when a breaker crashes */, under(camera, surfaceY | null) /* underwater ceiling */, dispose() }
 //
 // Assumes renderer.toneMapping = ACESFilmicToneMapping, outputColorSpace = SRGB (linear colours, glints > 1).
 // The mesh spans ±1000 m: set camera.far >= 1200. Transparent ShaderMaterial (renderOrder -10, depthWrite on) so the
@@ -34,6 +37,12 @@ export function buildOcean(THREE, scene, opts = {}) {
     shoreTex.magFilter = shoreTex.minFilter = THREE.NearestFilter; shoreTex.generateMipmaps = false; shoreTex.needsUpdate = true;
     gridWL = Math.max(...zs);
   }
+  const sb = opts.seabed && opts.seabed.data && opts.seabed.nx > 1 && opts.seabed.nz > 1 ? opts.seabed : null;
+  let seaTex = null;
+  if (sb) {
+    seaTex = new THREE.DataTexture(sb.data instanceof Float32Array ? sb.data : Float32Array.from(sb.data), sb.nx, sb.nz, THREE.RedFormat, THREE.FloatType);
+    seaTex.magFilter = seaTex.minFilter = THREE.NearestFilter; seaTex.generateMipmaps = false; seaTex.needsUpdate = true;
+  }
   const SLOPE = 0.4 / 14;
   const moonDir = new THREE.Vector3().copy(opts.moonDir || new THREE.Vector3(0.25, 0.32, -1)).normalize();
   const firePos = new THREE.Vector3().copy(opts.firePos || new THREE.Vector3(0, 0.9, 0));
@@ -53,9 +62,11 @@ export function buildOcean(THREE, scene, opts = {}) {
     uMoonDir: { value: moonDir }, uMoonCol: { value: new THREE.Color().setRGB(1.0, 0.93, 0.74) },
     uFogCol: { value: HOR.clone() }, uFogDensity: { value: 0.012 },
     uFirePos: { value: firePos }, uFireCol: { value: new THREE.Color().setRGB(1.0, 0.5, 0.18) },
-    uShallow: { value: new THREE.Color().setRGB(0.030, 0.200, 0.230) },
-    uMid: { value: new THREE.Color().setRGB(0.016, 0.070, 0.170) },
-    uDeep: { value: new THREE.Color().setRGB(0.010, 0.026, 0.105) },
+    uSea: { value: seaTex }, uSeaP: { value: new THREE.Vector4(sb ? sb.x0 : 0, sb ? sb.z0 : 0, sb ? 1 / sb.dx : 1, 0) }, uSeaN: { value: new THREE.Vector2(sb ? sb.nx : 1, sb ? sb.nz : 1) },
+    uClear: { value: 0.17 },   // absorption per metre: 1 - exp(-uClear * depth) is how much of the water colour covers the seabed
+    uShallow: { value: new THREE.Color().setRGB(0.045, 0.52, 0.40) },   // emerald, lit by the moon and the fire glow
+    uMid: { value: new THREE.Color().setRGB(0.03, 0.34, 0.38) },        // teal
+    uDeep: { value: new THREE.Color().setRGB(0.012, 0.17, 0.30) },       // deep blue-green basin
     uFoam: { value: new THREE.Color().setRGB(0.92, 0.96, 1.12) },
     uSet0: { value: new THREE.Vector3(...SETS[0]) }, uSet1: { value: new THREE.Vector3(...SETS[1]) },
   };
@@ -102,7 +113,7 @@ export function buildOcean(THREE, scene, opts = {}) {
   `;
 
   const mat = new THREE.ShaderMaterial({
-    defines: { HIGH: low ? 0 : 1, SHORE: shoreTex ? 1 : 0 },
+    defines: { HIGH: low ? 0 : 1, SHORE: shoreTex ? 1 : 0, SEA: seaTex ? 1 : 0 },
     uniforms,
     transparent: true, depthWrite: true, fog: false,
     vertexShader: /* glsl */`
@@ -138,7 +149,16 @@ export function buildOcean(THREE, scene, opts = {}) {
       ${SHORE_GLSL}
       uniform sampler2D uTex;
       uniform vec3 uMoonDir, uMoonCol, uFogCol, uFirePos, uFireCol, uShallow, uMid, uDeep, uFoam;
-      uniform float uFogDensity, uPx;
+      uniform float uFogDensity, uPx, uClear;
+      #if SEA == 1
+        uniform sampler2D uSea; uniform vec4 uSeaP; uniform vec2 uSeaN;
+        float seaH(vec2 p){   // bilinear ground height (clamped at the grid edge)
+          vec2 f = clamp((p - uSeaP.xy) * uSeaP.z, vec2(0.0), uSeaN - 1.001), i = floor(f), u = f - i;
+          float a = texture2D(uSea, (i + 0.5) / uSeaN).r, b = texture2D(uSea, (i + vec2(1.5, 0.5)) / uSeaN).r;
+          float c = texture2D(uSea, (i + vec2(0.5, 1.5)) / uSeaN).r, d = texture2D(uSea, (i + 1.5) / uSeaN).r;
+          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+      #endif
       varying vec3 vWorld; varying vec3 vN; varying float vBump;
 
       float hash2(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -175,10 +195,14 @@ export function buildOcean(THREE, scene, opts = {}) {
         float sw;
         float lvl = shoreLevel(s, vWorld.x, sw);
         float sandY = -s * uSlope;
-        float d = vWorld.y - sandY;
+        #if SEA == 1
+          float d = vWorld.y - seaH(p);          // real water depth (m)
+        #else
+          float d = vWorld.y - sandY;
+        #endif
         float wob = (t1.b - 0.5) * 0.06;
-        float b1 = smoothstep(0.11, 0.135, d + wob);
-        float b2 = smoothstep(0.46, 0.52, d + wob * 2.0);
+        float dd = max(d + wob, 0.0);
+        float b1 = smoothstep(0.0, 1.7, dd), b2 = smoothstep(1.2, 7.5, dd);
         vec3 col = mix(uShallow, uMid, b1);
         col = mix(col, uDeep, b2);
         // gentle lift toward the horizon (reflected sky), not banded
@@ -193,8 +217,12 @@ export function buildOcean(THREE, scene, opts = {}) {
           // stylized ripple contour lines (fade with distance to avoid aliasing)
           float rh = t1.b * 0.6 + t2.b * 0.4;
           float rl = 1.0 - aastep(0.022, abs(rh - 0.66));
-          col += vec3(0.02, 0.04, 0.07) * rl * (1.0 - smoothstep(12.0, 45.0, dist)) * b1;
+          col += vec3(0.02, 0.05, 0.06) * rl * (1.0 - smoothstep(12.0, 45.0, dist)) * b1;
         #endif
+        // caustic net on the bright shallows: thin light strands that crawl with the swell
+        float cn = 1.0 - abs((t1.b * 0.6 + t2.b * 0.4) * 2.0 - 1.0 + 0.08 * sin(uTime * 0.9 + p.x * 0.6));
+        float caustic = smoothstep(0.80, 0.97, cn) * smoothstep(0.03, 0.35, d) * (1.0 - smoothstep(1.8, 5.0, dd)) * (1.0 - smoothstep(25.0, 60.0, dist));
+        col += vec3(0.05, 0.34, 0.27) * caustic;
 
         // ---- moon path: soft band + twinkling glints
         vec2 toF = normalize(vWorld.xz - cameraPosition.xz + 1e-4);
@@ -252,7 +280,16 @@ export function buildOcean(THREE, scene, opts = {}) {
         col = mix(col, uFogCol * 0.82, fog);
         col += uMoonCol * glint * 2.6 * (1.0 - 0.6 * fog);
 
-        float alpha = clamp(smoothstep(0.0, 0.05, d) * 0.85 + smoothstep(0.05, 0.3, d) * 0.15 + foam, 0.0, 1.0);
+        #if SEA == 1
+          // clear water: the seabed shows through (1 - exp(-uClear * depth)); grazing angles and the distance reflect the sky, so the far sea stays solid
+          float nv = clamp(dot(normalize(vN), V), 0.0, 1.0);
+          float fres = pow(1.0 - nv, 3.5);
+          float absorb = 1.0 - exp(-uClear * dd);
+          float alpha = smoothstep(0.0, 0.05, d) * clamp(0.05 + absorb * 0.93 + fres * 0.55 + smoothstep(55.0, 190.0, dist) * 0.9, 0.0, 1.0);
+          alpha = clamp(max(alpha, glint * 0.8) + foam, 0.0, 1.0);
+        #else
+          float alpha = clamp(smoothstep(0.0, 0.05, d) * 0.85 + smoothstep(0.05, 0.3, d) * 0.15 + foam, 0.0, 1.0);
+        #endif
         gl_FragColor = vec4(col, alpha);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -264,6 +301,35 @@ export function buildOcean(THREE, scene, opts = {}) {
   mesh.frustumCulled = false; mesh.renderOrder = -10; mesh.name = 'ocean';
   mesh.onBeforeRender = (r) => { pxScale.value = r.getPixelRatio(); };
   scene.add(mesh);
+
+  // underwater ceiling: seen only from below (BackSide): a bright window straight up, dark teal toward the sides, drifting light strands
+  const under = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+    side: THREE.BackSide, fog: false, depthWrite: true,   // writes depth: the sky and the lamps above the water stay hidden behind the ceiling
+    uniforms: { uTime: uniforms.uTime, uTex: { value: tex }, uMoonDir: { value: moonDir } },
+    vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: /* glsl */`
+      uniform float uTime; uniform sampler2D uTex; uniform vec3 uMoonDir; varying vec3 vW;
+      void main(){
+        vec3 dir = normalize(vW - cameraPosition);
+        float k = clamp(dir.y, 0.0, 1.0);
+        vec2 p = vW.xz * 0.05;
+        vec4 a = texture2D(uTex, p + vec2(0.004, 0.012) * uTime), b = texture2D(uTex, p * 2.1 - vec2(0.01, 0.02) * uTime);
+        float str = smoothstep(0.78, 0.97, 1.0 - abs((a.b * 0.6 + b.b * 0.4) * 2.0 - 1.0));
+        float win = smoothstep(0.50, 0.78, k);                                 // Snell's window
+        vec3 outside = vec3(0.008, 0.075, 0.115), inside = vec3(0.06, 0.40, 0.40);
+        vec3 col = mix(outside, inside, win) + vec3(0.05, 0.30, 0.26) * str * (0.35 + 0.65 * win);
+        float m = pow(max(dot(dir, normalize(vec3(uMoonDir.x, abs(uMoonDir.y) + 0.2, uMoonDir.z))), 0.0), 40.0);
+        col += vec3(0.5, 0.62, 0.55) * m * win;
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  }));
+  under.frustumCulled = false; under.visible = false; under.renderOrder = -20; under.name = 'ocean-under'; scene.add(under);
+  function underCam(camera, y) {
+    if (y === null || y === undefined || !camera) { under.visible = false; return; }
+    under.visible = true; under.position.set(camera.position.x, y, camera.position.z);
+  }
 
   let lastT = 0, camX = 0;
   function frac(v) { return v - Math.floor(v); }
@@ -293,10 +359,10 @@ export function buildOcean(THREE, scene, opts = {}) {
   }
 
   function dispose() {
-    scene.remove(mesh); geo.dispose(); mat.dispose(); tex.dispose(); if (shoreTex) shoreTex.dispose();
+    scene.remove(mesh); scene.remove(under); geo.dispose(); mat.dispose(); tex.dispose(); under.geometry.dispose(); under.material.dispose(); if (shoreTex) shoreTex.dispose(); if (seaTex) seaTex.dispose();
   }
 
-  return { update, waveSoundLevel, dispose, mesh };
+  return { update, waveSoundLevel, under: underCam, dispose, mesh };
 }
 
 function makeGrid(THREE, WL, low) {

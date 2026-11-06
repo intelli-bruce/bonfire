@@ -236,15 +236,18 @@ function authoredClips() {
     { t: 0.75, torso: [0, 0, 0], head: [6, 0, 0], 'arm-left': [-30, 0, -20], 'arm-right': [-30, 0, 20], 'leg-left': [0, 0, 0], 'leg-right': [0, 0, 0], rp: [0, -0.025, 0], rs: [1.05, 0.92, 1.05] },
     { t: 1, torso: [0, 16, 6], head: [0, -10, 8], 'arm-left': [-20, 0, 40], 'arm-right': [-20, 0, 15], 'leg-left': [-15, 0, 4], 'leg-right': [5, 0, 0], rp: [0.02, 0, 0], rs: [1, 1, 1] },
   ]));
-  // punch: a quick straight, right hand ('punch') or left ('punchL'). The swinging arm lowers (Z) and then swings forward (X -90);
-  // the torso winds up away from the arm and unwinds into it; the other arm guards; the legs take a short boxer stance.
+  // punch ('punch' right / 'punchL' left): an overhead chop. The arm hangs (Z ~ 84), X swings it in the vertical plane in front of the body:
+  // X 0 down, -90 forward, -180 straight up, -210 up and slightly back. It winds up over the head (leaning back, the other arm out for balance),
+  // pauses, then comes down over the top in a big arc (X -205 -> -75, leaning in, a step forward): the contact frame is the arm pointing forward-down (t 0.5 of 0.46 s).
   const punchClip = (name, right) => {
     const z = right ? 1 : -1, A = right ? 'arm-right' : 'arm-left', G = right ? 'arm-left' : 'arm-right', LF = right ? 'leg-left' : 'leg-right', LB = right ? 'leg-right' : 'leg-left';
-    return makeClip(name, 0.3, [
-      { t: 0, root: [4, 0, 0], torso: [6, -24 * z, 0], head: [0, 12 * z, 0], [A]: [42, 0, 72 * z], [G]: [-38, 0, -62 * z], [LF]: [-22, 0, 0], [LB]: [18, 0, 0] },
-      { t: 0.42, root: [9, 0, 0], torso: [12, 26 * z, 0], head: [-4, -10 * z, 0], [A]: [-92, 0, 84 * z], [G]: [-45, 0, -66 * z], [LF]: [-28, 0, 0], [LB]: [24, 0, 0], rs: [1, 1, 1.03] },
-      { t: 0.68, root: [7, 0, 0], torso: [10, 20 * z, 0], [A]: [-90, 0, 84 * z], rs: [1, 1, 1] },
-      { t: 1, root: [0, 0, 0], torso: [0, 0, 0], head: [0, 0, 0], [A]: [0, 0, 45 * z], [G]: [0, 0, -45 * z], [LF]: [0, 0, 0], [LB]: [0, 0, 0] },
+    return makeClip(name, 0.46, [
+      { t: 0, root: [0, 0, 0], torso: [0, 0, 0], head: [0, 0, 0], [A]: [0, 0, 45 * z], [G]: [0, 0, -45 * z], [LF]: [0, 0, 0], [LB]: [0, 0, 0], rs: [1, 1, 1] },
+      { t: 0.2, root: [-3, 0, 0], torso: [-9, -16 * z, 0], head: [-8, 8 * z, 0], [A]: [-170, 0, 80 * z], [G]: [-35, 0, -58 * z], [LF]: [-16, 0, 0], [LB]: [14, 0, 0], rs: [1, 1.04, 1] },
+      { t: 0.36, root: [-6, 0, 0], torso: [-13, -8 * z, 0], head: [-12, 4 * z, 0], [A]: [-196, 0, 84 * z], [G]: [-40, 0, -62 * z], [LF]: [-18, 0, 0], [LB]: [16, 0, 0], rs: [1, 1.05, 1] },
+      { t: 0.5, root: [10, 0, 0], torso: [24, 12 * z, 0], head: [8, -6 * z, 0], [A]: [-78, 0, 80 * z], [G]: [-30, 0, -60 * z], [LF]: [-34, 0, 0], [LB]: [26, 0, 0], rs: [1, 0.94, 1.04] },
+      { t: 0.64, root: [13, 0, 0], torso: [30, 14 * z, 0], head: [10, 0, 0], [A]: [-42, 0, 74 * z], [LF]: [-30, 0, 0], [LB]: [22, 0, 0], rs: [1, 0.97, 1.02] },
+      { t: 1, root: [0, 0, 0], torso: [0, 0, 0], head: [0, 0, 0], [A]: [0, 0, 45 * z], [G]: [0, 0, -45 * z], [LF]: [0, 0, 0], [LB]: [0, 0, 0], rs: [1, 1, 1] },
     ]);
   };
   C.push(punchClip('punch', true), punchClip('punchL', false));
@@ -264,6 +267,35 @@ function authoredClips() {
     { t: 0.5, root: [12, 0, 2], head: [-8, 0, -3], 'arm-left': [-20, 25, -64], 'arm-right': [-20, -25, 64], 'leg-left': [5, 0, 6], 'leg-right': [-35, 0, -6], rp: [0, 0.012, 0] },
     { t: 1, root: [14, 0, 0], head: [-10, 0, 0], 'arm-left': [-20, -25, -72], 'arm-right': [-20, 25, 72], 'leg-left': [-35, 0, 6], 'leg-right': [5, 0, -6], rp: [0, 0, 0] },
   ], [0, 0.3, 0]));
+  // dive: a jump into the sea from the pier — body stretched out and pitched head down past horizontal, arms straight ahead (overhead relative to the body), legs together
+  C.push(makeClip('diveJump', 0.8, [
+    { t: 0, root: [118, 0, 0], torso: [4, 0, 0], head: [-72, 0, 0], 'arm-left': [0, 0, 86], 'arm-right': [0, 0, -86], 'leg-left': [8, 0, 3], 'leg-right': [12, 0, -3] },
+    { t: 0.5, root: [126, 0, 0], head: [-76, 0, 0], 'leg-left': [14, 0, 2], 'leg-right': [8, 0, -2] },
+    { t: 1, root: [118, 0, 0], head: [-72, 0, 0], 'leg-left': [8, 0, 3], 'leg-right': [12, 0, -3] },
+  ], [0, 0.3, 0]));
+  // sinking head first: pitched steeply down, arms pull back in breaststroke sweeps, a flutter kick
+  C.push(makeClip('diveDown', 1.2, [
+    { t: 0, root: [150, 0, 0], torso: [0, 0, 0], head: [-50, 0, 0], 'arm-left': [0, 0, 84], 'arm-right': [0, 0, -84], 'leg-left': [10, 0, 3], 'leg-right': [-14, 0, -3] },
+    { t: 0.3, 'arm-left': [-6, 0, 38], 'arm-right': [-6, 0, -38], 'leg-left': [-14, 0, 3], 'leg-right': [10, 0, -3] },
+    { t: 0.6, 'arm-left': [0, 0, 64], 'arm-right': [0, 0, -64], 'leg-left': [10, 0, 3], 'leg-right': [-14, 0, -3] },
+    { t: 1, 'arm-left': [0, 0, 84], 'arm-right': [0, 0, -84], 'leg-left': [10, 0, 3], 'leg-right': [-14, 0, -3] },
+  ], [0, 0.3, 0]));
+  // fishing chair: the kit's sit (legs forward, body lowered 0.15) with both hands forward on the rod; a slow breathing sway
+  const fs = { rp: [0, -0.15, 0], 'leg-left': [-75, 0, 0], 'leg-right': [-75, 0, 0] };
+  C.push(makeClip('fishSit', 3.0, [
+    { t: 0, ...fs, torso: [7, 0, 0], head: [4, 0, 0], 'arm-right': [-50, 0, 68], 'arm-left': [-44, 0, -62] },
+    { t: 0.5, torso: [5, 0, 0], head: [2, 0, 3], 'arm-right': [-53, 0, 66], 'arm-left': [-47, 0, -60] },
+    { t: 1, torso: [7, 0, 0], head: [4, 0, 0], 'arm-right': [-50, 0, 68], 'arm-left': [-44, 0, -62] },
+  ]));
+  // casting: rod over the shoulder (both arms up and back), then a quick whip forward and a settle into the sit pose
+  C.push(makeClip('fishCast', 1.1, [
+    { t: 0, ...fs, torso: [7, 0, 0], head: [4, 0, 0], 'arm-right': [-50, 0, 68], 'arm-left': [-44, 0, -62] },
+    { t: 0.22, torso: [-14, 0, 0], head: [-10, 0, 0], 'arm-right': [-208, 0, 72], 'arm-left': [-196, 0, -66] },
+    { t: 0.3, torso: [-16, 0, 0], head: [-12, 0, 0], 'arm-right': [-212, 0, 74], 'arm-left': [-200, 0, -68] },
+    { t: 0.46, torso: [18, 0, 0], head: [8, 0, 0], 'arm-right': [-84, 0, 66], 'arm-left': [-78, 0, -60] },
+    { t: 0.64, torso: [10, 0, 0], head: [4, 0, 0], 'arm-right': [-62, 0, 68], 'arm-left': [-56, 0, -62] },
+    { t: 1, torso: [7, 0, 0], head: [4, 0, 0], 'arm-right': [-50, 0, 68], 'arm-left': [-44, 0, -62] },
+  ]));
   return C;
 }
 // Ground fit: lift/lower the root per key so the lowest skinned vertex touches y = 0 (roll: every key; postures: one offset)
@@ -297,6 +329,8 @@ const MAP = {
   nod: { clip: 'emote-yes', loop: true },
   punch: { clip: 'punch', loop: false }, punchL: { clip: 'punchL', loop: false }, dashRun: { clip: 'dashRun', loop: true },
   swim: { clip: 'swim', loop: true }, tread: { clip: 'tread', loop: true },
+  diveJump: { clip: 'diveJump', loop: true }, diveDown: { clip: 'diveDown', loop: true },
+  fishSit: { clip: 'fishSit', loop: true }, fishCast: { clip: 'fishCast', loop: false },
 };
 const LOCO = new Set(['walk', 'run', 'crawl']);   // phase-synchronised loops
 
