@@ -3,6 +3,8 @@
 // Optional water ({ level, surface(x, z) }): wading in the shallows, swimming at the surface once it gets deep.
 // Combat feel: overhead chop (alternating hands, onStrike at the contact frame), knock(dx, dz) (a hit: shove + small hop), a second jump in the air,
 // a flying roll out of a jump, rolls that chain almost back to back, and a dash that sprints leaned forward.
+// Collision hooks: groundY(x, z, y) = the height of what a body with its feet at y stands on there; blocked(x, z, y) = does something taller than a step stop it.
+// Stepping onto or off a ledge eases the visual height (the physics snaps) so climbing a log or a rock does not pop.
 // No THREE import: works on avatar.root (an Object3D) and plain numbers.
 import { SIT_HIP } from './avatar.js';
 
@@ -255,7 +257,7 @@ export function createController({
       for (const dist of [0.65, 0.95, 1.3]) {
         for (const da of cand) {
           const a = s.seat.ry + da, nx = s.seat.x - Math.sin(a) * dist, nz = s.seat.z - Math.cos(a) * dist;
-          if (!blocked(nx, nz)) { s.x = nx; s.z = nz; done = true; break; }
+          if (!blocked(nx, nz, s.y)) { s.x = nx; s.z = nz; done = true; break; }
         }
         if (done) break;
       }
@@ -269,9 +271,9 @@ export function createController({
   // ------------------------------------------------------------ physics
   function moveH(dx, dz) {
     const nx = s.x + dx; let hit = false;
-    if (dx) { if (blocked(nx, s.z) || groundY(nx, s.z, s.y) > s.y + P.stepUp) { s.vx = 0; hit = true; } else s.x = nx; }
+    if (dx) { if (blocked(nx, s.z, s.y) || groundY(nx, s.z, s.y) > s.y + P.stepUp) { s.vx = 0; hit = true; } else s.x = nx; }
     const nz = s.z + dz;
-    if (dz) { if (blocked(s.x, nz) || groundY(s.x, nz, s.y) > s.y + P.stepUp) { s.vz = 0; hit = true; } else s.z = nz; }
+    if (dz) { if (blocked(s.x, nz, s.y) || groundY(s.x, nz, s.y) > s.y + P.stepUp) { s.vz = 0; hit = true; } else s.z = nz; }
     return hit;
   }
   function approach(tx, tz, accel, decel, h) {
@@ -354,7 +356,7 @@ export function createController({
     const g = floorAt(s.x, s.z);
     if (s.grounded) {
       if (s.y - g <= P.snapDown) {
-        if (s.swim && Math.abs(g - s.y) > 0.03) vis.oy -= g - s.y;   // floating up / finding the sand: ease the step visually
+        if (Math.abs(g - s.y) > 0.03) vis.oy -= g - s.y;   // floating up / finding the sand / stepping onto or off a ledge: ease the step visually
         s.y = g; s.vy = 0; s.lastGround = s.time;
       }
       else { s.grounded = false; s.vy = 0; airPeak = s.y; }

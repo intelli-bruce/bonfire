@@ -3,7 +3,7 @@
 // plus the fishing tackle (rod in the angler's hands, a line, a glowing float that rides the swell).
 //
 // API: buildPier(THREE, scene, { groundAt(x, z), quality }) -> {
-//   deckTop(x, z) /* height of the planks there, or null */, blocks /* collision circles (posts, chairs, crates) */,
+//   deckTop(x, z) /* height of the planks there, or null */, blocks /* collision circles (posts, chairs, crates) with top (y of the upper face) and base (the deck they stand on) */,
 //   seats /* fishing chairs, same shape as beach.json seats + fish:true */, ladders /* [{ x, z, tx, tz, ty, ry }] swim spot -> deck landing */,
 //   update(dt, t), dispose() }
 //   createAngler(THREE, scene, root, { waterY(x, z), onLand(x, z), onRing(x, z) }) -> { show(on), cast(tx, tz), reel(), update(dt, t), state, floatPos, dispose() }
@@ -116,7 +116,7 @@ export function buildPier(THREE, scene, opts = {}) {
       if (k === 1 && z <= PIER.fish.z1 + 0.2 && z >= PIER.fish.z0 - 0.2) continue;   // the walkway opens onto the fishing deck here
       const top = (deckTop(P.x, z) ?? DY) + (i % 2 === k ? 0.95 : 0.52);
       post(x, z, top);
-      if (z <= P.zRamp + 0.1) blocks.push({ type: 'circle', x, z, r: 0.12 });
+      if (z <= P.zRamp + 0.1) blocks.push({ type: 'circle', x, z, r: 0.12, top, base: DY });
       if (i % 2 === k && z < -14) { box(x, top + 0.05, z, 0.22, 0.05, 0.22, WOOD_D, 1); lampAt(x, z, top + 0.07); }
     }
   });
@@ -141,21 +141,21 @@ export function buildPier(THREE, scene, opts = {}) {
   const headPosts = [[H.x0 + 0.1, H.z0 + 0.1], [H.x1 - 0.1, H.z0 + 0.1], [H.x0 + 0.1, H.z1 - 0.1], [H.x1 - 0.1, H.z1 - 0.1], [(H.x0 + H.x1) / 2 - 2.2, H.z0 + 0.1], [(H.x0 + H.x1) / 2 + 2.2, H.z0 + 0.1], [P.x - 2.2, H.z0 + 0.1], [P.x + 2.2, H.z0 + 0.1]];
   headPosts.forEach(([x, z], i) => {
     const top = DY + (i % 3 === 0 ? 1.0 : 0.55);
-    post(x, z, top); blocks.push({ type: 'circle', x, z, r: 0.12 });
+    post(x, z, top); blocks.push({ type: 'circle', x, z, r: 0.12, top, base: DY });
     if (i % 3 === 0) { box(x, top + 0.05, z, 0.22, 0.05, 0.22, WOOD_D, 1); lampAt(x, z, top + 0.07); }
   });
   for (const x of [-3.6, 1.2]) {   // bollards
     const z = H.z0 + 0.45; post(x, z, DY + 0.34, '#2c2a2e', 0.15, DY - 0.2); box(x, DY + 0.36, z, 0.4, 0.06, 0.18, '#2c2a2e', 1);
-    blocks.push({ type: 'circle', x, z, r: 0.16 });
+    blocks.push({ type: 'circle', x, z, r: 0.16, top: DY + 0.39, base: DY });
   }
   for (const [x, z, s] of [[H.x0 + 0.7, H.z1 - 0.8, 0.6], [H.x0 + 0.7, H.z1 - 1.5, 0.5], [H.x0 + 1.35, H.z1 - 0.8, 0.55]]) {
-    box(x, DY + s / 2, z, s, s, s, '#8a6a46', 0.9 + rnd() * 0.2, 0, rnd() * 0.5); blocks.push({ type: 'circle', x, z, r: s * 0.55 });
+    box(x, DY + s / 2, z, s, s, s, '#8a6a46', 0.9 + rnd() * 0.2, 0, rnd() * 0.5); blocks.push({ type: 'circle', x, z, r: s * 0.55, top: DY + s + 0.02, base: DY });
   }
 
   // fishing deck: edge posts, two folding chairs facing the open sea (-Z), a cooler and a tackle box between them, a lantern
   const F = P.fish;
   for (const [x, z] of [[F.x1 - 0.1, F.z0 + 0.1], [F.x1 - 0.1, F.z1 - 0.1], [F.x1 - 0.1, (F.z0 + F.z1) / 2], [(F.x0 + F.x1) / 2 + 1.0, F.z0 + 0.1], [F.x0 + 1.1, F.z0 + 0.1], [F.x1 - 2.2, F.z0 + 0.1]]) {
-    post(x, z, DY + 0.55); blocks.push({ type: 'circle', x, z, r: 0.12 });
+    post(x, z, DY + 0.55); blocks.push({ type: 'circle', x, z, r: 0.12, top: DY + 0.55, base: DY });
   }
   const seats = [];
   const chairs = [[3.2, -26.5], [5.3, -26.5]];
@@ -171,13 +171,13 @@ export function buildPier(THREE, scene, opts = {}) {
       box(cx + sx, sy - 0.2, cz + 0.2, 0.035, 0.5, 0.035, '#a8b1bb', 1, 0.0, 0, 0);      // rear leg
     }
     box(cx, sy - 0.2, cz, 0.5, 0.03, 0.03, '#a8b1bb', 0.9);   // cross bar
-    blocks.push({ type: 'circle', x: cx, z: cz + 0.05, r: 0.2 });
+    blocks.push({ type: 'circle', x: cx, z: cz + 0.05, r: 0.2, top: sy + 0.03, base: DY });   // the seat cloth
     seats.push({ id: 'f' + (i + 1), x: cx, z: cz, ry: 0, y: sy + 0.025, fish: true });
   });
   // cooler + tackle box + bucket on the pier head side of the chairs
   box(4.25, DY + 0.17, -25.75, 0.6, 0.34, 0.4, '#d9e6ee', 0.95); box(4.25, DY + 0.35, -25.75, 0.62, 0.05, 0.42, '#2b7fbf', 1);
-  box(4.25, DY + 0.46, -25.75, 0.18, 0.06, 0.06, '#2c2a2e', 1); blocks.push({ type: 'circle', x: 4.25, z: -25.75, r: 0.36 });
-  box(6.35, DY + 0.1, -25.6, 0.42, 0.2, 0.26, '#b8452e', 0.95); box(6.35, DY + 0.21, -25.6, 0.44, 0.03, 0.28, '#7a2b1d', 1); blocks.push({ type: 'circle', x: 6.35, z: -25.6, r: 0.26 });
+  box(4.25, DY + 0.46, -25.75, 0.18, 0.06, 0.06, '#2c2a2e', 1); blocks.push({ type: 'circle', x: 4.25, z: -25.75, r: 0.36, top: DY + 0.38, base: DY });
+  box(6.35, DY + 0.1, -25.6, 0.42, 0.2, 0.26, '#b8452e', 0.95); box(6.35, DY + 0.21, -25.6, 0.44, 0.03, 0.28, '#7a2b1d', 1); blocks.push({ type: 'circle', x: 6.35, z: -25.6, r: 0.26, top: DY + 0.23, base: DY });
   lampAt(0.7, -25.2, DY + 0.32); box(0.7, DY + 0.16, -25.2, 0.1, 0.32, 0.1, WOOD_D, 1);   // a stake lantern at the junction
 
   // ladders (a swimmer can climb them): rails + rungs down to 1.7 m under the water, fixed to the deck edge
