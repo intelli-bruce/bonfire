@@ -236,6 +236,18 @@ function authoredClips() {
     { t: 0.75, torso: [0, 0, 0], head: [6, 0, 0], 'arm-left': [-30, 0, -20], 'arm-right': [-30, 0, 20], 'leg-left': [0, 0, 0], 'leg-right': [0, 0, 0], rp: [0, -0.025, 0], rs: [1.05, 0.92, 1.05] },
     { t: 1, torso: [0, 16, 6], head: [0, -10, 8], 'arm-left': [-20, 0, 40], 'arm-right': [-20, 0, 15], 'leg-left': [-15, 0, 4], 'leg-right': [5, 0, 0], rp: [0.02, 0, 0], rs: [1, 1, 1] },
   ]));
+  // punch: a quick straight, right hand ('punch') or left ('punchL'). The swinging arm lowers (Z) and then swings forward (X -90);
+  // the torso winds up away from the arm and unwinds into it; the other arm guards; the legs take a short boxer stance.
+  const punchClip = (name, right) => {
+    const z = right ? 1 : -1, A = right ? 'arm-right' : 'arm-left', G = right ? 'arm-left' : 'arm-right', LF = right ? 'leg-left' : 'leg-right', LB = right ? 'leg-right' : 'leg-left';
+    return makeClip(name, 0.3, [
+      { t: 0, root: [4, 0, 0], torso: [6, -24 * z, 0], head: [0, 12 * z, 0], [A]: [42, 0, 72 * z], [G]: [-38, 0, -62 * z], [LF]: [-22, 0, 0], [LB]: [18, 0, 0] },
+      { t: 0.42, root: [9, 0, 0], torso: [12, 26 * z, 0], head: [-4, -10 * z, 0], [A]: [-92, 0, 84 * z], [G]: [-45, 0, -66 * z], [LF]: [-28, 0, 0], [LB]: [24, 0, 0], rs: [1, 1, 1.03] },
+      { t: 0.68, root: [7, 0, 0], torso: [10, 20 * z, 0], [A]: [-90, 0, 84 * z], rs: [1, 1, 1] },
+      { t: 1, root: [0, 0, 0], torso: [0, 0, 0], head: [0, 0, 0], [A]: [0, 0, 45 * z], [G]: [0, 0, -45 * z], [LF]: [0, 0, 0], [LB]: [0, 0, 0] },
+    ]);
+  };
+  C.push(punchClip('punch', true), punchClip('punchL', false));
   // swimming (not ground-fitted: the controller floats the root at the water line minus TUNING.swimSink).
   // swim: front crawl, body pitched forward about the belly, arms windmill half a cycle apart, flutter kick at twice the rate
   const sw = (t, al, ar, ll, lr, roll) => ({ t, root: [62, roll, 0], 'arm-left': [al, 0, -78], 'arm-right': [ar, 0, 78], 'leg-left': [ll, 0, 4], 'leg-right': [lr, 0, -4] });
@@ -283,6 +295,7 @@ const MAP = {
   prone: { clip: 'prone', loop: true }, crawl: { clip: 'crawl', loop: true },
   wave: { clip: 'wave', loop: false }, cheer: { clip: 'cheer', loop: false }, dance: { clip: 'dance', loop: true },
   nod: { clip: 'emote-yes', loop: true },
+  punch: { clip: 'punch', loop: false }, punchL: { clip: 'punchL', loop: false }, dashRun: { clip: 'dashRun', loop: true },
   swim: { clip: 'swim', loop: true }, tread: { clip: 'tread', loop: true },
 };
 const LOCO = new Set(['walk', 'run', 'crawl']);   // phase-synchronised loops
@@ -316,6 +329,7 @@ export async function loadAvatarKit(THREE, { baseUrl = new URL('./', import.meta
   // calmer sprint: the stock clip hops the root 0.2 model units (≈0.44 m); halve the bounce for a cosy look
   const spr = clips.get('sprint'), tr = spr && spr.tracks.find((t) => t.name === 'root.position');
   if (tr) for (let i = 1; i < tr.values.length; i += 3) tr.values[i] *= 0.5;
+  if (spr) { const dr = spr.clone(); dr.name = 'dashRun'; clips.set('dashRun', dr); }   // dash = the sprint cycle, played fast and leaned in by the controller
   for (const c of authoredClips()) clips.set(c.name, c);
   groundFit(first, clips);
   // blob shadow (shared)

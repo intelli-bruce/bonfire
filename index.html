@@ -150,11 +150,12 @@ body.coarse #log { width: min(380px, calc(100vw - 110px)); }
   <button id="waveBtn" class="btn" type="button">손 흔들기</button>
 </div>
 <div id="acts" class="hud" hidden>
-  <button id="emoteBtn" class="act small" type="button" aria-label="감정 표현: 춤">춤</button>
-  <button id="proneBtn" class="act small" type="button">엎드리기</button>
-  <button id="rollBtn" class="act" type="button">구르기</button>
-  <button id="dashBtn" class="act" type="button">대시</button>
-  <button id="jumpBtn" class="act big" type="button">점프</button>
+  <button id="emoteBtn" class="act small" type="button" aria-label="감정 표현: 춤" title="감정 표현 (1·2·3)">춤</button>
+  <button id="proneBtn" class="act small" type="button" title="엎드리기 (Z)">엎드리기</button>
+  <button id="rollBtn" class="act" type="button" title="구르기 (C) · 점프 중이면 멀리 날며 구르기">구르기</button>
+  <button id="dashBtn" class="act" type="button" title="대시 (Q)">대시</button>
+  <button id="punchBtn" class="act" type="button" title="때리기 (마우스 왼쪽 클릭 · F)">때리기</button>
+  <button id="jumpBtn" class="act big" type="button" title="점프 (Space) · 공중에서 한 번 더">점프</button>
 </div>
 <div id="stick" hidden><div id="knob"></div></div>
 <div id="flash" aria-hidden="true"></div>
@@ -181,7 +182,7 @@ body.coarse #log { width: min(380px, calc(100vw - 110px)); }
     </div>
     <div id="loadRow" class="load" hidden><div class="track"><div id="loadBar"></div></div><span id="loadTxt">바닷가 풍경을 불러오는 중…</span></div>
     <button id="enterBtn" type="submit">입장하기</button>
-    <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). Shift 달리기 · Q 대시 · Space 점프 · C 구르기 · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1 춤 · 2 환호 · 3 끄덕 · E 통나무에 앉기/장작 넣기 · P 사진입니다. 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기).</span></div>
+    <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 때리기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1 춤 · 2 환호 · 3 끄덕 · E 통나무에 앉기/장작 넣기 · P 사진입니다. 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기).</span></div>
   </form>
 </div>
 
@@ -684,13 +685,15 @@ canvas.addEventListener('pointerdown', (e) => {
   if (!entered) return;
   canvas.focus({ preventScroll: true });
   if (e.pointerType !== 'touch' && lookMode === 'mouse') {   // mouse look: a click while unlocked only re-locks; nothing else happens
+    const looking = lockedNow() || lockFails > 0;   // looking around already (locked, or hover look after a refusal): a left click is a punch
     if (!lockedNow() && lockFails < 3) tryLock();
+    if (e.button === 0 && looking) myAct('punch');
     return;
   }
   if (e.pointerType === 'touch') {
     if (e.clientX < window.innerWidth * 0.45 && joy.id === null) { joy.id = e.pointerId; joy.ox = e.clientX; joy.oy = e.clientY; joy.x = joy.y = 0; feedStick(); setStick(true, e.clientX, e.clientY); $('knob').style.transform = ''; }
     else { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (touches.size === 2) { const [a, b] = [...touches.values()]; pinchD = Math.hypot(a.x - b.x, a.y - b.y); } }
-  } else { mouseDrag = { x: e.clientX, y: e.clientY }; }
+  } else { mouseDrag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), btn: e.button, moved: 0 }; }
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
 });
 canvas.addEventListener('pointermove', (e) => {
@@ -704,12 +707,16 @@ canvas.addEventListener('pointermove', (e) => {
     else orbit(e.clientX - px, e.clientY - py, 0.006);
   } else if (mouseDrag && e.pointerType !== 'touch' && lookMode === 'drag') {
     orbit(e.clientX - mouseDrag.x, e.clientY - mouseDrag.y, 0.0045); mouseDrag.x = e.clientX; mouseDrag.y = e.clientY;
+    mouseDrag.moved = Math.max(mouseDrag.moved, Math.hypot(e.clientX - mouseDrag.sx, e.clientY - mouseDrag.sy));
   }
 });
 function endPointer(e) {
   if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; feedStick(); setStick(false); }
   if (touches.delete(e.pointerId)) pinchD = 0;
-  if (e.pointerType !== 'touch') mouseDrag = null;
+  if (e.pointerType !== 'touch') {
+    if (mouseDrag && e.type === 'pointerup' && mouseDrag.btn === 0 && lookMode === 'drag' && mouseDrag.moved < 6 && performance.now() - mouseDrag.t < 350) myAct('punch');   // drag look: a click that did not drag is a punch
+    mouseDrag = null;
+  }
 }
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
@@ -792,7 +799,7 @@ const kitGate = loadAvatarKit(THREE, { baseUrl: new URL('./bf/kit/', location.hr
 const CHARACTERS = KIT_CHARS;
 const CHAR_IDS = new Set(CHARACTERS.map((c) => c.id));
 const validChar = (v) => (typeof v === 'string' && CHAR_IDS.has(v) ? v : CHARACTERS[0].id);
-const ACT_CODES = new Set(['j', 'd', 'dj', 'r', 's', 'p', 'w', 'dn', 'ch', 'nd']);
+const ACT_CODES = new Set(['j', 'j2', 'd', 'dj', 'r', 's', 'p', 'w', 'dn', 'ch', 'nd', 'pu', 'pl']);
 // baked beach: no scene light touches the avatars (it would double-light the bake), so their material carries a soft moonlit
 // fill: emissive = its own albedo (accent included) x a cool tint, a bit stronger on upward faces. The fire's point light still adds
 // warm directional shading on top, so the figures keep their form instead of reading flat.
@@ -848,10 +855,17 @@ function hatFor(av) {
   } catch (e) { console.warn('[bonfire] santa hat skipped:', e && e.message); }
 }
 function makeController(av, local, spawn) {
-  return createController({ avatar: av, groundY: heightAt, blocked: (x, z) => !walkable(x, z), input: local ? 'keyboard' : 'none', spawn, onAction: local ? onMyAction : null, water: WATER });
+  let ctrl = null;
+  ctrl = createController({
+    avatar: av, groundY: heightAt, blocked: (x, z) => !walkable(x, z), input: local ? 'keyboard' : 'none', spawn, onAction: local ? onMyAction : null, water: WATER,
+    onStrike: local ? strikeNow : null,
+    onRemoteAct: local ? null : (act) => fxAct(av, ctrl && ctrl.state, act, false),   // a remote avatar's action starts on the delayed timeline: its dust / sound / swing
+  });
+  return ctrl;
 }
 function onMyAction(act) {   // the kit started one of my actions: tell everyone now (the 10 Hz stream carries the motion)
   if (act === 'wave') waveEffects();
+  if (meRec) fxAct(meRec.av, meRec.ctrl.state, act, true);
   sendPresence(performance.now(), true);
 }
 function myAct(a) { initAudio(); return entered && meRec ? meRec.ctrl.press(a) : false; }
@@ -946,7 +960,7 @@ function rebuildAvatar(rec, ch) {   // remote only (my own character is fixed on
   for (const s of [rec.label, rec.bubble]) if (s) av.root.add(s);
   rec.ctrl.dispose(); old.dispose(); scene.add(av.root);
   rec.av = av; rec.ctrl = makeController(av, false, { x: st.x, z: st.z, ry: st.ry }); rec.asSeen = undefined;
-  rec.ch = ch; rec.chAt = performance.now();
+  rec.ch = ch; rec.chAt = performance.now(); rec.hitOn = false;
 }
 function setLabel(rec, name) {
   if (rec.name === name && rec.label) return;
@@ -1173,6 +1187,138 @@ function swimFx(rec, dt, mine) {
   } else f.t = 0.2;
 }
 
+// ---------- combat / movement effects: dust (dash, roll, double jump), hit sparks, red hit flash, the punch hit box ----------
+// PUFF: pooled billboard puffs (dust: normal blending; sparks: additive) + a few flat rings. Everything is cosmetic and local;
+// remote avatars trigger it from the kit's delayed action events (onRemoteAct), so it lines up with what they are seen doing.
+const PUFF = (() => {
+  const N = coarse ? 44 : 100, NR = 6, DUST = '#b4adc8', rnd = Math.random;
+  const tex = canvasTex(64, 64, (g) => {
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 31);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  });
+  const ps = [];
+  for (let i = 0; i < N; i++) {
+    const m = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false });
+    const sp = new THREE.Sprite(m); sp.visible = false; sp.renderOrder = 3; scene.add(sp);
+    ps.push({ sp, m, age: 0, life: 0, vx: 0, vy: 0, vz: 0, s0: 0.3, s1: 1, op: 0.5, drag: 3 });
+  }
+  let pi = 0;
+  function emit(x, y, z, vx, vy, vz, life, s0, s1, op, color, add, drag) {
+    const o = ps[pi]; pi = (pi + 1) % N;
+    o.sp.position.set(x, y, z); o.vx = vx; o.vy = vy; o.vz = vz; o.life = life; o.age = 0; o.s0 = s0; o.s1 = s1; o.op = op; o.drag = drag || 3;
+    o.m.color.set(color); o.m.blending = add ? THREE.AdditiveBlending : THREE.NormalBlending; o.m.rotation = rnd() * TAU;
+    o.sp.scale.set(s0, s0, 1); o.m.opacity = op; o.sp.visible = true;
+  }
+  function dash(x, y, z, ry, n) {   // dust thrown backwards from the feet (a runner faces (-sin ry, -cos ry))
+    const bx = Math.sin(ry), bz = Math.cos(ry);
+    for (let i = 0; i < n; i++) {
+      const sp = 3 + rnd() * 4.5, lat = (rnd() - 0.5) * 2.4;
+      emit(x + bx * 0.1, y + 0.08, z + bz * 0.1, bx * sp - bz * lat, 0.3 + rnd() * 1.1, bz * sp + bx * lat, 0.55 + rnd() * 0.4, 0.34 + rnd() * 0.15, 1.5 + rnd() * 0.9, 0.75, DUST, false, 3.2);
+    }
+  }
+  function poof(x, y, z, n) {   // a small round puff of dust at the feet
+    for (let i = 0; i < n; i++) { const a = rnd() * TAU, sp = 0.8 + rnd() * 1.6; emit(x + Math.cos(a) * 0.2, y + 0.05, z + Math.sin(a) * 0.2, Math.cos(a) * sp, 0.2 + rnd() * 0.6, Math.sin(a) * sp, 0.4 + rnd() * 0.3, 0.22, 0.8 + rnd() * 0.3, 0.5, DUST, false, 3); }
+  }
+  function spark(x, y, z) {   // hit: a bright flash and a few flying sparks
+    emit(x, y, z, 0, 0, 0, 0.16, 0.5, 1.5, 0.95, '#fff1c2', true, 1);
+    for (let i = 0; i < 7; i++) { const a = rnd() * TAU, e = (rnd() - 0.3) * 1.2, sp = 3 + rnd() * 3.5; emit(x, y, z, Math.cos(a) * sp, Math.sin(e) * sp, Math.sin(a) * sp, 0.24 + rnd() * 0.1, 0.28, 0.05, 0.95, '#ffc46a', true, 5); }
+  }
+  const ringTex = canvasTex(128, 128, (g) => {
+    const gr = g.createRadialGradient(64, 64, 36, 64, 64, 63);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.6, 'rgba(255,255,255,0.9)'); gr.addColorStop(0.8, 'rgba(255,255,255,0.3)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  });
+  const ringGeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2), rings = [];
+  for (let i = 0; i < NR; i++) {
+    const m = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ map: ringTex, color: '#e4e9ff', transparent: true, opacity: 0, depthWrite: false }));
+    m.visible = false; m.renderOrder = 3; scene.add(m); rings.push({ m, age: 0, life: 0.38 });
+  }
+  let ri = 0;
+  function ring(x, y, z) { const o = rings[ri]; ri = (ri + 1) % NR; o.m.position.set(x, y, z); o.age = 0; o.m.scale.set(0.2, 1, 0.2); o.m.visible = true; }   // double jump: a ring under the feet
+  function update(dt) {
+    for (const o of ps) {
+      if (!o.sp.visible) continue;
+      o.age += dt; const u = o.age / o.life;
+      if (u >= 1) { o.sp.visible = false; continue; }
+      const k = Math.exp(-o.drag * dt);
+      o.vx *= k; o.vy *= k; o.vz *= k;
+      o.sp.position.x += o.vx * dt; o.sp.position.y += o.vy * dt; o.sp.position.z += o.vz * dt;
+      const sc = o.s0 + (o.s1 - o.s0) * (1 - (1 - u) * (1 - u));
+      o.sp.scale.set(sc, sc, 1); o.m.opacity = o.op * (1 - u);
+    }
+    for (const o of rings) {
+      if (!o.m.visible) continue;
+      o.age += dt; const u = o.age / o.life;
+      if (u >= 1) { o.m.visible = false; continue; }
+      const r = 0.2 + 0.95 * (1 - (1 - u) * (1 - u));
+      o.m.scale.set(r, 1, r); o.m.material.opacity = 0.7 * (1 - u);
+    }
+  }
+  return { dash, trail: (x, y, z, ry) => dash(x, y, z, ry, 2), poof, spark, ring, update };
+})();
+// an action of an avatar starts (mine: right now; remote: on the kit's delayed timeline)
+function fxAct(av, st, act, mine) {
+  if (!st) return;
+  const p = av.root.position, wet = st.swim === 2, d = mine ? 0 : Math.hypot(p.x - me.x, p.z - me.z);
+  if (act === 'djump') { if (!wet) { PUFF.ring(p.x, p.y + 0.05, p.z); PUFF.poof(p.x, p.y + 0.05, p.z, 4); } }
+  else if (act === 'dash') { if (!wet) PUFF.dash(p.x, p.y, p.z, st.ry, coarse ? 5 : 9); }
+  else if (act === 'roll' || act === 'leap') { if (!wet && p.y - heightAt(p.x, p.z) < 0.6) PUFF.poof(p.x, p.y + 0.05, p.z, 3); }
+  else if (act === 'punch' || act === 'punchL') swingSound(mine ? 1 : clamp(1 - d / 16, 0, 1));
+}
+// per frame, per avatar: a dust stream behind a dashing runner, a few puffs under a rolling one (on the ground only)
+function moveFx(rec, dt) {
+  const st = rec.ctrl.state, f = rec.mfx || (rec.mfx = { t: 0 }), dash = st.act === 'dash', roll = st.act === 'roll';
+  if (!((dash || roll) && st.swim === 0)) { f.t = 0; return; }
+  f.t -= dt; if (f.t > 0) return;
+  const p = rec.av.root.position;
+  if (p.y - heightAt(p.x, p.z) > 0.5) return;
+  f.t = dash ? (coarse ? 0.05 : 0.028) : 0.07;
+  if (dash) PUFF.trail(p.x, p.y, p.z, st.ry); else PUFF.poof(p.x, p.y + 0.05, p.z, 1);
+}
+// Punch hit box (checked on MY screen at the swing's contact frame, so what I see is what lands): a sphere in front of me against each
+// avatar's body. Landing a hit flashes the target red for everyone (a 'hit' event) and shoves the target — on the target's own client.
+const HIT = { reach: 0.95, radius: 0.85, body: 0.35, dy: 1.4, maxD: 5.5 };   // maxD: receivers ignore a hit from farther than this (lag slack included)
+const hitStats = { sent: 0, recv: 0, onMe: 0 };
+const HIT_FLASH = 0.5;
+function strikeNow() {
+  if (!entered || !meRec) return;
+  const st = meRec.ctrl.state, fx = -Math.sin(st.ry), fz = -Math.cos(st.ry);
+  const cx = st.x + fx * HIT.reach, cz = st.z + fz * HIT.reach;
+  for (const rec of others.values()) {
+    if (!rec.mq || !rec.rid) continue;
+    const o = rec.ctrl.state;
+    if (Math.abs(o.y - st.y) > HIT.dy || Math.hypot(o.x - cx, o.z - cz) > HIT.radius + HIT.body) continue;
+    let dx = o.x - st.x, dz = o.z - st.z; const len = Math.hypot(dx, dz);
+    if (len < 0.05) { dx = fx; dz = fz; } else { dx /= len; dz /= len; }
+    hitStats.sent++;
+    hitFlash(rec);
+    if (netLive()) mqPub('hit', { id: myId, mid: newMid(), to: rec.rid, dx: r2(dx), dz: r2(dz) });
+  }
+}
+function hitFlash(rec) {
+  rec.hitT = HIT_FLASH;
+  const p = rec.av.root.position;
+  PUFF.spark(p.x, p.y + 1.0, p.z);
+  thumpSound(clamp(1 - Math.hypot(p.x - me.x, p.z - me.z) / 16, 0, 1));
+}
+function hitMats(rec) {   // the body materials (skinned meshes), not the santa hat
+  if (rec.hitFor === rec.av) return rec.hitMats;
+  const set = new Set();
+  rec.av.root.traverse((o) => { if (o.isMesh && (o.isSkinnedMesh || o === rec.av.model)) for (const m of [].concat(o.material)) if (m && m.emissive) set.add(m); });
+  rec.hitFor = rec.av; rec.hitMats = [...set]; return rec.hitMats;
+}
+function hitFx(rec, dt) {   // red blinks for HIT_FLASH s: on, off, on, off, ...
+  if (!(rec.hitT > 0) && !rec.hitOn) return;
+  rec.hitT = Math.max(0, (rec.hitT || 0) - dt);
+  const on = rec.hitT > 0 && Math.floor((HIT_FLASH - rec.hitT) / 0.085) % 2 === 0;
+  if (on === !!rec.hitOn) return;
+  rec.hitOn = on;
+  for (const m of hitMats(rec)) {   // red = the albedo pulled towards red (skin and clothes go red, not just brighter) plus a red glow
+    if (on) { m.color.setRGB(1, 0.16, 0.12); m.emissive.setRGB(0.85, 0.01, 0); m.emissiveIntensity = 1; } else { m.color.setRGB(1, 1, 1); m.emissive.setRGB(0, 0, 0); }
+  }
+}
+
 // ---------- audio: waves, crackle by distance, pops, a soft chime for waves of the hand, water splashes ----------
 let actx = null, master = null, sfx = null, waveGain = null, crackle = null, noiseBuf = null;
 function getNoise(ctx) {
@@ -1259,6 +1405,29 @@ function chime(seed) {
   }
 }
 
+function whiteBuffer() {
+  if (!whiteBuf) { whiteBuf = actx.createBuffer(1, actx.sampleRate * 0.6, actx.sampleRate); const d = whiteBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  return whiteBuf;
+}
+function swingSound(level) {   // a quick airy whoosh
+  if (level < 0.05 || !actx || actx.state !== 'running' || !evtOk('*', 'swing', 70)) return;
+  const t = actx.currentTime, src = actx.createBufferSource(), bp = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = whiteBuffer(); src.playbackRate.value = 1.2;
+  bp.type = 'bandpass'; bp.Q.value = 1.4; bp.frequency.setValueAtTime(700, t); bp.frequency.exponentialRampToValueAtTime(2600, t + 0.11);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16 * level, t + 0.04); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+  src.connect(bp); bp.connect(g); g.connect(sfx); src.start(t); src.stop(t + 0.15);
+}
+function thumpSound(level) {   // a punch landing: a falling low sine plus a short noise tick
+  if (level < 0.05 || !actx || actx.state !== 'running' || !evtOk('*', 'thump', 60)) return;
+  const t = actx.currentTime, o = actx.createOscillator(), og = actx.createGain(), src = actx.createBufferSource(), bp = actx.createBiquadFilter(), g = actx.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(55, t + 0.16);
+  og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(0.7 * level, t + 0.006); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+  o.connect(og); og.connect(sfx); o.start(t); o.stop(t + 0.22);
+  src.buffer = whiteBuffer(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.8;
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.28 * level, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+  src.connect(bp); bp.connect(g); g.connect(sfx); src.start(t); src.stop(t + 0.08);
+}
+
 // ---------- chat log ----------
 const logEl = $('log');
 const netLog = (name, text, sys) => { if (evtOk('*', 'log', 80)) logLine(name, text, sys); };   // network-originated lines: at most ~12/s overall
@@ -1312,7 +1481,7 @@ let mqAll = { t: 0, n: 0 };   // inbound budget over all senders combined (after
 const mqLastT = new Map();    // presence de-dup: sender id -> newest presence timestamp already handled
 const mqMids = new Map();     // event de-dup: small LRU of sender+mid
 const MQ_GLOBAL_BUDGET = 400, MQ_SENDER_BUDGET = 30, MQ_LRU = 200;
-const EVENT_SUBS = new Set(['chat', 'wave', 'wood', 'lantern', 'firework']);
+const EVENT_SUBS = new Set(['chat', 'wave', 'wood', 'lantern', 'firework', 'hit']);
 const dec = new TextDecoder();
 const newMid = () => Math.random().toString(36).slice(2, 10);
 const mqLiveCount = () => (mq ? mq.clients.reduce((n, c) => n + (c.live ? 1 : 0), 0) : 0);
@@ -1353,7 +1522,7 @@ async function connectMqtt() {
       client.on('error', () => {});
       client.on('connect', () => {
         c.live = true; c.everUp = true;
-        client.subscribe([MQ_P + 'p/+', MQ_P + 'bye/+', MQ_P + 'chat', MQ_P + 'wave', MQ_P + 'wood', MQ_P + 'fire', MQ_P + 'lantern', MQ_P + 'firework'], { qos: 0 });
+        client.subscribe([MQ_P + 'p/+', MQ_P + 'bye/+', MQ_P + 'chat', MQ_P + 'wave', MQ_P + 'wood', MQ_P + 'fire', MQ_P + 'lantern', MQ_P + 'firework', MQ_P + 'hit'], { qos: 0 });
         if (namesTopics.size) client.subscribe([...namesTopics], { qos: 0 });
         if (!mq) { mq = st; startNames(); if (!connecting) logLine(null, '공개 연결이 되었습니다. 이제 함께 볼 수 있습니다.', true); if (entered && nickState === 'pending') scheduleClaimRetry(); }   // first broker up: public mode; the others join as they connect
         refreshControls(); sendPresence(performance.now(), true);
@@ -1499,6 +1668,25 @@ function onMqMessage(topic, payload) {
       if (!evtOk(key, 'wood', 1200)) return;
       bumpFuel(); counts.wood++;
       netLog(null, `${who} 님이 장작을 넣었습니다.`, true);
+    } else if (sub === 'hit') {   // someone's punch landed on `to`: everyone flashes that avatar red; if `to` is me, I also get shoved
+      const to = typeof d.to === 'string' ? d.to.replace(/[^a-z0-9]/gi, '').slice(0, 24) : '';
+      if (!to || !evtOk(key + '>' + to, 'hit', 110)) return;   // per attacker and victim: a double hit on two people in one swing is fine
+      let dx = num(d.dx, -1, 1), dz = num(d.dz, -1, 1); if (dx === null || dz === null) return;
+      const len = Math.hypot(dx, dz); if (len < 0.2) return; dx /= len; dz /= len;
+      const atk = rec.ctrl.state;
+      if (to === myId) {
+        if (!entered || !meRec || Math.hypot(me.x - atk.x, me.z - atk.z) > HIT.maxD) return;   // a hit only counts from within reach (plus lag slack)
+        hitStats.onMe++;
+        hitFlash(meRec); meRec.ctrl.knock(dx, dz);
+        if (mq) mq.boostUntil = now + 700;
+        sendPresence(now, true);
+        if (evtOk('*', 'hitlog', 2500)) netLog(null, `${who} 님에게 맞았습니다.`, true);
+      } else {
+        const vr = others.get('mq:' + to); if (!vr) return;
+        const v = vr.ctrl.state; if (Math.hypot(v.x - atk.x, v.z - atk.z) > HIT.maxD) return;
+        hitFlash(vr);
+      }
+      hitStats.recv++;
     } else if (sub === 'lantern' || sub === 'firework') {
       const lx = num(d.x, P_BOUNDS.x0, P_BOUNDS.x1), lz = num(d.z, P_BOUNDS.z0, P_BOUNDS.z1);
       const seed = typeof d.seed === 'number' && Number.isInteger(d.seed) && d.seed >= 0 && d.seed <= 0xffffffff ? d.seed : null;
@@ -1524,11 +1712,12 @@ function pruneMq(now) {
 }
 function sendPresence(now, full) {   // >= 10 Hz while anything changes, at once on actions (>= 45 ms apart), 1 s keepalive when still
   if (!entered || !mq || !mq.live || !meRec) return;
-  const urgent = full || mq.pend;
-  if (now - mq.lastSent < (urgent ? 45 : 90)) { if (full) mq.pend = true; return; }
+  const urgent = full || mq.pend, ma = meRec.ctrl.state.act;
+  const fast = ma === 'dash' || ma === 'roll' || ma === 'leap' || now < (mq.boostUntil || 0);   // quick moves and a fresh knock-back: stream smoothly (~16/s)
+  if (now - mq.lastSent < (urgent ? 45 : fast ? 60 : 90)) { if (full) mq.pend = true; return; }
   const f = presenceFields(), seat = mySeat ? mySeat.id : null;
   const sig = [f.x, f.y, f.z, f.r, f.l, f.as, f.s || '', f.w || 0, seat || ''].join(',');
-  if (!urgent && sig === mq.lastSig && now - mq.lastSent < 1000) return;
+  if (!urgent && !fast && sig === mq.lastSig && now - mq.lastSent < 1000) return;
   mq.lastSent = now; mq.lastSig = sig; mq.pend = false;
   const claimed = nickState === 'ok' ? claimedNick() : '';
   const body = { id: myId, ...f, color: myColor, nick: claimed || null, seat, st: mySeat ? mySeatT : 0, ts: Date.now() };
@@ -1554,7 +1743,8 @@ const doWave = () => myAct('wave');
 waveBtn.addEventListener('click', doWave);
 $('lanternBtn').addEventListener('click', launchLantern);
 $('fwBtn').addEventListener('click', launchFirework);
-for (const [id, a] of [['dashBtn', 'dash'], ['jumpBtn', 'jump'], ['rollBtn', 'roll'], ['proneBtn', 'prone']]) $(id).addEventListener('click', () => myAct(a));
+for (const [id, a] of [['dashBtn', 'dash'], ['jumpBtn', 'jump'], ['rollBtn', 'roll'], ['proneBtn', 'prone'], ['punchBtn', 'punch']]) $(id).addEventListener('click', () => myAct(a));
+$('acts').addEventListener('mousedown', (e) => e.preventDefault());   // a click must not leave a button focused (Space would press it again)
 const EMOTES = [['dance', '춤'], ['cheer', '환호'], ['nod', '끄덕']];
 let emoteI = 0;
 $('emoteBtn').addEventListener('click', () => {   // one button cycles the emotes; its label names the one it plays next
@@ -1669,7 +1859,7 @@ function refreshCtx() {
 let swimUi = false;
 function refreshSwimUi() {   // in deep water: roll / prone / emotes need footing (the kit ignores them), so the phone buttons dim
   const sw = meRec.ctrl.state.swim === 2; if (sw === swimUi) return;
-  swimUi = sw; for (const id of ['rollBtn', 'proneBtn', 'emoteBtn']) $(id).disabled = sw;
+  swimUi = sw; for (const id of ['rollBtn', 'proneBtn', 'emoteBtn', 'punchBtn']) $(id).disabled = sw;
 }
 function interact() {
   const k = ctxKind();
@@ -1704,7 +1894,7 @@ document.body.classList.toggle('coarse', coarse);
     b.addEventListener('click', () => { myColor = r.hex; wrap.querySelectorAll('.robe').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); });
     wrap.appendChild(b);
   });
-  if (coarse) $('entryHelp').textContent = '화면 왼쪽을 엄지로 밀어 걷고(끝까지 밀면 달립니다), 오른쪽을 끌어 시점을 돌립니다. 두 손가락으로 거리를 조절하고, 오른쪽 버튼으로 대시·점프·구르기·엎드리기·춤을 합니다. 바다로 걸어 들어가면 헤엄치고, 「사진」으로 지금 장면을 남깁니다.';
+  if (coarse) $('entryHelp').textContent = '화면 왼쪽을 엄지로 밀어 걷고(끝까지 밀면 달립니다), 오른쪽을 끌어 시점을 돌립니다. 두 손가락으로 거리를 조절하고, 오른쪽 버튼으로 때리기·대시·점프(공중에서 한 번 더)·구르기·엎드리기·춤을 합니다. 바다로 걸어 들어가면 헤엄치고, 「사진」으로 지금 장면을 남깁니다.';
 }
 // unique nicknames: first come, first served; see bf/names.js for the honest limits
 const nickErr = $('nickErr'), enterBtn = $('enterBtn');
@@ -1771,9 +1961,9 @@ $('entryForm').addEventListener('submit', async (e) => {
   if (nickState === 'ok') onClaimed(); else if (nickState === 'pending') scheduleClaimRetry();
   $('entry').hidden = true;
   for (const id of ['badge', 'hint', 'log', 'bar', 'tools']) $(id).hidden = false;
-  $('acts').hidden = !coarse;
+  $('acts').hidden = false;   // the action buttons are for the desktop too (keys and mouse still work)
   updateFireHud();
-  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무 가까이에서 「앉기」 · 바다에서 수영 · 「사진」' : 'WASD 걷기 · Shift 달리기 · Q 대시 · Space 점프 · C 구르기 · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1·2·3 감정 · E 통나무/장작 · 바다에서 수영(Shift 빠르게 · Space 뛰어오르기) · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
+  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무 가까이에서 「앉기」 · 바다에서 수영 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 때리기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기 · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1·2·3 감정 · E 통나무/장작 · 바다에서 수영(Shift 빠르게 · Space 뛰어오르기) · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
   setTimeout(() => $('hint').classList.add('fade'), 9000);
   canvas.focus({ preventScroll: true });
   tryLock(); refreshLook();
@@ -1794,7 +1984,7 @@ if (location.hostname === '127.0.0.1') {   // local test read-out only
     get nickState() { return nickState; }, get mySig() { return mySig; }, get live() { return netLive(); }, get worldReady() { return worldReady; },
     get fx() { return { ...FX.real, materialMode: W.materialMode, shoreline: W.shoreline ? W.shoreline.length : 0, oceanShoreline: !!(FX.real.ocean && W.shoreline), fireLightScale, seats: W.seats.length, blocks: W.blocks.length, lan: FX.lan && FX.lan.counts ? FX.lan.counts() : null }; },
     setPose(x, z, ry, yaw, pitch, dist) { if (mySeat) standUp(); if (meRec) meRec.ctrl.teleport(x, z, ry); me.x = x; me.z = z; me.ry = ry; cam.yaw = yaw; cam.pitch = pitch; cam.dist = dist; cam.cur = dist; cam.tx = x; cam.tz = z; },
-    act: (k) => myAct(k), get kit() { return { ...kitState }; }, get myState() { return meRec ? meRec.ctrl.state : null; },
+    act: (k) => myAct(k), get hits() { return { ...hitStats }; }, get kit() { return { ...kitState }; }, get myState() { return meRec ? meRec.ctrl.state : null; },
     get look() { return { mode: lookMode, locked: lockedNow(), lockFails, hint: !$('lookHint').hidden }; }, forceHover() { lockFails = Math.max(1, lockFails); if (lockedNow()) document.exitPointerLock(); refreshLook(); },
     sit: (id) => (id ? sitOn(seatById(id)) : sitOn(nearestSeat(me.x, me.z, 2, true))),
     stand: () => standUp(), interact: () => interact(),
@@ -1825,9 +2015,9 @@ function frame() {
     cam.yaw = Math.sin(t * 0.1) * 0.35; cam.pitch = 0.1 + Math.sin(t * 0.07) * 0.05;
   }
   updateCamera(dt);
-  if (meRec) { animTags(meRec, now); swimFx(meRec, dt, true); }
-  for (const rec of others.values()) { rec.ctrl.update(dt); animTags(rec, now); swimFx(rec, dt, false); }   // kit: 100 ms buffered interpolation + counter-driven actions
-  SWF.update(dt);
+  if (meRec) { animTags(meRec, now); swimFx(meRec, dt, true); moveFx(meRec, dt); hitFx(meRec, dt); }
+  for (const rec of others.values()) { rec.ctrl.update(dt); animTags(rec, now); swimFx(rec, dt, false); moveFx(rec, dt); hitFx(rec, dt); }   // kit: 100 ms buffered interpolation + counter-driven actions
+  SWF.update(dt); PUFF.update(dt);
   if (mq && now - lastPrune > 1000) { lastPrune = now; pruneMq(now); }
 
   fxCall('sky', (s) => s.update(dt, t));
