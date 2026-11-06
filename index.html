@@ -198,6 +198,7 @@ import { loadAvatarKit, createAvatar, CHARACTERS as KIT_CHARS } from './bf/kit/a
 import { createController, TUNING as KIT_TUNING } from './bf/kit/controller.js';
 import { initNames, claimNick, signPresence, verifyPeer, myNick as claimedNick } from './bf/names.js';
 import { buildPier, createAngler, deckTop as pierDeck, PIER } from './bf/pier.js';
+import { createSolids } from './bf/solids.js';
 
 // ---------- small helpers ----------
 const TAU = Math.PI * 2;
@@ -313,27 +314,30 @@ function parseWorld(j) {
 }
 
 // ---------- collision ----------
-const R_AV = 0.3;   // the kit controller tests blocked(x, z) at the avatar centre only: keep 0.3 m off logs, rocks and the fire ring
-function hitBlocks(list, x, z) {
-  for (const b of list) {
-    if (b.type === 'circle') { if ((x - b.x) ** 2 + (z - b.z) ** 2 < (b.r + R_AV) ** 2) return true; }
-    else if (x > Math.min(b.x0, b.x1) - R_AV && x < Math.max(b.x0, b.x1) + R_AV && z > Math.min(b.z0, b.z1) - R_AV && z < Math.max(b.z0, b.z1) + R_AV) return true;
-  }
-  return false;
+// One list for every prop (bf/solids.js): beach.json shapes (heights from bf/solids.json), bf/xmas.js decorations, bf/pier.js posts / crates / chairs.
+// A shape's upper face is ground for a body whose feet are within a step of it, its sides block anything lower: low things are walked over, taller ones are
+// jumped onto (a second jump in the air reaches ~2 m), the rest is wall. The kit tests the avatar centre only, so the footprint is grown by the avatar radius.
+const SOL = createSolids({ margin: 0.2, step: KIT_TUNING.stepUp, reach: 2.0, baseAt: (x, z) => heightAt(x, z) });
+const blockKey = (b) => (b.type === 'circle' ? `c${b.x},${b.z},${b.r}` : `b${b.x0},${b.x1},${b.z0},${b.z1}`);
+function syncSolids() { SOL.set('world', W.blocks); SOL.set('xmas', XM.blocks); SOL.set('pier', PR.blocks); }
+function applyBlockHeights(j) {   // bf/solids.json (tools/block-tops.mjs): h = height above the ground for beach.json shapes; no entry = wall
+  if (!j || !Array.isArray(j.blocks)) return;
+  const hs = new Map(); for (const b of j.blocks) if (validBlock(b) && Number.isFinite(b.h)) hs.set(blockKey(b), b.h);
+  for (const b of W.blocks) { const h = hs.get(blockKey(b)); if (h !== undefined) b.h = h; }
 }
-const blocked = (x, z) => hitBlocks(W.blocks, x, z) || hitBlocks(XM.blocks, x, z) || hitBlocks(PR.blocks, x, z);   // beach.json + bf/xmas.js decorations + bf/pier.js posts and chairs
-function walkable(x, z) {
+const blocked = (x, z, y) => SOL.blockedAt(x, z, y);   // y = the body's feet height; omitted: everything blocks
+function walkable(x, z, y) {
   const B = W.bounds, wide = z < -46;   // out beyond the headlands the open sea is wider
-  return x >= (wide ? -44 : B.x0) && x <= (wide ? 44 : B.x1) && z >= Math.max(B.z0, SEA_Z) && z <= B.z1 && !blocked(x, z);
+  return x >= (wide ? -44 : B.x0) && x <= (wide ? 44 : B.x1) && z >= Math.max(B.z0, SEA_Z) && z <= B.z1 && !blocked(x, z, y);
 }
 // the pier: planks count as ground only for someone standing on them (y >= deck - 0.45), never for a swimmer under them
 const PR = { on: false, mod: null, blocks: [], ladders: [] };
-function groundY3(x, z, y) {
-  const g = heightAt(x, z);
+function groundY3(x, z, y) {   // terrain, or the upper face of a prop within a step of the body (y omitted: the highest one), or the deck
+  let g = heightAt(x, z);
+  const st = SOL.topAt(x, z, y); if (st > g) g = st;
   if (!PR.on) return g;
   const d = pierDeck(x, z);
-  if (d === null) return g;
-  return y === undefined || y >= d - 0.45 ? Math.max(g, d) : g;
+  return d !== null && d > g && (y === undefined || y >= d - 0.45) ? d : g;
 }
 
 // ---------- water surface: still level y = 0; with bf/ocean.js the same swell its vertex shader draws (vertical part; the
@@ -556,6 +560,7 @@ function initFallbackWorld() {
   if (!W.seats.length) W.seats = f.seats;
   if (!W.blocks.length) W.blocks = f.blocks;
   buildFallbackTerrain(); buildFallbackProps(f.logs);
+  syncSolids();
 }
 W.fire.y = heightAt(W.fire.x, W.fire.z);
 initFallbackWorld();
@@ -587,6 +592,8 @@ async function loadWorld() {
         const f = fallbackSeats();
         if (!W.seats.length) W.seats = f.seats;
         if (!W.blocks.length) W.blocks = f.blocks;
+        if (has('solids.json')) { try { const rs = await fetch('./bf/solids.json', { cache: 'no-cache' }); if (rs.ok) applyBlockHeights(await rs.json()); } catch (e) { /* no heights: every shape is a wall, as before */ } }
+        syncSolids();
         buildFallbackTerrain(); buildFallbackProps(f.logs);
         if (FX.fire && !FX.real.fire) { FX.fire.dispose(); FX.fire = buildFallbackFire(W.fire); }
         applyLightProfile();
@@ -638,8 +645,9 @@ async function loadWorld() {
     if (!x) return;
     FX.xmas = x; FX.real.xmas = true; XM.mod = x;
     if (Array.isArray(x.blocks)) XM.blocks = x.blocks.filter(validBlock).slice(0, 500);
+    syncSolids();
     for (const rec of [meRec, ...others.values()]) if (rec) hatFor(rec.av);
-    if (meRec && blocked(me.x, me.z)) settleOnGround();
+    if (meRec && blocked(me.x, me.z, me.y)) settleOnGround();
   });
   await Promise.all(jobs);
   worldReady = true;
@@ -654,7 +662,7 @@ function initPier() {   // bf/pier.js: pier, fishing deck, chairs. Needs heightA
   if (PR.on) return;
   try {
     const p = buildPier(THREE, scene, { groundAt: heightAt, quality: QUALITY });
-    PR.mod = p; PR.blocks = p.blocks.filter(validBlock); PR.ladders = p.ladders; PR.on = true;
+    PR.mod = p; PR.blocks = p.blocks.filter(validBlock); PR.ladders = p.ladders; PR.on = true; syncSolids();
     for (const st of p.seats) if (!W.seats.some((q) => q.id === st.id)) W.seats.push(st);
   } catch (e) { console.warn('[bonfire] pier skipped:', e && e.message); }
 }
@@ -706,7 +714,7 @@ const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
 const touches = new Map(); let pinchD = 0;
 let mouseDrag = null;
 function settleOnGround() {
-  if (!walkable(me.x, me.z)) { me.x = 0; me.z = 9; }
+  if (!walkable(me.x, me.z, me.y)) { me.x = 0; me.z = 9; }
   me.y = heightAt(me.x, me.z);
   if (meRec) meRec.ctrl.teleport(me.x, me.z, me.ry);
 }
@@ -908,7 +916,7 @@ function hatFor(av) {
 function makeController(av, local, spawn) {
   let ctrl = null;
   ctrl = createController({
-    avatar: av, groundY: groundY3, blocked: (x, z) => !walkable(x, z), input: local ? 'keyboard' : 'none', spawn, onAction: local ? onMyAction : null, water: WATER,
+    avatar: av, groundY: groundY3, blocked: (x, z, y) => !walkable(x, z, y), input: local ? 'keyboard' : 'none', spawn, onAction: local ? onMyAction : null, water: WATER,
     onStrike: local ? strikeNow : null,
     onRemoteAct: local ? null : (act) => fxAct(av, ctrl && ctrl.state, act, false),   // a remote avatar's action starts on the delayed timeline: its dust / sound / swing
   });
@@ -923,7 +931,11 @@ function myAct(a) { initAudio(); return entered && meRec ? meRec.ctrl.press(a) :
 const leftAct = () => (mySeat && mySeat.fish ? castRod() : myAct('punch'));   // left click / the chop button: a chop, or (on a fishing chair) the rod
 function stepLocal(dt) {
   const c = meRec.ctrl; c.update(dt, cam.yaw);
-  const s = c.state; me.x = s.x; me.z = s.z; me.ry = s.ry; me.y = s.y;
+  let s = c.state;
+  if (s.grounded && s.swim !== 2 && s.act !== 'sit' && blocked(s.x, s.z, s.y)) {   // safety net: standing inside a prop's footprint (a late-loading decoration, a bad spawn) -> out to the nearest free spot
+    const p = SOL.pushOut(s.x, s.z, s.y); if (p) { c.teleport(p.x, p.z); s = c.state; }
+  }
+  me.x = s.x; me.z = s.z; me.ry = s.ry; me.y = s.y;
   if (mySeat && (s.act !== 'sit' || s.seat !== mySeat.id)) { mySeat = null; fishStop(); sendPresence(performance.now(), true); refreshCtx(); }   // moved / jumped / X: off the log
   return s.speed;
 }
@@ -2153,7 +2165,7 @@ if (location.hostname === '127.0.0.1') {   // local test read-out only
     get xmas() { return { loaded: FX.real.xmas, hats: XM.hats, blocks: XM.blocks.length }; },
     get pier() { return { on: PR.on, blocks: PR.blocks.length, ladders: PR.ladders, seats: W.seats.filter((q) => q.fish) }; },
     get fish() { return { ...FISH, state: meRec && meRec.angler ? meRec.angler.state : null, float: meRec && meRec.angler ? meRec.angler.floatPos.toArray() : null, seat: mySeat && mySeat.id }; },
-    walkable, blocked, plungeFx, get under() { return { on: uwOn, camUnder, camY: camera.position.y }; }, groundY3, deck: pierDeck, cast: () => castRod(), dive: (on) => meRec && meRec.ctrl.setDive(on),
+    walkable, blocked, SOL, plungeFx, get under() { return { on: uwOn, camUnder, camY: camera.position.y }; }, groundY3, deck: pierDeck, cast: () => castRod(), dive: (on) => meRec && meRec.ctrl.setDive(on),
     setCam(yaw, pitch, dist) { cam.yaw = yaw; cam.pitch = pitch; cam.dist = dist; cam.cur = dist; },
     shot: () => takeShot(), get lastShot() { return lastShot && { size: lastShot.blob.size, type: lastShot.blob.type, filename: lastShot.filename, w: lastShot.w, h: lastShot.h, saved: lastShot.saved }; },
     async lastShotData() { if (!lastShot) return null; const b = new Uint8Array(await lastShot.blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return btoa(s); },
