@@ -856,7 +856,7 @@ export function createBossRoster(factories, opt = {}) {
     const f = factories[kind]; if (!f) return null;
     const b = f(); if (!b) return null;
     const e = { kind, b, born: 0, tag: 0 };
-    for (const ev of EVS) b.on(ev, (v) => emit(ev, { ...(v || {}), kind, born: e.born }));
+    for (const ev of EVS) b.on(ev, (v) => emit(ev, { ...(v || {}), kind, born: e.born || b.view.born }));
     return e;
   }
   const setBorn = (e, born) => { e.born = born; e.tag = tagOf(born); };
