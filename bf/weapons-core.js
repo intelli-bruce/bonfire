@@ -27,9 +27,9 @@ export const ROCKET = { speed: 46, g: 1.2, life: 3.2, r: 7.5, dmg: 220, minDmg: 
 export function rocketStep(p, v, dt) { v[1] -= ROCKET.g * dt; p[0] += v[0] * dt; p[1] += v[1] * dt; p[2] += v[2] * dt; }
 export const rocketDmg = (d) => (d > ROCKET.r ? 0 : Math.round(ROCKET.minDmg + (ROCKET.dmg - ROCKET.minDmg) * (1 - clamp(d / ROCKET.r, 0, 1)) ** 1.2));
 
-// ---------- 반동: 연사하면 누적(위로 더 튀고 좌우 흔들림), 손을 떼면 원래 시선으로 돌아온다 ----------
+// ---------- 반동: 모든 총의 화면(시선) 반동은 0 — 연사해도 시점이 움직이지 않는다(총구 섬광·탄피·효과음·총 모델 반동은 그대로) ----------
 // streak = 이번 연사에서 몇 번째 발인가(0부터). 반환 [위로(라디안), 좌우(라디안 · r 은 -1..1 난수)]
-export const RECOIL = { 3: [0.012, 0.004], 4: [0.05, 0.012], 5: [0.022, 0.006], 7: [0.07, 0.01], 8: [0.09, 0.02] };
+export const RECOIL = { 3: [0, 0], 4: [0, 0], 5: [0, 0], 7: [0, 0], 8: [0, 0] };
 export function recoilKick(slot, streak, ads, r = 0) {
   const k = RECOIL[slot]; if (!k) return [0, 0];
   const grow = 1 + 0.12 * Math.min(streak, 12), a = 1 - 0.45 * clamp(ads || 0, 0, 1);
