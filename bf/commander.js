@@ -95,7 +95,8 @@ export function createCommanderBoss(ctx) {
       m.metalness = Math.min(m.metalness, 0.6);   // 환경맵 없는 밤: 금속이 검게 죽지 않게
       if (/gold/.test(m.name)) { m.emissive.setRGB(0.35, 0.2, 0.04); m.emissiveIntensity = 0.55; }
       else if (/skin|tooth|eyeball/.test(m.name)) { m.emissive.setRGB(0.3, 0.27, 0.24); m.emissiveIntensity = 0.35; }
-      else if (m.emissive.getHex() === 0) { m.emissive.copy(m.color).multiplyScalar(0.12); }
+      else if (/cape/.test(m.name)) { m.emissive.setRGB(0.12, 0.03, 0.02); m.emissiveIntensity = 0.6; }
+      else if (m.emissive.getHex() === 0) { m.emissive.setRGB(0.05, 0.05, 0.06); }   // 검은 판금: 꼭짓점 색(금 띠)이 살게 아주 약하게
     }
     const base = new Map(); for (const m of mats) base.set(m, { e: m.emissive.clone(), i: m.emissiveIntensity });
     root.updateMatrixWorld(true);

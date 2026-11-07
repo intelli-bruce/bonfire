@@ -29,6 +29,7 @@
 - 멀티: 거미와 같은 소유자 방식(`boss` 주제, 스냅샷에 `kd` = 종류). 새 보스의 동작 코드는 거미와 겹치지 않아 옛 클라이언트는 새 보스 스냅샷을 무시합니다.
 - 모델(`bf/shark.glb` · `bf/golem.glb` · `bf/seraph.glb`)은 Blender 스크립트로 만듭니다: `blender -b --factory-startup --python tools/bosses/build_bosses.py -- all --out bf [--preview <폴더>]`. 텍스처(색·노멀맵)도 numpy 로 생성(외부 에셋 없음), LOD 2단(가까이 약 3~6만 · 멀리 약 1만 삼각형), Draco 압축 + JPEG 텍스처. 디코더는 three@0.160.0 의 jsdelivr draco 경로.
 - 로직 검사: `node tools/bosses.test.mjs`(정의 · 스냅샷 검증 · 옛 클라이언트 호환 · 허브 라우팅 · 몸 판정 · 패턴 피해 · 처치).
+- 대검 지휘관(`bf/commander.js`, 모델 `bf/commander.glb`): 대검 수평 베기(점프로 넘김) · 내려찍기 + 앞으로 갈라지는 충격파(분노 시 세 갈래) · 돌진 찌르기. 모델은 `blender -b --factory-startup --python tools/bosses/build_commander.py -- --out bf [--preview <폴더>]`(얼굴 피부 2048 텍스처·노멀맵, LOD 2단, Draco). 로직 검사 `node tools/commander.test.mjs`.
 
 ## 무기 (숫자 1~4 · 마우스 휠)
 
