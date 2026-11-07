@@ -66,7 +66,10 @@ const feet = [];                                   // per leg { k: tibia start, 
     loading = (async () => {
       const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
       const SU = await import('three/addons/utils/SkeletonUtils.js');
+      const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
       const ld = new GLTFLoader();
+      const dr = new DRACOLoader(); dr.setDecoderPath(ctx.dracoPath || 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+      ld.setDRACOLoader(dr);   // spider.glb · spider_mini.glb 는 Draco 압축(tools/spider/build_spider.py)
       const get = (f) => new Promise((res, rej) => ld.load(new URL(f, ctx.baseUrl).href, res, undefined, rej));
       const [b, m] = await Promise.all([get('spider.glb'), get('spider_mini.glb')]);
       assets = { boss: b, mini: m, SU };
@@ -120,12 +123,20 @@ const feet = [];                                   // per leg { k: tibia start, 
     let jaw = null; const byName = {}; root.traverse((o) => { if (o.isBone && o.name === 'jaw') jaw = o; if (o.name) byName[o.name] = o; });
     // per leg: tibia start (knee 2), metatarsus start (ankle), foot tip (`_e` marker bone) — the hit/push read-out below
     const legs = LEGS.map((l) => ({ t: byName[l + '_t'], m: byName[l + '_m'], e: byName[l + '_e'] })).filter((q) => q.t && q.m && q.e);
-    const mats = new Set(); root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) mats.add(m); });
+    const mats = new Set(), lods = []; root.traverse((o) => { if (o.isMesh) { for (const m of [].concat(o.material)) mats.add(m); if (/_LOD\d/.test(o.name) || /_LOD\d/.test(o.parent && o.parent.name || '')) lods.push(o); } });
     // night scene without an environment map: metal would render black, and a little self-light keeps the dark shell readable
-    for (const m of mats) { if (!m.isMeshStandardMaterial) continue; m.metalness = Math.min(m.metalness, 0.05); if (m.emissive.getHex() === 0) m.emissive.copy(m.color).multiplyScalar(/lip/.test(m.name) ? 0.18 : 0.36); }
+    for (const m of mats) { if (!m.isMeshStandardMaterial) continue; m.metalness = Math.min(m.metalness, 0.05); if (m.emissive.getHex() === 0) { m.emissive.copy(m.color).multiplyScalar(/lip/.test(m.name) ? 0.18 : m.map ? 0.22 : 0.36); if (m.map) m.emissiveMap = m.map; } }
     const base = new Map(); for (const m of mats) base.set(m, { e: m.emissive ? m.emissive.clone() : null, i: m.emissiveIntensity });
     scene.add(root);
-    return { root, mixer, clips, cur: null, os: null, jaw, legs, mats, base, flash: 0 };
+    const rig = { root, mixer, clips, cur: null, os: null, jaw, legs, mats, base, flash: 0, lods, lod: -1 };
+    setLod(rig, 0);
+    return rig;
+  }
+  // LOD: 보스만 Spider_LOD0(가까이 · 고디테일) / Spider_LOD1(멀리). 새끼는 한 단이라 lods 가 비어 있다.
+  const LOD_FAR = 70;
+  function setLod(rig, want) {
+    if (!rig.lods.length || want === rig.lod) return;
+    rig.lod = want; for (const o of rig.lods) o.visible = new RegExp('_LOD' + want).test(o.name) || new RegExp('_LOD' + want).test(o.parent && o.parent.name || '');
   }
   function setLoop(rig, name, ts = 1) {
     const a = rig.clips[name]; if (!a) return;
@@ -436,6 +447,8 @@ const feet = [];                                   // per leg { k: tibia start, 
       boss.root.position.set(B.x, gy - (1 - se) * K * 2.4, B.z); boss.root.rotation.order = 'YXZ'; boss.root.rotation.set(boss.tp, B.ry, boss.tr); boss.root.scale.setScalar(0.35 + 0.65 * se);
       if (B.a === 'd') { if (boss.cur !== 'die') { boss.os = null; playOnce(boss, 'die', 1, true); } }
       else if (!boss.os) setLoop(boss, B.a === 'w' ? 'walk' : 'idle', B.a === 'w' ? (BOSS.walk * (B.rage ? 1.25 : 1)) / (3.4 * K) : 1);   // the walk clip covers 3.4 K per cycle
+      const cp = ctx.camPos ? ctx.camPos() : null;
+      setLod(boss, cp && Math.hypot(cp.x - B.x, cp.z - B.z) > LOD_FAR ? 1 : 0);
       tickRig(boss, dt);
       readFeet();
       if (B.spawnT > 0 && Math.random() < dt * 14) ctx.fx.poof(B.x + (Math.random() - 0.5) * K * 2.2, g + 0.05, B.z + (Math.random() - 0.5) * K * 2.2, 2);

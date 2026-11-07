@@ -1,5 +1,5 @@
-// bf/kit/preview.js — the entry screen's 3D preview: its own small renderer (the world is not loaded yet), the avatar idling and
-// turning slowly, drag (or ← →) to turn it by hand. Pauses while hidden. THREE and createAvatar are passed in (one THREE instance).
+// bf/kit/preview.js — the entry screen's 3D preview: its own small renderer (the world is not loaded yet), the avatar idling, facing the front and
+// staying there (no auto-turn); drag (or ← →) to turn it by hand. Pauses while hidden. THREE and createAvatar are passed in (one THREE instance).
 export function createPreview(THREE, canvas, { createAvatar, reduceMotion = false }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -13,7 +13,7 @@ export function createPreview(THREE, canvas, { createAvatar, reduceMotion = fals
   const fire = new THREE.PointLight('#ffa257', 9, 6, 2); fire.position.set(-1.6, 0.7, 1.8); scene.add(fire);   // a warm kick from the bonfire side
   const pivot = new THREE.Group(); scene.add(pivot);
 
-  let av = null, yaw = 0.5, last = 0, raf = 0, running = false, visible = true, dragging = false, idleSince = 0, lastX = 0, reactAt = 0, reactTimer = 0, dist = 5, aimY = 0.8;
+  let av = null, yaw = 0, last = 0, raf = 0, running = false, visible = true, dragging = false, lastX = 0, reactAt = 0, reactTimer = 0, dist = 5, aimY = 0.8;
   const FOV = 28, HALF = Math.tan((FOV / 2) * Math.PI / 180);
 
   function fit() {   // whole body in view for any canvas shape (tall phones: limited by the width)
@@ -46,7 +46,6 @@ export function createPreview(THREE, canvas, { createAvatar, reduceMotion = fals
     raf = 0; if (!running) return;
     const dt = Math.min(0.05, (t - last) / 1000 || 0.016); last = t;
     if (av && visible && !document.hidden) {
-      if (!dragging && !reduceMotion && t - idleSince > 1800) yaw += dt * 0.55;   // slow turn once left alone
       av.update(dt); render();
     }
     raf = requestAnimationFrame(frame);
@@ -56,9 +55,9 @@ export function createPreview(THREE, canvas, { createAvatar, reduceMotion = fals
 
   // drag to turn (vertical pans stay with the page: touch-action: pan-y), arrow keys when focused
   const down = (e) => { dragging = true; lastX = e.clientX; try { canvas.setPointerCapture(e.pointerId); } catch (_) { /* old browsers */ } };
-  const move = (e) => { if (!dragging) return; yaw += (e.clientX - lastX) * 0.012; lastX = e.clientX; idleSince = performance.now(); render(); };
-  const up = () => { dragging = false; idleSince = performance.now(); };
-  const keys = (e) => { if (e.key === 'ArrowLeft') yaw -= 0.25; else if (e.key === 'ArrowRight') yaw += 0.25; else return; e.preventDefault(); idleSince = performance.now(); render(); };
+  const move = (e) => { if (!dragging) return; yaw += (e.clientX - lastX) * 0.012; lastX = e.clientX; render(); };
+  const up = () => { dragging = false; };
+  const keys = (e) => { if (e.key === 'ArrowLeft') yaw -= 0.25; else if (e.key === 'ArrowRight') yaw += 0.25; else return; e.preventDefault(); render(); };
   canvas.addEventListener('pointerdown', down); canvas.addEventListener('pointermove', move);
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up); canvas.addEventListener('keydown', keys);
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { fit(); render(); }) : null; if (ro) ro.observe(canvas);
