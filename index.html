@@ -303,6 +303,7 @@ body.coarse #ammo b { font-size: 32px; }
   <button class="btn" type="button" data-kind="shark"><b>메갈로돈</b><small>바다에서 덮침 · 물기 · 꼬리치기 · 수면 돌진</small></button>
   <button class="btn" type="button" data-kind="golem"><b>초거대 바위 골렘</b><small>내려찍기 충격파 · 바위 던지기 · 돌진</small></button>
   <button class="btn" type="button" data-kind="seraph"><b>반천사·반악마</b><small>빛 기둥 · 지옥불 · 비행 강하</small></button>
+  <button class="btn" type="button" data-kind="demon"><b>대악마</b><small>붉은 균열 광선 · 손톱 할퀴기 · 지면 균열 폭발</small></button>
 </div>
 <div id="bossIntro" class="hud" aria-live="polite"><b id="bossIntroName"></b><small id="bossIntroSub"></small></div>
 <div id="myHp" class="hud" hidden><div class="track"><i id="myHpFill"></i></div><span id="myHpTxt">1000</span></div>
@@ -2507,14 +2508,16 @@ const BOSS_LOG = {
   shark: { spawn: '검은 바다가 갈라지며 메갈로돈이 솟구칩니다!', die: '메갈로돈이 배를 드러내고 가라앉습니다!', gone: '메갈로돈' },
   golem: { spawn: '땅이 갈라지고 바위 골렘이 일어섭니다! 가슴의 심장이 타오릅니다.', die: '바위 골렘이 무너져 내렸습니다!', gone: '바위 골렘' },
   seraph: { spawn: '하늘이 갈라지고 반천사·반악마가 내려옵니다!', die: '반천사·반악마가 추락했습니다! 후광이 부서집니다.', gone: '반천사·반악마' },
+  demon: { spawn: '땅이 붉게 갈라지고 대악마가 솟아오릅니다! 가슴의 균열이 타오릅니다.', die: '대악마가 무릎 꿇고 쓰러졌습니다! 가슴의 불이 꺼집니다.', gone: '대악마' },
 };
-const BOSS_HURT_NAME = { spider: '거미', shark: '메갈로돈', golem: '바위 골렘', seraph: '반천사·반악마' };
+const BOSS_HURT_NAME = { spider: '거미', shark: '메갈로돈', golem: '바위 골렘', seraph: '반천사·반악마', demon: '대악마' };
 const BOSS_HIT_MSG = {
   swipe: '거미의 앞다리에 맞았습니다.', spit: '독침에 맞았습니다. 잠시 느려집니다.', minion: '새끼 거미에게 물렸습니다.',
   bite: '메갈로돈에게 물렸습니다!', lunge: '물 밖으로 덮친 메갈로돈에 깔렸습니다!', tail: '꼬리에 얻어맞았습니다.', rush: '돌진하는 메갈로돈에 부딪혔습니다.', ring: '충격파에 휩쓸렸습니다.',
   slam: '골렘의 주먹에 내리찍혔습니다!', wave: '충격파에 넘어졌습니다. (점프로 넘을 수 있습니다)', hurl: '날아온 바위에 맞았습니다!', charge: '돌진하는 골렘에 치였습니다!',
   pillar: '빛 기둥에 맞았습니다!', hellfire: '지옥불에 휩싸였습니다!', burn: '불 장판 위에서 타고 있습니다.', dive: '내리꽂힌 날개에 휩쓸렸습니다!',
 };
+const BOSS_SFX_EXT = {};   // 확장 보스의 합성음: kind -> (name, {osc, noise, roar, rumble}) => 처리했으면 true
 function initBosses(spMod, gMod) {
   const meFn = () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2 && !MYHP.dead, x: me.x, y: me.y, z: me.z });
   const BOSS_DMG_K = 7.5;
@@ -2536,6 +2539,7 @@ function initBosses(spMod, gMod) {
   const gctx = { ...base, canSwim: bossSwimOk, canFly: bossFlyOk, waterLevel: () => WATER.level, camPos: () => camera.position, shake: (a, d) => camShake(a, d), sfx: (k, n, x, z) => bossSound(k, n, x, z) };
   const map = { spider };
   for (const k of ['shark', 'golem', 'seraph']) map[k] = gMod.createGiantBoss(gctx, k);
+  for (const k in gMod.KINDS) { const E = gMod.KINDS[k]; if (!E.ext) continue; map[k] = map[k] || gMod.createGiantBoss(gctx, k); Object.assign(BOSS_HIT_MSG, E.msgs || {}); if (E.ext.sound) BOSS_SFX_EXT[k] = E.ext.sound; }   // 확장 보스(bf/demon.js 등)
   SPIDER = gMod.createBossHub(map);
   SPIDER.on('spawn', (e) => { refreshBossUi(true); logLine(null, (BOSS_LOG[e.kind] || BOSS_LOG.spider).spawn, true); bossIntro(e.kind); });
   SPIDER.on('despawn', () => refreshBossUi(true));
@@ -2565,6 +2569,7 @@ function bossSound(kind, name, x, z) {
   const noise = (type, f0, f1, q, a, peak, dur) => { const src = actx.createBufferSource(), bq = actx.createBiquadFilter(); src.buffer = whiteBuffer(); src.loop = true; bq.type = type; bq.Q.value = q; bq.frequency.setValueAtTime(f0, t); bq.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur); src.connect(bq); env(bq, a, peak, dur); src.start(t); src.stop(t + dur + 0.05); };
   const roar = (f, dur, gr) => { const o = actx.createOscillator(), lfo = actx.createOscillator(), lg = actx.createGain(), lp = actx.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f * 1.4, t); o.frequency.exponentialRampToValueAtTime(f, t + dur * 0.3); o.frequency.exponentialRampToValueAtTime(f * 0.6, t + dur); lfo.frequency.value = gr; lg.gain.value = f * 0.25; lfo.connect(lg); lg.connect(o.frequency); lp.type = 'lowpass'; lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(240, t + dur); o.connect(lp); env(lp, 0.15, 0.55, dur); o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05); };
   const rumble = (dur, peak = 0.8) => { osc('sine', 52, 30, 0.08, peak, dur); noise('lowpass', 260, 60, 0.7, 0.1, peak * 0.9, dur); };
+  if (BOSS_SFX_EXT[kind] && BOSS_SFX_EXT[kind](name, { osc, noise, roar, rumble })) return;
   if (name === 'intro' || name === 'rage' || name === 'die') {
     const dur = name === 'die' ? 3.2 : 2.6;
     if (kind === 'shark') { roar(70, dur, 9); noise('lowpass', 900, 160, 0.5, 0.05, 0.9, dur); }
