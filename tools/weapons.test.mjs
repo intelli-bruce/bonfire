@@ -272,7 +272,7 @@ console.warn = () => {};
   const fn = html.match(/function onGameKey\(e\) \{([\s\S]*?)\n\}\nwindow\.addEventListener\('keydown', onGameKey, true\)/);
   ok(!!fn && /weaponKey\(e\)\) \{ e\.preventDefault\(\); e\.stopImmediatePropagation\(\);/.test(fn[1]), 'weapon keys get preventDefault + stopImmediatePropagation');
   ok(/const weaponKey = \(e\) => \(SLOT_KEYS\[e\.code\] \|\| e\.code === 'KeyR'\) && !e\.ctrlKey && !e\.metaKey && !e\.altKey/.test(html), 'weapon keys = 1~7 and R without Ctrl/Meta/Alt (Ctrl+R still reloads the browser)');
-  ok(/window\.addEventListener\('mousedown', \(e\) => \{ if \(e\.button === 2/.test(html) && /rightDown\(\)/.test(html) && /\$\('altBtn'\)/.test(html), 'right mouse button / mobile button: aim, ultimate');
+  ok(/if \(e\.button === 2\) \{ e\.preventDefault\(\); rightDown\(\); \}/.test(html) && /rightDown\(\)/.test(html) && /\$\('altBtn'\)/.test(html), 'right mouse button / mobile button: aim, ultimate');
   ok(/8 춤 · 9 환호 · 0 끄덕 · 1~7 무기/.test(html), 'help text names the new keys');
   ok(/if \(!text \|\| !netLive\(\)\) \{ chatInput\.blur\(\);/.test(html), 'an empty chat Enter gives the keyboard back to the game');
   ok(/textContent = Number\.isFinite\(g\.reserve\) \? g\.reserve : '∞'/.test(html), 'HUD shows ∞ for the reserve');
