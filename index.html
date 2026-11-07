@@ -303,6 +303,7 @@ body.coarse #ammo b { font-size: 32px; }
   <button class="btn" type="button" data-kind="shark"><b>메갈로돈</b><small>바다에서 덮침 · 물기 · 꼬리치기 · 수면 돌진</small></button>
   <button class="btn" type="button" data-kind="golem"><b>초거대 바위 골렘</b><small>내려찍기 충격파 · 바위 던지기 · 돌진</small></button>
   <button class="btn" type="button" data-kind="seraph"><b>반천사·반악마</b><small>빛 기둥 · 지옥불 · 비행 강하</small></button>
+  <button class="btn" type="button" data-kind="hydra"><b>뼈가면 히드라</b><small>세 머리 화염 브레스 · 물기 · 꼬리 휩쓸기 · 비행 강하 (머리마다 따로 깨짐)</small></button>
 </div>
 <div id="bossIntro" class="hud" aria-live="polite"><b id="bossIntroName"></b><small id="bossIntroSub"></small></div>
 <div id="myHp" class="hud" hidden><div class="track"><i id="myHpFill"></i></div><span id="myHpTxt">1000</span></div>
@@ -2515,7 +2516,7 @@ const BOSS_HIT_MSG = {
   slam: '골렘의 주먹에 내리찍혔습니다!', wave: '충격파에 넘어졌습니다. (점프로 넘을 수 있습니다)', hurl: '날아온 바위에 맞았습니다!', charge: '돌진하는 골렘에 치였습니다!',
   pillar: '빛 기둥에 맞았습니다!', hellfire: '지옥불에 휩싸였습니다!', burn: '불 장판 위에서 타고 있습니다.', dive: '내리꽂힌 날개에 휩쓸렸습니다!',
 };
-function initBosses(spMod, gMod) {
+function initBosses(spMod, gMod, hyMod) {
   const meFn = () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2 && !MYHP.dead, x: me.x, y: me.y, z: me.z });
   const BOSS_DMG_K = 7.5;
   const onHitMe = (h) => {
@@ -2536,12 +2537,14 @@ function initBosses(spMod, gMod) {
   const gctx = { ...base, canSwim: bossSwimOk, canFly: bossFlyOk, waterLevel: () => WATER.level, camPos: () => camera.position, shake: (a, d) => camShake(a, d), sfx: (k, n, x, z) => bossSound(k, n, x, z) };
   const map = { spider };
   for (const k of ['shark', 'golem', 'seraph']) map[k] = gMod.createGiantBoss(gctx, k);
+  if (hyMod) { map.hydra = hyMod.createHydraBoss(gctx); BOSS_LOG.hydra = hyMod.LOG; BOSS_HURT_NAME.hydra = '히드라'; Object.assign(BOSS_HIT_MSG, hyMod.HIT_MSG); }   // 뼈가면 히드라 (bf/hydra.js)
   SPIDER = gMod.createBossHub(map);
   SPIDER.on('spawn', (e) => { refreshBossUi(true); logLine(null, (BOSS_LOG[e.kind] || BOSS_LOG.spider).spawn, true); bossIntro(e.kind); });
   SPIDER.on('despawn', () => refreshBossUi(true));
   SPIDER.on('gone', (e) => { refreshBossUi(true); const n = (BOSS_LOG[e.kind] || BOSS_LOG.spider).gone; logLine(null, e && e.dead ? `${n}이(가) 쓰러졌습니다.` : `${n}이(가) 사라졌습니다.`, true); });
   SPIDER.on('die', (e) => logLine(null, (BOSS_LOG[e.kind] || BOSS_LOG.spider).die, true));
   SPIDER.on('rage', (e) => logLine(null, `${BOSS_HURT_NAME[e.kind] || '보스'}이(가) 분노했습니다! 더 빠르고 더 자주 공격합니다.`, true));
+  SPIDER.on('headbreak', (e) => logLine(null, e.left ? `히드라의 머리 하나가 꺾였습니다! 남은 머리 ${e.left}개.` : '히드라의 마지막 머리가 꺾였습니다!', true));
   SPIDER.on('takeover', () => logLine(null, '보스를 이어 받아 진행합니다.', true));
   SPIDER.on('request-despawn', () => bossDelete(true));
   BOSS_UI.btn.disabled = false;
@@ -2569,6 +2572,7 @@ function bossSound(kind, name, x, z) {
     const dur = name === 'die' ? 3.2 : 2.6;
     if (kind === 'shark') { roar(70, dur, 9); noise('lowpass', 900, 160, 0.5, 0.05, 0.9, dur); }
     else if (kind === 'golem') { rumble(dur + 0.6, 1); roar(48, dur, 4); noise('bandpass', 420, 140, 1.4, 0.3, 0.5, dur); }
+    else if (kind === 'hydra') { roar(62, dur, 7); roar(88, dur * 0.9, 11); roar(47, dur * 1.1, 5); noise('lowpass', 1200, 200, 0.6, 0.1, 0.6, dur); }
     else if (kind === 'seraph') { [262, 330, 392, 523].forEach((f, i) => osc('sine', f, name === 'die' ? f * 0.5 : f, 0.4, 0.16, dur, i * 0.05)); roar(58, dur, 6); osc('sawtooth', 110, 98, 0.3, 0.12, dur); }
     return;
   }
@@ -2588,6 +2592,12 @@ function bossSound(kind, name, x, z) {
     case 'fire': noise('lowpass', 1800, 400, 0.6, 0.05, 0.8, 0.9); break;
     case 'burst': noise('lowpass', 1400, 200, 0.6, 0.005, 0.9, 0.7); osc('sine', 110, 45, 0.005, 0.5, 0.5); break;
     case 'dive': noise('bandpass', 200, 1200, 2, 0.6, 0.7, 1.9); roar(64, 1.4, 6); break;
+    case 'hbreath': case 'charge': roar(70, 1.0, 9); noise('bandpass', 300, 900, 1.5, 0.6, 0.4, 1.0); break;   // 히드라: 숨 모으기
+    case 'flame': noise('lowpass', 2600, 500, 0.5, 0.05, 0.9, 2.0); osc('sawtooth', 70, 50, 0.1, 0.3, 2.0); break;
+    case 'hsnap': roar(96, 0.7, 13); break;
+    case 'hsweep': noise('bandpass', 180, 1400, 2.5, 0.3, 0.8, 1.2); roar(52, 1.1, 5); break;
+    case 'hdive': case 'flap': for (let i = 0; i < 4; i++) noise('lowpass', 500, 120, 0.8, 0.02 + i * 0.3, 0.7, 0.3 + i * 0.3); roar(66, 1.6, 7); break;
+    case 'headbreak': noise('bandpass', 1800, 400, 1.2, 0.004, 1, 0.5); roar(120, 1.4, 16); break;
     default: break;
   }
 }
@@ -2683,7 +2693,7 @@ function bossFrame(dt, t, now) {
   if (now < SLOW.until) f = Math.min(f, 1 - SLOW.poison); else SLOW.poison = 0;
   if (Math.abs(f - SLOW.cur) > 0.01) { SLOW.cur = f; for (const k in SLOW.base) KIT_TUNING[k] = SLOW.base[k] * f; }
 }
-Promise.all([import('./bf/spider.js'), import('./bf/bosses.js')]).then(([a, b]) => initBosses(a, b)).catch((e) => { console.warn('[bonfire] could not load the bosses', e && e.message); if (LOCAL) window.__bossLoadErr = String((e && e.stack) || e); });
+Promise.all([import('./bf/spider.js'), import('./bf/bosses.js'), import('./bf/hydra.js')]).then(([a, b, h]) => initBosses(a, b, h)).catch((e) => { console.warn('[bonfire] could not load the bosses', e && e.message); if (LOCAL) window.__bossLoadErr = String((e && e.stack) || e); });
 
 // ---------- weapons (bf/weapons.js; models bf/sword.glb · m4a1.glb · shotgun.glb from tools/weapons/build_weapons.py) ----------
 // 1 bare hands (the kit's chop) · 2 sword (3-hit combo + a flying crescent) · 3 M4A1 (30 rounds, auto) · 4 pump shotgun. Damage lands on the boss and its minions
