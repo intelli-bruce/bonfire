@@ -6,17 +6,41 @@ export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const fin = (v, a, b) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, a, b) : null);
 const r2 = (v) => Math.round(v * 100) / 100;
 
-// ---------- 슬롯 표 (1 맨손 · 2 검 · 3 M4A1 · 4 산탄총) ----------
-export const SLOT_KEYS = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4 };   // 감정 표현은 7·8·9 로 옮겼다
+// ---------- 슬롯 표 (1 맨손 · 2 검 · 3 M4A1 · 4 산탄총 · 5 권총 · 6 수류탄 · 7 저격총) ----------
+export const SLOT_KEYS = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5: 5, Digit6: 6, Digit7: 7 };   // 감정 표현은 8·9·0 으로 옮겼다
 export const WEAPONS = {
   1: { id: 1, key: 'fist', name: '맨손', hint: '내려찍기', gun: false },
   2: { id: 2, key: 'sword', name: '검', hint: '3연 베기 + 검기', gun: false },
   3: { id: 3, key: 'rifle', name: 'M4A1', hint: '연사', gun: true, mag: 30, reserve: Infinity, interval: 0.095, auto: true, dmg: 6, pellets: 1, spread: 0.010, range: 160, reloadT: 1.9, reloadEmptyT: 2.5, kick: 0.012 },
   4: { id: 4, key: 'shotgun', name: '산탄총', hint: '산탄 7발', gun: true, mag: 6, reserve: Infinity, interval: 0.85, auto: false, dmg: 4, pellets: 7, spread: 0.060, range: 55, shellT: 0.42, reloadT: 0.6, kick: 0.05 },
+  5: { id: 5, key: 'pistol', name: '권총', hint: '반자동 12발', gun: true, mag: 12, reserve: Infinity, interval: 0.15, auto: false, dmg: 9, pellets: 1, spread: 0.014, range: 110, reloadT: 1.25, reloadEmptyT: 1.55, kick: 0.02 },
+  6: { id: 6, key: 'grenade', name: '수류탄', hint: '던지기 · 범위 폭발', gun: false, throwable: true },
+  7: { id: 7, key: 'sniper', name: '저격총', hint: '볼트액션 5발', gun: true, mag: 5, reserve: Infinity, interval: 1.25, auto: false, dmg: 70, pellets: 1, spread: 0.050, range: 240, reloadT: 2.6, reloadEmptyT: 2.9, kick: 0.09, bolt: 0.95 },
 };
-export const SLOT_COUNT = 4;
+export const SLOT_COUNT = 7;
+export const GUN_SLOTS = [3, 4, 5, 7];
+export const isGun = (s) => s === 3 || s === 4 || s === 5 || s === 7;
+
+// ---------- 조준(우클릭 누르는 동안): 확대 배율 · 퍼짐 배율 · 이동 속도 ----------
+// 소총·산탄총·권총은 약 1.3~1.5배 줌, 저격총은 스코프(6배). 조준하면 탄이 덜 퍼지고(명중률 상승) 저격총은 정확히 한 점으로 간다
+export const ADS = {
+  3: { zoom: 1.5, spread: 0.3, move: 0.55 },
+  4: { zoom: 1.25, spread: 0.65, move: 0.6 },
+  5: { zoom: 1.35, spread: 0.35, move: 0.65 },
+  7: { zoom: 6, spread: 0, move: 0.35, scope: true },
+};
+// 조준 정도 a(0..1)에서 퍼짐: 서서 쏘기 1 → 조준 ADS.spread. 움직이면 1.5배(조준 중엔 1.15배)
+export function spreadFor(slot, a, moving) {
+  const w = WEAPONS[slot]; if (!w || !w.gun) return 0;
+  const z = ADS[slot], k = 1 + ((z ? z.spread : 1) - 1) * clamp(a, 0, 1);
+  return w.spread * k * (moving ? lerp(1.5, 1.15, clamp(a, 0, 1)) : 1);
+}
+// 기본 시야 base(도)에서 조준 a 만큼 확대한 시야(도)
+export const adsFov = (base, slot, a) => { const z = ADS[slot]; if (!z || !(a > 0)) return base; const k = lerp(1, z.zoom, clamp(a, 0, 1)); return 2 * Math.atan(Math.tan(base * Math.PI / 360) / k) * 180 / Math.PI; };
+function lerp(a, b, t) { return a + (b - a) * t; }
 export const SWITCH_T = 0.15;   // 무기를 바꿀 때 팔이 올라오는 시간(s). 바꾸자마자 쏠 수 있다(애니메이션을 기다리지 않는다)
 export const wrapSlot = (s, dir) => ((s - 1 + (dir > 0 ? 1 : -1) + SLOT_COUNT) % SLOT_COUNT) + 1;
+export const validSlot = (s) => Number.isInteger(s) && s >= 1 && s <= SLOT_COUNT;
 
 // ---------- 검 콤보: 3연 베기. 마지막 한 방이 크고 검기도 커진다 ----------
 export const COMBO = [
@@ -26,16 +50,65 @@ export const COMBO = [
 ];
 export const COMBO_WINDOW = 0.55;     // 앞 동작이 끝난 뒤 이 안에 다시 누르면 다음 단계
 export const SLASH = { speed: 24, life: 1.25, r: 2.0, h: 1.0, range: 30 };   // 검기: 초속 24 m, 약 30 m 날아감
+// 좌클릭 한 번 = 베기 한 번 = 검기 한 발. 클릭이 빠르면 그만큼 빨리 나간다: 최소 간격 SWORD_MIN 만 두고, 앞 동작은 끊고 다음 동작을 시작한다.
+// 검기는 클릭 뒤 SWORD_LAUNCH 초에 나간다(동작 길이와 상관없이).
+export const SWORD_MIN = 0.14, SWORD_LAUNCH = 0.07;
 
-export function newSword() { return { step: -1, startAt: -1e9, endAt: -1e9 }; }
-// 지금 누르면 몇 번째 베기인가? 아직 바쁘면 -1. 앞 베기의 80 % 가 지나면 이어 칠 수 있다(미리 눌러 두기 허용).
+export function newSword() { return { step: -1, startAt: -1e9, endAt: -1e9, ultAt: -1e9 }; }
+// 지금 누르면 몇 번째 베기인가? 최소 간격 안이면 -1. 앞 동작 중이거나 끝난 뒤 COMBO_WINDOW 안이면 다음 단계(3타 뒤는 1타로)
 export function swordNext(st, now) {
+  if (now < st.startAt + SWORD_MIN) return -1;
+  if (now < (st.ultUntil || -1e9)) return -1;                                    // 궁극기 난무 중엔 일반 베기 없음
   const prev = st.step >= 0 ? COMBO[st.step] : null;
-  if (prev && now < st.startAt + prev.dur * 0.8) return -1;
-  if (prev && st.step === 2 && now < st.endAt + 0.2) return -1;                 // 마지막 한 방 뒤 짧은 후딜
-  if (prev && st.step < 2 && now <= st.endAt + COMBO_WINDOW) return st.step + 1;
+  if (prev && now <= st.endAt + COMBO_WINDOW) return (st.step + 1) % 3;
   return 0;
 }
+
+// ---------- 검 궁극기(우클릭): 아주 빠른 난무 → 「死」 모양 거대 검기. 쿨타임 15 s ----------
+export const ULT = { cd: 15, rushT: 0.9, rushHits: 9, rushDmg: 5, rushReach: 3.6, deathDmg: 80, speed: 30, life: 1.6, r: 4.2, range: 48, size: 5.2 };
+export const ultLeft = (st, now) => Math.max(0, (st.ultAt + ULT.cd) - now);
+export const ultReady = (st, now) => ultLeft(st, now) <= 0 && now >= (st.ultUntil || -1e9);
+export function ultStart(st, now) {
+  if (!ultReady(st, now)) return false;
+  st.ultAt = now; st.ultUntil = now + ULT.rushT + 0.25; st.step = -1; st.startAt = now; st.endAt = now;
+  return true;
+}
+// 난무의 i 번째 타격 시각(시작 기준 s): 앞은 빠르게, 끝으로 갈수록 더 빠르게
+export const ultHitT = (i) => ULT.rushT * Math.pow((i + 1) / ULT.rushHits, 0.85) * 0.92;
+
+// ---------- 수류탄: 던지기 · 포물선 · 튕김 · 지연 폭발 · 범위 피해 ----------
+export const GREN = { speed: 17, up: 0.32, g: 15, fuse: 2.2, cd: 1.1, bounce: 0.42, friction: 0.62, r: 6.5, dmg: 55, minDmg: 8, radius: 0.08 };
+// 던지는 속도: 카메라 방향(yaw, pitch)으로 앞·위. pitch 는 카메라 기준(위를 보면 음수)
+export function throwVel(yaw, pitch, power = 1) {
+  const up = clamp(-pitch + GREN.up, -0.3, 1.2), c = Math.cos(up), s = GREN.speed * power;
+  return [-Math.sin(yaw) * c * s, Math.sin(up) * s, -Math.cos(yaw) * c * s];
+}
+// 한 단계 적분(지면에서 튕김). p, v 는 [x,y,z] 배열(제자리 수정). ground(x, z, y) → 지면 높이. 반환: 이번에 튕겼으면 true
+export function grenadeStep(p, v, dt, ground) {
+  v[1] -= GREN.g * dt;
+  p[0] += v[0] * dt; p[1] += v[1] * dt; p[2] += v[2] * dt;
+  const g = ground(p[0], p[2], p[1] + 0.4) + GREN.radius;
+  if (p[1] < g) {
+    p[1] = g;
+    const hit = v[1] < -1.2;
+    v[1] = hit ? -v[1] * GREN.bounce : 0; v[0] *= GREN.friction; v[2] *= GREN.friction;
+    if (!hit) { v[0] *= 0.9; v[2] *= 0.9; }
+    return hit;
+  }
+  return false;
+}
+// 궤적 미리보기: 점 목록(첫 착지까지 + 튕김 한 번) — 화면 표시와 테스트가 같은 적분을 쓴다
+export function grenadeArc(o, v0, ground, maxT = GREN.fuse, dt = 1 / 30) {
+  const p = o.slice(), v = v0.slice(), pts = [p.slice()]; let bounces = 0, land = null;
+  for (let t = 0; t < maxT; t += dt) {
+    if (grenadeStep(p, v, dt, ground)) { bounces++; if (!land) land = p.slice(); }
+    pts.push(p.slice());
+    if (bounces >= 1 && pts.length > 2 && Math.hypot(v[0], v[1], v[2]) < 0.5) break;
+  }
+  return { pts, land: land || p.slice() };
+}
+// 폭발 피해: 중심에서 거리 d 에 따라 dmg → minDmg 로 줄고 r 밖은 0
+export const grenadeDmg = (d) => (d > GREN.r ? 0 : Math.round(GREN.minDmg + (GREN.dmg - GREN.minDmg) * (1 - clamp(d / GREN.r, 0, 1)) ** 1.3));
 export function swordSwing(st, now) {
   const n = swordNext(st, now); if (n < 0) return -1;
   st.step = n; st.startAt = now; st.endAt = now + COMBO[n].dur;
@@ -111,7 +184,7 @@ export function rifleReloadPose(u, empty) {
 }
 
 // ---------- 피해 표 (받는 쪽 소유자가 이 표로 피해를 정한다: 보낸 사람이 말한 값은 믿지 않는다) ----------
-export const DMG_CD = { punch: 220, sword: 150, slash: 90, rifle: 70, shotgun: 450 };   // 공격자별 최소 간격(ms)
+export const DMG_CD = { punch: 220, sword: 120, slash: 80, rifle: 70, shotgun: 450, pistol: 120, sniper: 900, grenade: 300, rush: 70, death: 600 };   // 공격자별 최소 간격(ms)
 export function dmgFor(w, how, c, n) {
   if (w === 1) return { amount: 10, cd: DMG_CD.punch, key: 'punch' };
   if (w === 2) {
@@ -120,6 +193,15 @@ export function dmgFor(w, how, c, n) {
   }
   if (w === 3) return { amount: WEAPONS[3].dmg, cd: DMG_CD.rifle, key: 'rifle' };
   if (w === 4) { const k = clamp(Math.round(n) || 1, 1, WEAPONS[4].pellets); return { amount: WEAPONS[4].dmg * k, cd: DMG_CD.shotgun, key: 'shotgun' }; }
+  if (w === 5) return { amount: WEAPONS[5].dmg, cd: DMG_CD.pistol, key: 'pistol' };
+  if (w === 7) return { amount: WEAPONS[7].dmg, cd: DMG_CD.sniper, key: 'sniper' };
+  if (w === 6) { const d = clamp(Number(n) || 0, 0, GREN.r); return { amount: grenadeDmg(d), cd: DMG_CD.grenade, key: 'grenade' }; }   // n = 폭발 중심에서의 거리(m)
+  return null;
+}
+// 검 궁극기 피해: how 'r' 난무 한 타 · 'u' 死 검기
+export function ultDmg(how) {
+  if (how === 'r') return { amount: ULT.rushDmg, cd: DMG_CD.rush, key: 'rush' };
+  if (how === 'u') return { amount: ULT.deathDmg, cd: DMG_CD.death, key: 'death' };
   return null;
 }
 
@@ -173,9 +255,10 @@ export function spreadDir(dx, dy, dz, spread, r1, r2) {
 }
 
 // ---------- 네트워크 메시지(`wpn`) 검증: 모르는 모양·범위 밖은 버린다 ----------
-// f(발사) {k:'f', w:3|4, o:[x,y,z], d:[dx,dy,dz], l: 길이, n: 맞힌 알갱이 수, h:[종류 'b'|'m', id]}
+// f(발사) {k:'f', w:3|4|5|7, z: 조준 0..1, o:[x,y,z], d:[dx,dy,dz], l: 길이, n: 맞힌 알갱이 수, h:[종류 'b'|'m', id]}
 // s(검 휘두름) {k:'s', c:0..2, o:[x,y,z], a: 방향각}
-// h(피해 보고) {k:'h', w:1..4, c, sl:0|1, h:[종류, id]}   r(장전 시작) {k:'r', w, e:0|1}
+// h(피해 보고) {k:'h', w:1..7, c, sl:0|1, x:'r'|'u'(궁극기), n(수류탄 = 거리), h:[종류, id]}   g(수류탄) {k:'g', o, v}   u(궁극기) {k:'u', o, a}
+//   r(장전 시작) {k:'r', w, e:0|1}
 const arr3 = (v, lim) => (Array.isArray(v) && v.length === 3 ? v.map((q, i) => fin(q, -lim[i], lim[i])) : null);
 const POS_LIM = [140, 60, 140];
 export function sanitizeWpn(d) {
@@ -187,10 +270,10 @@ export function sanitizeWpn(d) {
     return t && i !== null ? { kind: t, id: Math.round(i) } : null;
   };
   if (k === 'f') {
-    const w = d.w === 3 || d.w === 4 ? d.w : null, o = arr3(d.o, POS_LIM), dir = arr3(d.d, [1.01, 1.01, 1.01]);
+    const w = isGun(d.w) ? d.w : null, o = arr3(d.o, POS_LIM), dir = arr3(d.d, [1.01, 1.01, 1.01]);
     if (!w || !o || !dir || o.includes(null) || dir.includes(null)) return null;
     const dl = Math.hypot(dir[0], dir[1], dir[2]); if (dl < 0.5 || dl > 1.5) return null;
-    const out = { k, w, o, d: dir.map((q) => q / dl), l: fin(d.l, 0, WEAPONS[w].range + 5) ?? WEAPONS[w].range, n: Math.round(fin(d.n, 0, 8) ?? 0), seed: Math.round(fin(d.seed, 0, 1e9) ?? 0) };
+    const out = { k, w, o, d: dir.map((q) => q / dl), l: fin(d.l, 0, WEAPONS[w].range + 5) ?? WEAPONS[w].range, n: Math.round(fin(d.n, 0, 8) ?? 0), seed: Math.round(fin(d.seed, 0, 1e9) ?? 0), z: fin(d.z, 0, 1) ?? 0 };
     if (d.h !== undefined) { const h = hit(d.h); if (!h) return null; out.h = h; }
     return out;
   }
@@ -200,21 +283,36 @@ export function sanitizeWpn(d) {
     return { k, c: Math.round(c), o, a };
   }
   if (k === 'h') {
-    const w = fin(d.w, 1, 4), c = fin(d.c, 0, 2), h = hit(d.h);
+    const w = fin(d.w, 1, SLOT_COUNT), c = fin(d.c, 0, 2), h = hit(d.h);
     if (w === null || !h) return null;
-    return { k, w: Math.round(w), c: Math.round(c ?? 0), sl: d.sl ? 1 : 0, n: Math.round(fin(d.n, 1, 8) ?? 1), h };
+    const out = { k, w: Math.round(w), c: Math.round(c ?? 0), sl: d.sl ? 1 : 0, n: Math.round(fin(d.n, 1, 8) ?? 1), h };
+    if (out.w === 6) out.n = r2(fin(d.n, 0, GREN.r) ?? GREN.r);   // 수류탄: n = 폭발 중심까지 거리
+    if (out.w === 2 && (d.x === 'r' || d.x === 'u')) out.x = d.x;   // 궁극기 난무 'r' · 死 검기 'u'
+    return out;
   }
-  if (k === 'r') { const w = d.w === 3 || d.w === 4 ? d.w : null; return w ? { k, w, e: d.e ? 1 : 0 } : null; }
+  if (k === 'r') { const w = isGun(d.w) ? d.w : null; return w ? { k, w, e: d.e ? 1 : 0 } : null; }
+  if (k === 'g') {   // 수류탄 던짐: 손 위치 o, 처음 속도 v
+    const o = arr3(d.o, POS_LIM), v = arr3(d.v, [40, 40, 40]);
+    if (!o || !v || o.includes(null) || v.includes(null) || Math.hypot(v[0], v[1], v[2]) > GREN.speed * 1.6) return null;
+    return { k, o, v };
+  }
+  if (k === 'u') {   // 궁극기 시작: 위치 o, 방향각 a
+    const o = arr3(d.o, POS_LIM), a = fin(d.a, -7, 7);
+    if (!o || o.includes(null) || a === null) return null;
+    return { k, o, a };
+  }
   return null;
 }
 export const wpnMsg = {   // 보내는 쪽 모양(위 검증과 짝)
-  fire: (w, o, d, l, n, seed, h) => { const m = { k: 'f', w, o: o.map(r2), d: d.map((v) => Math.round(v * 1000) / 1000), l: r2(l), n, seed }; if (h) m.h = h; return m; },
+  fire: (w, o, d, l, n, seed, h, z) => { const m = { k: 'f', w, o: o.map(r2), d: d.map((v) => Math.round(v * 1000) / 1000), l: r2(l), n, seed }; if (h) m.h = h; if (z) m.z = r2(z); return m; },
   swing: (c, o, a) => ({ k: 's', c, o: o.map(r2), a: r2(a) }),
-  hit: (w, c, sl, h, n) => ({ k: 'h', w, c, sl: sl ? 1 : 0, n: n || 1, h }),
+  hit: (w, c, sl, h, n, x) => { const m = { k: 'h', w, c, sl: sl ? 1 : 0, n: w === 6 ? r2(n) : (n || 1), h }; if (x) m.x = x; return m; },
   reload: (w, empty) => ({ k: 'r', w, e: empty ? 1 : 0 }),
+  grenade: (o, v) => ({ k: 'g', o: o.map(r2), v: v.map(r2) }),
+  ult: (o, a) => ({ k: 'u', o: o.map(r2), a: r2(a) }),
 };
 // 받은 피해 보고가 믿을 만한가(공격자와 보스의 거리): 무기별 닿는 거리 + 지연 여유
 export function reachOk(w, how, dist, bossReach) {
-  const lim = w === 2 ? (how === 'sl' ? SLASH.range + bossReach : 6 + bossReach) : w === 1 ? bossReach + 4 : WEAPONS[w].range + 12;
+  const lim = w === 2 ? (how === 'u' ? ULT.range + ULT.r + bossReach : how === 'sl' ? SLASH.range + bossReach : 6 + bossReach) : w === 1 ? bossReach + 4 : w === 6 ? 40 + GREN.r + bossReach : WEAPONS[w].range + 12;
   return dist <= lim;
 }

@@ -195,6 +195,20 @@ body.coarse #wslots { display: none; }
 #cross::after { top: 50%; left: 0; height: 2px; width: 9px; margin-top: -1px; box-shadow: 21px 0 0 var(--c); }
 #cross i { left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; }
 #cross.hot { --c: #ff5a4a; } #cross.hot { transform: scale(1.18); transition: transform 0.08s; }
+#cross.ads::before { height: 6px; box-shadow: 0 24px 0 var(--c); } #cross.ads::after { width: 6px; box-shadow: 24px 0 0 var(--c); } #cross.ads { --c: #9dffb0; }
+#cross.ads i { width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; }
+/* sniper scope: black around a round lens, thin cross hairs with mil dots */
+#scope { position: fixed; inset: 0; pointer-events: none; z-index: 8; opacity: 0; transition: opacity 0.06s; background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(38vh, 38vw), rgba(0,0,0,0.9) calc(min(38vh, 38vw) + 1px), #000 calc(min(38vh, 38vw) + 18px)); }
+#scope::before, #scope::after { content: ""; position: absolute; background: rgba(0,0,0,0.85); }
+#scope::before { left: 50%; top: calc(50% - min(38vh, 38vw)); width: 2px; height: calc(2 * min(38vh, 38vw)); margin-left: -1px; }
+#scope::after { top: 50%; left: calc(50% - min(38vh, 38vw)); height: 2px; width: calc(2 * min(38vh, 38vw)); margin-top: -1px; }
+#scope i { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #ff3b30; box-shadow: 0 0 6px #ff3b30; }
+#skill { left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 74px); display: grid; justify-items: center; gap: 4px; pointer-events: none; z-index: 10; font-family: var(--f-display); color: #ffe2bd; text-shadow: 0 1px 3px #000, 0 0 10px rgba(0,0,0,.65); }
+#skill .ring { --p: 1; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; color: #fff; background: conic-gradient(#ff4d3a calc(var(--p) * 360deg), rgba(20, 14, 40, 0.75) 0); border: 2px solid rgba(255, 236, 210, 0.5); }
+#skill .ring.ready { box-shadow: 0 0 14px #ff4d3a; }
+#skill .ring b { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: rgba(20, 14, 40, 0.85); font-weight: 400; }
+#skill .nm { font-size: 13px; color: var(--mist); }
+body.coarse #skill { left: calc(env(safe-area-inset-left, 0px) + 12px); top: calc(env(safe-area-inset-top, 0px) + 92px); bottom: auto; transform: none; justify-items: start; }
 #reloadBtn[hidden] { display: none; }
 body.coarse #ammo { left: calc(env(safe-area-inset-left, 0px) + 12px); top: calc(env(safe-area-inset-top, 0px) + 92px); bottom: auto; transform: none; justify-items: start; }
 body.coarse #ammo b { font-size: 32px; }
@@ -227,13 +241,15 @@ body.coarse #ammo b { font-size: 32px; }
   <div class="track"><div class="ghost" id="bossHpGhost"></div><div class="fill" id="bossHpFill"></div></div>
   <div class="state" id="bossState"></div>
 </div>
-<div id="wslots" class="hud" role="group" aria-label="무기 슬롯 (숫자 1~4 · 마우스 휠)" hidden></div>
+<div id="wslots" class="hud" role="group" aria-label="무기 슬롯 (숫자 1~7 · 마우스 휠)" hidden></div>
 <div id="ammo" class="hud" hidden>
   <div class="nums"><b id="ammoMag">30</b><span class="sep">/</span><span class="res" id="ammoRes">∞</span></div>
   <div class="nm" id="ammoName">M4A1 · R 장전</div>
   <div class="rbar" id="rbar"><i id="rfill"></i></div>
 </div>
 <div id="cross" class="hud" hidden aria-hidden="true"><i></i></div>
+<div id="scope" aria-hidden="true"><i></i></div>
+<div id="skill" class="hud" hidden><div class="ring" id="skillRing"><b id="skillIcon">死</b></div><div class="nm" id="skillName">궁극기 · 우클릭</div></div>
 <div id="bar" class="hud" hidden>
   <form id="chatForm" autocomplete="off">
     <label class="sr" for="chatInput">대화</label>
@@ -244,9 +260,10 @@ body.coarse #ammo b { font-size: 32px; }
 </div>
 <div id="acts" class="hud" hidden>
   <button id="castBtn" class="act cast" type="button" title="낚싯대 던지기·감기 (R · 마우스 왼쪽 클릭)" hidden>낚싯대 던지기</button>
-  <button id="wpnBtn" class="act small" type="button" aria-label="무기 바꾸기" title="무기 바꾸기 (숫자 1~4 · 마우스 휠)">맨손</button>
+  <button id="wpnBtn" class="act small" type="button" aria-label="무기 바꾸기" title="무기 바꾸기 (숫자 1~7 · 마우스 휠)">맨손</button>
+  <button id="altBtn" class="act small" type="button" title="조준 (마우스 오른쪽 누르는 동안) · 검이면 궁극기" hidden>조준</button>
   <button id="reloadBtn" class="act small" type="button" title="장전 (R)" hidden>장전</button>
-  <button id="emoteBtn" class="act small" type="button" aria-label="감정 표현: 춤" title="감정 표현 (7·8·9)">춤</button>
+  <button id="emoteBtn" class="act small" type="button" aria-label="감정 표현: 춤" title="감정 표현 (8·9·0)">춤</button>
   <button id="proneBtn" class="act small" type="button" title="엎드리기 (Z)">엎드리기</button>
   <button id="rollBtn" class="act" type="button" title="구르기 (C) · 점프 중이면 멀리 날며 구르기">구르기</button>
   <button id="dashBtn" class="act" type="button" title="대시 (Q)">대시</button>
@@ -298,7 +315,7 @@ body.coarse #ammo b { font-size: 32px; }
       </div>
       <div id="loadRow" class="load" hidden><div class="track"><div id="loadBar"></div></div><span id="loadTxt">바닷가 풍경을 불러오는 중…</span></div>
       <button id="enterBtn" type="submit">입장하기</button>
-      <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 위에서 아래로 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 7 춤 · 8 환호 · 9 끄덕 · 1~4 무기(1 맨손 · 2 검 · 3 M4A1 · 4 산탄총, 마우스 휠로도 바꿈) · R 총이면 장전 아니면 낚싯대 · E 통나무·낚시 의자에 앉기/장작 넣기/사다리 오르기 · P 사진입니다. 검은 3연 베기와 날아가는 검기, 총은 화면 가운데 조준점으로 거미를 쏩니다(카메라 확대는 Shift+휠). 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기 · C 꾹 눌러 잠수, 놓으면 떠오름). 바닷가 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 판자의 의자에 앉으면 낚시를 할 수 있습니다.</span></div>
+      <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 위에서 아래로 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 8 춤 · 9 환호 · 0 끄덕 · 1~7 무기(1 맨손 · 2 검 · 3 M4A1 · 4 산탄총 · 5 권총 · 6 수류탄 · 7 저격총, 마우스 휠로도 바꿈) · 마우스 오른쪽 누르는 동안 총 조준(저격총은 스코프), 검이면 궁극기 「死」(15초) · R 총이면 장전 아니면 낚싯대 · E 통나무·낚시 의자에 앉기/장작 넣기/사다리 오르기 · P 사진입니다. 검은 클릭마다 검기 한 발, 총은 화면 가운데 조준점으로 거미를 쏘고, 수류탄은 점선 궤적을 보고 던집니다(카메라 확대는 Shift+휠). 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기 · C 꾹 눌러 잠수, 놓으면 떠오름). 바닷가 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 판자의 의자에 앉으면 낚시를 할 수 있습니다.</span></div>
     </div>
   </form>
 </div>
@@ -313,7 +330,7 @@ import { initNames, claimNick, signPresence, verifyPeer, myNick as claimedNick }
 import { buildPier, createAngler, deckTop as pierDeck, PIER } from './bf/pier.js';
 import { createSolids } from './bf/solids.js';
 import { createWeapons } from './bf/weapons.js';
-import { SLOT_KEYS, WEAPONS as WPN_TABLE, wrapSlot } from './bf/weapons-core.js';
+import { SLOT_KEYS, SLOT_COUNT, WEAPONS as WPN_TABLE, wrapSlot, isGun as isGunSlot } from './bf/weapons-core.js';
 
 // ---------- small helpers ----------
 const TAU = Math.PI * 2;
@@ -355,6 +372,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color('#232861');
 scene.fog = new THREE.FogExp2('#2c3170', 0.0085);
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1200);
+let baseFov = 60;   // the window's field of view; aiming narrows it (WP.fov)
 camera.rotation.order = 'YXZ';
 const MOON_DIR = new THREE.Vector3(0.25, 0.32, -1).normalize();
 const WATERLINE_Z = -14, SEA_Z = -88;   // still water y = 0 along the waterline; the sea is open to swimmers out to z = -88 (a flat basin about 9 m deep from z = -48 on)
@@ -880,6 +898,14 @@ canvas.addEventListener('pointerup', endPointer);
 window.addEventListener('pointerup', (e) => { if (e.button === 0 && e.pointerType !== 'touch') leftUp(); });   // released outside the canvas / after a pointer-lock click
 canvas.addEventListener('pointercancel', endPointer);
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+// right button (held): aim with a gun (the sniper's scope), the sword's ultimate. mouse events fire per button (pointer events chord a second button into a move)
+window.addEventListener('mousedown', (e) => {
+  if (!entered || !(e.target === canvas || lockedNow())) return;
+  if (e.button === 2) { e.preventDefault(); rightDown(); }
+  else if (e.button === 0 && (e.buttons & 2)) leftDown();   // left while the right is held (aiming): pointer events fold this press into a move, so take it here
+});
+window.addEventListener('mouseup', (e) => { if (e.button === 2) rightUp(); else if (e.button === 0 && (e.buttons & 2)) leftUp(); });
+window.addEventListener('blur', () => { rightUp(); });
 let wheelAcc = 0, wheelAt = 0;
 canvas.addEventListener('wheel', (e) => {
   if (!entered) return; e.preventDefault();
@@ -916,7 +942,7 @@ canvas.addEventListener('mousemove', (e) => {   // locked: always; refused: hove
 });
 $('lookBtn').addEventListener('click', () => setLook(lookMode === 'mouse' ? 'drag' : 'mouse'));
 for (const ev of ['focus', 'blur']) $('chatInput').addEventListener(ev, () => setTimeout(refreshLook, 0));
-// movement and action keys belong to the kit controller (Shift run, Q dash, Space jump, C roll, X sit, Z prone, V wave, 1/2/3 emotes);
+// movement and action keys belong to the kit controller (Shift run, Q dash, Space jump, C roll, X sit, Z prone, V wave, 8/9/0 emotes);
 // the page keeps Enter (chat), Escape (leave the chat box), E (sit on a log / add wood) and P (screenshot)
 // the listener runs in the capture phase and swallows the weapon keys (1~4 and R), so the page's own handling does not depend on what bubbles up to it
 // (browser extensions such as Vimium take digits as counts and `r` as "reload page": exclude this site there as well)
@@ -960,7 +986,7 @@ function bossCamTarget() {   // the boss is ~13 m tall and ~45 m wide: while it 
 function updateCamera(dt) {
   const k = 1 - Math.exp(-dt * 10);
   bossCamZ += (bossCamTarget() - bossCamZ) * (1 - Math.exp(-dt * 2.2));
-  const zm = 1 + 2.1 * bossCamZ, camDist = cam.dist * zm;   // zoom factor: up to ~3x of the user's chosen distance
+  const zm = 1 + 2.1 * bossCamZ, camDist = cam.dist * zm * (1 - 0.4 * (WP ? WP.ads : 0));   // aiming pulls the view in over the shoulder   // zoom factor: up to ~3x of the user's chosen distance
   const sh = WP.shoulder;   // a gun up: the view slides over the right shoulder so the muzzle, the tracers and the crosshair are not hidden behind my own back
   cam.tx += (me.x + Math.cos(cam.yaw) * sh - cam.tx) * k; cam.tz += (me.z - Math.sin(cam.yaw) * sh - cam.tz) * k;
   const st = meRec ? meRec.ctrl.state : null, g = groundY3(me.x, me.z, me.y), swim = !!(st && st.swim === 2), dive = swim ? st.dive : 0;
@@ -982,7 +1008,8 @@ function updateCamera(dt) {
   const d = cam.cur, cx = cam.tx + dx * d, cz = cam.tz + dz * d, gy = groundY3(cx, cz, me.y);
   camera.position.set(cx, Math.max(gy + 0.3, gy < 0.05 && camUnder < 0.5 ? waterY(cx, cz) + 0.35 : -Infinity, TY + dy * d), cz);   // never under the sand; under the sea only while diving
   camera.lookAt(cam.tx, TY + 0.1 + Math.max(0, -cam.pitch) * 9 + 3.4 * bossCamZ + WP.kick * 1.8, cam.tz);   // WP.kick: a shot's recoil lifts the view for a moment   // aim a little higher: the giant's head, not just my feet
-  if (meRec) meRec.av.root.visible = entered && d > 0.9;
+  if (meRec) meRec.av.root.visible = entered && d > 0.9 && !(WP && WP.scope > 0.5);   // through the sniper scope my own body would fill the lens
+  const fov = WP ? WP.fov(baseFov) : baseFov; if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
   const wy = waterY(camera.position.x, camera.position.z), under = camera.position.y < wy - (uwOn ? 0.0 : 0.04) && gy < wy;
   setUnderwater(under);
   fxCall('ocean', (o) => o.under && o.under(camera, under ? wy : null));
@@ -1072,7 +1099,7 @@ function onMyAction(act) {   // the kit started one of my actions: tell everyone
 }
 function myAct(a) { initAudio(); return entered && meRec ? meRec.ctrl.press(a) : false; }
 // left click / F / the attack button: a chop, a sword swing or a gun shot by the weapon slot, or (on a fishing chair) the rod
-const gunSlot = () => !!WP && (WP.slot === 3 || WP.slot === 4);
+const gunSlot = () => !!WP && isGunSlot(WP.slot);
 function leftAct() {
   if (mySeat && mySeat.fish) return castRod();
   if (WP && WP.slot >= 2) { initAudio(); if (mySeat) standUp(); return WP.attackPress(); }
@@ -1083,7 +1110,9 @@ function leftDown() {   // the press: a gun also starts holding the trigger (aut
   if (gunSlot()) { initAudio(); if (mySeat) standUp(); WP.trigger(true); return true; }
   return leftAct();
 }
-function leftUp() { if (WP && WP.slot >= 3) WP.trigger(false); }
+function leftUp() { if (WP && isGunSlot(WP.slot)) WP.trigger(false); }
+function rightDown() { if (!WP || !entered) return false; initAudio(); if (mySeat && (WP.slot === 2 || gunSlot())) standUp(); return WP.alt(true); }
+function rightUp() { if (WP) WP.alt(false); }
 function stepLocal(dt) {
   const c = meRec.ctrl; c.update(dt, cam.yaw);
   let s = c.state;
@@ -1094,7 +1123,7 @@ function stepLocal(dt) {
   if (mySeat && (s.act !== 'sit' || s.seat !== mySeat.id)) { mySeat = null; fishStop(); sendPresence(performance.now(), true); refreshCtx(); }   // moved / jumped / X: off the log
   return s.speed;
 }
-function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar, ap: myApCode, ...(WP && WP.slot > 1 ? { wp: WP.slot } : {}) }; }   // x y z r l a as t (s while on a log, w in the water), ch + color = the closest stock look for old clients, ap = my full look, wp = weapon slot when not bare-handed
+function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar, ap: myApCode, ...(WP && WP.slot > 1 ? { wp: WP.slot } : {}), ...(WP && WP.ads > 0.5 ? { za: 1 } : {}) }; }   // x y z r l a as t (s while on a log, w in the water), ch + color = the closest stock look for old clients, ap = my full look, wp = weapon slot when not bare-handed
 function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the kit's applyNet
   const g = groundY3(x, z, undefined), o = { x, z };
   const y = num(d.y, Math.min(g, heightAt(x, z)) - 1, Math.max(g + 6, 2)); if (y !== null) o.y = y;   // swimmers float metres above a deep seabed (a diver is between the surface and the seabed)
@@ -1104,7 +1133,7 @@ function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the ki
   if (typeof d.a === 'string' && ACT_CODES.has(d.a)) o.a = d.a;
   if (Number.isInteger(d.as) && d.as >= 0 && d.as <= 1e9) o.as = d.as;
   const t = num(d.t, 0, 1e6); if (t !== null) o.t = t;
-  if (WP) WP.setRemoteSlot(rec, Number.isInteger(d.wp) && d.wp >= 1 && d.wp <= 4 ? d.wp : 1);   // weapon in hand (shown from the next frame; the models may still be loading)
+  if (WP) { WP.setRemoteSlot(rec, Number.isInteger(d.wp) && d.wp >= 1 && d.wp <= SLOT_COUNT ? d.wp : 1); WP.setRemoteAds(rec, d.za === 1 ? 1 : 0); }   // weapon in hand (shown from the next frame; the models may still be loading)
   if (typeof d.s === 'string' && seatById(d.s.slice(0, 16))) o.s = d.s.slice(0, 16);
   if (o.as !== undefined) {   // read-out of actions seen from this peer (first sight is a baseline, as in the kit)
     if (rec.asSeen === undefined) rec.asSeen = o.as;
@@ -2085,6 +2114,8 @@ $('punchBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); initA
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('punchBtn').addEventListener(ev, leftUp);
 $('wpnBtn').addEventListener('click', () => { initAudio(); if (WP) WP.cycle(1); });
 $('reloadBtn').addEventListener('click', () => { initAudio(); if (WP) WP.reload(); });
+$('altBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); rightDown(); });   // touch: hold to aim, tap for the ultimate
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('altBtn').addEventListener(ev, rightUp);
 // in deep water the roll button becomes 「잠수」: hold it to sink, let go to float up (key C does the same; Space swims up)
 for (const ev of ['pointerdown']) $('rollBtn').addEventListener(ev, () => { if (meRec && meRec.ctrl.state.swim === 2) meRec.ctrl.setDive(true); });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('rollBtn').addEventListener(ev, () => { if (meRec) meRec.ctrl.setDive(false); });
@@ -2346,7 +2377,7 @@ $('entryForm').addEventListener('submit', async (e) => {
   for (const id of ['badge', 'hint', 'log', 'bar', 'tools', 'wslots']) $(id).hidden = false;
   $('acts').hidden = false;   // the action buttons are for the desktop too (keys and mouse still work)
   updateFireHud();
-  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무·낚시 의자 가까이에서 「앉기」 · 바다에서 수영, 「잠수」 꾹 누르면 가라앉음 · 부두 끝에서 점프하면 다이빙 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(물속에선 꾹 눌러 잠수) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1~4 무기(휠로도) · R 장전/낚싯대 · 7·8·9 감정 · E 통나무/장작/낚시 의자/사다리 · 부두 끝에서 점프하면 다이빙 · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
+  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무·낚시 의자 가까이에서 「앉기」 · 바다에서 수영, 「잠수」 꾹 누르면 가라앉음 · 부두 끝에서 점프하면 다이빙 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(물속에선 꾹 눌러 잠수) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1~7 무기(휠로도) · 우클릭 조준·검 궁극기 · R 장전/낚싯대 · 8·9·0 감정 · E 통나무/장작/낚시 의자/사다리 · 부두 끝에서 점프하면 다이빙 · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
   setTimeout(() => $('hint').classList.add('fade'), 9000);
   canvas.focus({ preventScroll: true });
   tryLock(); refreshLook();
@@ -2481,9 +2512,9 @@ import('./bf/spider.js').then(initSpider).catch((e) => { console.warn('[bonfire]
 // ---------- weapons (bf/weapons.js; models bf/sword.glb · m4a1.glb · shotgun.glb from tools/weapons/build_weapons.py) ----------
 // 1 bare hands (the kit's chop) · 2 sword (3-hit combo + a flying crescent) · 3 M4A1 (30 rounds, auto) · 4 pump shotgun. Damage lands on the boss and its minions
 // through the same owner-books-it path as the punch; shots, swings, reloads and damage reports ride the `wpn` topic.
-const SLOT_ATTACK = { 1: '내려찍기', 2: '베기', 3: '사격', 4: '사격' };
+const SLOT_ATTACK = { 1: '내려찍기', 2: '베기', 3: '사격', 4: '사격', 5: '사격', 6: '던지기', 7: '저격' };
 const slotBtns = [];
-for (let n = 1; n <= 4; n++) {
+for (let n = 1; n <= SLOT_COUNT; n++) {
   const b = document.createElement('button'); b.type = 'button'; b.className = 'wslot'; b.setAttribute('aria-pressed', String(n === 1));
   b.innerHTML = `<kbd>${n}</kbd><span>${WPN_TABLE[n].name}</span><small>${WPN_TABLE[n].hint}</small>`;
   b.addEventListener('click', () => { initAudio(); WP.equip(n); canvas.focus({ preventScroll: true }); });
@@ -2491,11 +2522,14 @@ for (let n = 1; n <= 4; n++) {
 }
 $('wslots').addEventListener('mousedown', (e) => e.preventDefault());
 const AMMO = { box: $('ammo'), mag: $('ammoMag'), res: $('ammoRes'), name: $('ammoName'), bar: $('rbar'), fill: $('rfill'), cross: $('cross') };
+let adsSent = false;
 const WPN_HUD = {
   slot(s) {
     slotBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(i + 1 === s)));
-    const gun = s >= 3;
+    const gun = isGunSlot(s);
     $('punchBtn').textContent = SLOT_ATTACK[s]; $('wpnBtn').textContent = WPN_TABLE[s].name; $('reloadBtn').hidden = !gun;
+    $('altBtn').hidden = !(gun || s === 2); $('altBtn').textContent = s === 2 ? '궁극기' : s === 7 ? '스코프' : '조준';
+    $('skill').hidden = !(s === 2 || s === 6); $('skillIcon').textContent = s === 2 ? '死' : '●';
     AMMO.box.hidden = !gun; AMMO.cross.hidden = !gun; AMMO.name.textContent = gun ? `${WPN_TABLE[s].name} · R 장전` : '';
     if (!gun) { AMMO.bar.classList.remove('on'); AMMO.cross.classList.remove('hot'); }
     sendPresence(performance.now(), true);
@@ -2508,7 +2542,17 @@ const WPN_HUD = {
   aim(kind) { AMMO.cross.classList.toggle('hot', !!kind); },
   reload(u, name) {
     const on = u > 0; AMMO.bar.classList.toggle('on', on); AMMO.fill.style.transform = `scaleX(${u})`;
-    if (WP && WP.slot >= 3) AMMO.name.textContent = on ? `${name} · 장전 중…` : `${name} · R 장전`;
+    if (WP && isGunSlot(WP.slot)) AMMO.name.textContent = on ? `${name} · 장전 중…` : `${name} · R 장전`;
+  },
+  ads(a, scope, s) {   // aiming: a tighter green crosshair; the sniper's scope fades in over the last part of the zoom
+    AMMO.cross.classList.toggle('ads', a > 0.5); $('scope').style.opacity = scope.toFixed(2); AMMO.cross.style.opacity = scope > 0.5 ? '0' : '';
+    const on = a > 0.5; if (on !== adsSent) { adsSent = on; sendPresence(performance.now(), true); }
+  },
+  skill(s, left, cd) {   // the sword's ultimate / the grenade: cooldown ring
+    if (s !== 2 && s !== 6) return;
+    const ring = $('skillRing'), p = cd > 0 ? 1 - left / cd : 1;
+    ring.style.setProperty('--p', p.toFixed(3)); ring.classList.toggle('ready', left <= 0);
+    $('skillName').textContent = s === 2 ? (left > 0 ? `궁극기 「死」 ${left.toFixed(1)}초` : '궁극기 「死」 · 우클릭') : (left > 0 ? `수류탄 ${left.toFixed(1)}초` : '수류탄 · 클릭 던지기');
   },
 };
 const WP = createWeapons({
@@ -2531,7 +2575,7 @@ WPN_HUD.ammo(3, WP.guns[3]);
 // ---------- loop ----------
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
-  renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w < h ? 70 : 60; camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false); camera.aspect = w / h; baseFov = w < h ? 70 : 60; camera.fov = baseFov; camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize); resize();
 if (location.hostname === '127.0.0.1') {   // local test read-out only

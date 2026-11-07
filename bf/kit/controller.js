@@ -100,7 +100,7 @@ export function createController({
   }
 
   // ------------------------------------------------------------ input
-  const KEYMAP = { KeyQ: 'dash', Space: 'jump', KeyC: 'roll', KeyF: 'punch', KeyX: 'sit', KeyZ: 'prone', KeyV: 'wave', Digit7: 'dance', Digit8: 'cheer', Digit9: 'nod' };   // 1~4 are the weapon slots (the page); the emotes moved to 7 8 9
+  const KEYMAP = { KeyQ: 'dash', Space: 'jump', KeyC: 'roll', KeyF: 'punch', KeyX: 'sit', KeyZ: 'prone', KeyV: 'wave', Digit8: 'dance', Digit9: 'cheer', Digit0: 'nod' };   // 1~7 are the weapon slots (the page); the emotes moved to 8 9 0
   const MOVE = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
   const typing = (e) => { const t = e.target; return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
   function onKeyDown(e) {
