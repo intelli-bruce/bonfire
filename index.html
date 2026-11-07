@@ -173,10 +173,22 @@ body.under #uw { opacity: 1; }
 #bossHp .fill { background: linear-gradient(180deg, #ff6a4a, #c4201e); transition: transform 0.18s ease-out; }
 #bossHp.rage .fill { background: linear-gradient(180deg, #ff9a3c, #e0301a); box-shadow: 0 0 10px rgba(255, 120, 40, 0.8); }
 #bossHp .state { font-size: 12px; color: var(--sand); text-align: center; min-height: 1.1em; text-shadow: 0 1px 3px #000; }
+#setPanel { right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 116px); width: min(300px, calc(100vw - 24px)); display: grid; gap: 10px; padding: 14px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
+#setPanel[hidden] { display: none; }
+#setPanel .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#setPanel input[type=range] { width: 100%; accent-color: var(--ember); }
+#myHp { left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 40px); display: flex; align-items: center; gap: 8px; pointer-events: none; z-index: 10; font-family: var(--f-display); color: #ffe2bd; text-shadow: 0 1px 3px #000; }
+#myHp .track { width: 180px; height: 10px; border-radius: 999px; background: rgba(20, 14, 40, 0.78); border: 1px solid rgba(255, 236, 210, 0.35); overflow: hidden; }
+#myHp i { display: block; height: 100%; width: 100%; transform-origin: left center; background: linear-gradient(90deg, #3fcf6a, #8ff09a); transition: transform 0.15s; }
+#myHp.low i { background: linear-gradient(90deg, #e0301a, #ff7a4a); }
+#downMsg { left: 50%; top: 38%; transform: translateX(-50%); padding: 10px 18px; border-radius: 14px; background: rgba(60, 10, 14, 0.8); color: #ffd9d0; font-family: var(--f-display); font-size: 18px; z-index: 12; pointer-events: none; }
+#hurt { position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(220, 20, 20, 0.55) 100%); transition: opacity 0.35s; }
+#hurt.on { opacity: 1; transition: none; }
+.wslot svg { width: 46px; height: 22px; display: block; }
 /* weapons: slot list (left, desktop), ammo read-out (bottom centre), crosshair (screen centre) */
 #wslots { left: calc(env(safe-area-inset-left, 0px) + 12px); top: 50%; transform: translateY(-50%); display: grid; gap: 6px; z-index: 10; }
 body.coarse #wslots { display: none; }
-.wslot { display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 8px; min-width: 128px; padding: 7px 12px 7px 8px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); cursor: pointer; font-family: var(--f-display); font-size: 14px; color: var(--mist); text-align: left; touch-action: manipulation; }
+.wslot { display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 8px; min-width: 84px; padding: 7px 12px 7px 8px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); cursor: pointer; font-family: var(--f-display); font-size: 14px; color: var(--mist); text-align: left; touch-action: manipulation; }
 .wslot kbd { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: rgba(255, 243, 223, 0.12); font: inherit; font-size: 13px; color: var(--sand); }
 .wslot small { grid-column: 2; margin-top: -4px; font-family: var(--f-ui); font-size: 11.5px; color: var(--mist); opacity: 0.85; }
 .wslot[aria-pressed="true"] { border-color: var(--ember); color: #ffe2bd; background: rgba(255, 162, 87, 0.24); box-shadow: 0 0 0 2px rgba(255, 162, 87, 0.28), var(--shadow); transform: translateX(4px); }
@@ -235,13 +247,21 @@ body.coarse #ammo b { font-size: 32px; }
   <button id="lanternBtn" class="btn" type="button">풍등 날리기</button>
   <button id="fwBtn" class="btn" type="button">폭죽</button>
   <button id="bossBtn" class="btn" type="button" aria-pressed="false" title="인면 거미 보스를 불러오거나 지웁니다" disabled>보스 생성</button>
+  <button id="setBtn" class="btn" type="button" aria-expanded="false" aria-controls="setPanel">설정</button>
 </div>
+<div id="setPanel" class="hud" role="dialog" aria-label="설정" hidden>
+  <div class="row"><label for="sensIn">마우스 감도</label><b id="sensVal">0.50배</b></div>
+  <input id="sensIn" type="range" min="0.1" max="2" step="0.05" value="0.5">
+  <div class="row"><button id="sensReset" class="btn" type="button">기본값(0.5배)</button><button id="setClose" class="btn" type="button">닫기</button></div>
+</div>
+<div id="myHp" class="hud" hidden><div class="track"><i id="myHpFill"></i></div><span id="myHpTxt">100</span></div>
+<div id="downMsg" class="hud" hidden>쓰러졌습니다 · <span id="downT">4</span>초 뒤 부활</div>
 <div id="bossHp" class="hud" role="status" aria-live="off" hidden>
   <div class="name"><span>인면 거미 · 직녀</span><small id="bossHpTxt"></small></div>
   <div class="track"><div class="ghost" id="bossHpGhost"></div><div class="fill" id="bossHpFill"></div></div>
   <div class="state" id="bossState"></div>
 </div>
-<div id="wslots" class="hud" role="group" aria-label="무기 슬롯 (숫자 1~7 · 마우스 휠)" hidden></div>
+<div id="wslots" class="hud" role="group" aria-label="무기 슬롯 (숫자 1~8 · 마우스 휠)" hidden></div>
 <div id="ammo" class="hud" hidden>
   <div class="nums"><b id="ammoMag">30</b><span class="sep">/</span><span class="res" id="ammoRes">∞</span></div>
   <div class="nm" id="ammoName">M4A1 · R 장전</div>
@@ -260,10 +280,10 @@ body.coarse #ammo b { font-size: 32px; }
 </div>
 <div id="acts" class="hud" hidden>
   <button id="castBtn" class="act cast" type="button" title="낚싯대 던지기·감기 (R · 마우스 왼쪽 클릭)" hidden>낚싯대 던지기</button>
-  <button id="wpnBtn" class="act small" type="button" aria-label="무기 바꾸기" title="무기 바꾸기 (숫자 1~7 · 마우스 휠)">맨손</button>
+  <button id="wpnBtn" class="act small" type="button" aria-label="무기 바꾸기" title="무기 바꾸기 (숫자 1~8 · 마우스 휠)">맨손</button>
   <button id="altBtn" class="act small" type="button" title="조준 (마우스 오른쪽 누르는 동안) · 검이면 궁극기" hidden>조준</button>
   <button id="reloadBtn" class="act small" type="button" title="장전 (R)" hidden>장전</button>
-  <button id="emoteBtn" class="act small" type="button" aria-label="감정 표현: 춤" title="감정 표현 (8·9·0)">춤</button>
+  <button id="emoteBtn" class="act small" type="button" aria-label="감정 표현: 춤" title="감정 표현 (9·0·-)">춤</button>
   <button id="proneBtn" class="act small" type="button" title="엎드리기 (Z)">엎드리기</button>
   <button id="rollBtn" class="act" type="button" title="구르기 (C) · 점프 중이면 멀리 날며 구르기">구르기</button>
   <button id="dashBtn" class="act" type="button" title="대시 (Q)">대시</button>
@@ -273,6 +293,7 @@ body.coarse #ammo b { font-size: 32px; }
 <div id="stick" hidden><div id="knob"></div></div>
 <div id="flash" aria-hidden="true"></div>
 <div id="uw" aria-hidden="true"></div>
+<div id="hurt" aria-hidden="true"></div>
 <div id="shotToast" class="hud" role="status" hidden><img alt=""><span></span></div>
 
 <div id="entry">
@@ -315,7 +336,7 @@ body.coarse #ammo b { font-size: 32px; }
       </div>
       <div id="loadRow" class="load" hidden><div class="track"><div id="loadBar"></div></div><span id="loadTxt">바닷가 풍경을 불러오는 중…</span></div>
       <button id="enterBtn" type="submit">입장하기</button>
-      <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 위에서 아래로 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 8 춤 · 9 환호 · 0 끄덕 · 1~7 무기(1 맨손 · 2 검 · 3 M4A1 · 4 산탄총 · 5 권총 · 6 수류탄 · 7 저격총, 마우스 휠로도 바꿈) · 마우스 오른쪽 누르는 동안 총 조준(저격총은 스코프), 검이면 궁극기 「死」(15초) · R 총이면 장전 아니면 낚싯대 · E 통나무·낚시 의자에 앉기/장작 넣기/사다리 오르기 · P 사진입니다. 검은 클릭마다 검기 한 발, 총은 화면 가운데 조준점으로 거미를 쏘고, 수류탄은 점선 궤적을 보고 던집니다(카메라 확대는 Shift+휠). 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기 · C 꾹 눌러 잠수, 놓으면 떠오름). 바닷가 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 판자의 의자에 앉으면 낚시를 할 수 있습니다.</span></div>
+      <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 위에서 아래로 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 9 춤 · 0 환호 · - 끄덕 · 1~8 무기(1 맨손 · 2 검 · 3 M4A1 · 4 산탄총 · 5 권총 · 6 선물상자 수류탄 · 7 저격총 · 8 RPG, 마우스 휠로도 바꿈) · 마우스 오른쪽 누르는 동안 총 조준(저격총은 스코프), 검이면 궁극기 「死」(15초) · R 총이면 장전 아니면 낚싯대 · E 통나무·낚시 의자에 앉기/장작 넣기/사다리 오르기 · P 사진입니다. 검은 클릭마다 검기 한 발, 총은 화면 가운데 조준점으로 거미를 쏘고, 수류탄은 점선 궤적을 보고 던집니다(카메라 확대는 Shift+휠). 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기 · C 꾹 눌러 잠수, 놓으면 떠오름). 바닷가 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 판자의 의자에 앉으면 낚시를 할 수 있습니다.</span></div>
     </div>
   </form>
 </div>
@@ -330,7 +351,8 @@ import { initNames, claimNick, signPresence, verifyPeer, myNick as claimedNick }
 import { buildPier, createAngler, deckTop as pierDeck, PIER } from './bf/pier.js';
 import { createSolids } from './bf/solids.js';
 import { createWeapons } from './bf/weapons.js';
-import { SLOT_KEYS, SLOT_COUNT, WEAPONS as WPN_TABLE, wrapSlot, isGun as isGunSlot } from './bf/weapons-core.js';
+import { SLOT_KEYS, SLOT_COUNT, WEAPONS as WPN_TABLE, wrapSlot, isGun as isGunSlot, HP as HPC, HURT, newHp, hpHit, hpTick, sanitizeHp } from './bf/weapons-core.js';
+import { createHealthBars } from './bf/health.js';
 
 // ---------- small helpers ----------
 const TAU = Math.PI * 2;
@@ -853,6 +875,8 @@ function settleOnGround() {
 }
 const feedStick = () => { if (meRec) meRec.ctrl.setStick(joy.x, joy.y); };   // x right, y down; |v| >= 0.92 runs
 
+// mouse sensitivity (settings menu, saved): 1 = the old feel; the default is half of it
+const SENS = { v: (() => { const q = parseFloat(store.get('bonfire.sens')); return Number.isFinite(q) && q >= 0.1 && q <= 2 ? q : 0.5; })() };
 function orbit(dx, dy, s) { cam.yaw -= dx * s; cam.pitch = clamp(cam.pitch + dy * s * 0.85, mySeat ? -1.0 : -0.5, 1.15); }   // seated: a wider look-up for the sky and the moon
 function setStick(show, x, y) { const s = $('stick'); s.hidden = !show; if (show) { s.style.left = x + 'px'; s.style.top = y + 'px'; } }
 canvas.addEventListener('pointerdown', (e) => {
@@ -881,7 +905,7 @@ canvas.addEventListener('pointermove', (e) => {
     if (touches.size >= 2) { const [a, b] = [...touches.values()], nd = Math.hypot(a.x - b.x, a.y - b.y); if (pinchD > 0 && nd > 0) cam.dist = clamp(cam.dist * pinchD / nd, 2, 9); pinchD = nd; }
     else orbit(e.clientX - px, e.clientY - py, 0.006);
   } else if (mouseDrag && e.pointerType !== 'touch' && lookMode === 'drag') {
-    orbit(e.clientX - mouseDrag.x, e.clientY - mouseDrag.y, 0.0045); mouseDrag.x = e.clientX; mouseDrag.y = e.clientY;
+    orbit(e.clientX - mouseDrag.x, e.clientY - mouseDrag.y, 0.0045 * SENS.v); mouseDrag.x = e.clientX; mouseDrag.y = e.clientY;
     mouseDrag.moved = Math.max(mouseDrag.moved, Math.hypot(e.clientX - mouseDrag.sx, e.clientY - mouseDrag.sy));
   }
 });
@@ -938,13 +962,18 @@ document.addEventListener('pointerlockchange', refreshLook);
 document.addEventListener('pointerlockerror', () => { lockFails++; refreshLook(); });
 canvas.addEventListener('mousemove', (e) => {   // locked: always; refused: hover look while the cursor is over the canvas
   if (!entered || lookMode !== 'mouse' || !(lockedNow() || lockFails)) return;
-  orbit(clamp(e.movementX || 0, -120, 120), clamp(e.movementY || 0, -120, 120), 0.0035);
+  orbit(clamp(e.movementX || 0, -120, 120), clamp(e.movementY || 0, -120, 120), 0.0035 * SENS.v);
 });
 $('lookBtn').addEventListener('click', () => setLook(lookMode === 'mouse' ? 'drag' : 'mouse'));
+function refreshSens() { $('sensIn').value = String(SENS.v); $('sensVal').textContent = SENS.v.toFixed(2) + '배'; }
+$('setBtn').addEventListener('click', () => { const p = $('setPanel'), open = p.hidden; p.hidden = !open; $('setBtn').setAttribute('aria-expanded', String(open)); refreshSens(); if (WP) WP.sfx('ui', 1); if (open && lockedNow()) document.exitPointerLock(); });
+$('sensIn').addEventListener('input', () => { const q = clamp(parseFloat($('sensIn').value) || 0.5, 0.1, 2); SENS.v = q; store.set('bonfire.sens', String(q)); refreshSens(); });
+$('sensReset').addEventListener('click', () => { SENS.v = 0.5; store.set('bonfire.sens', '0.5'); refreshSens(); if (WP) WP.sfx('ui', 1); });
+$('setClose').addEventListener('click', () => { $('setPanel').hidden = true; $('setBtn').setAttribute('aria-expanded', 'false'); if (WP) WP.sfx('ui', 1); canvas.focus({ preventScroll: true }); tryLock(); });
 for (const ev of ['focus', 'blur']) $('chatInput').addEventListener(ev, () => setTimeout(refreshLook, 0));
-// movement and action keys belong to the kit controller (Shift run, Q dash, Space jump, C roll, X sit, Z prone, V wave, 8/9/0 emotes);
+// movement and action keys belong to the kit controller (Shift run, Q dash, Space jump, C roll, X sit, Z prone, V wave, 9/0/- emotes);
 // the page keeps Enter (chat), Escape (leave the chat box), E (sit on a log / add wood) and P (screenshot)
-// the listener runs in the capture phase and swallows the weapon keys (1~4 and R), so the page's own handling does not depend on what bubbles up to it
+// the listener runs in the capture phase and swallows the weapon keys (1~8 and R), so the page's own handling does not depend on what bubbles up to it
 // (browser extensions such as Vimium take digits as counts and `r` as "reload page": exclude this site there as well)
 const weaponKey = (e) => (SLOT_KEYS[e.code] || e.code === 'KeyR') && !e.ctrlKey && !e.metaKey && !e.altKey;
 function onGameKey(e) {
@@ -1123,7 +1152,7 @@ function stepLocal(dt) {
   if (mySeat && (s.act !== 'sit' || s.seat !== mySeat.id)) { mySeat = null; fishStop(); sendPresence(performance.now(), true); refreshCtx(); }   // moved / jumped / X: off the log
   return s.speed;
 }
-function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar, ap: myApCode, ...(WP && WP.slot > 1 ? { wp: WP.slot } : {}), ...(WP && WP.ads > 0.5 ? { za: 1 } : {}) }; }   // x y z r l a as t (s while on a log, w in the water), ch + color = the closest stock look for old clients, ap = my full look, wp = weapon slot when not bare-handed
+function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar, ap: myApCode, ...(WP && WP.slot > 1 ? { wp: WP.slot } : {}), ...(WP && WP.ads > 0.5 ? { za: 1 } : {}), hp: Math.round(MYHP.hp), ...(MYHP.dead ? { dd: 1 } : {}) }; }   // x y z r l a as t (s while on a log, w in the water), ch + color = the closest stock look for old clients, ap = my full look, wp = weapon slot when not bare-handed
 function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the kit's applyNet
   const g = groundY3(x, z, undefined), o = { x, z };
   const y = num(d.y, Math.min(g, heightAt(x, z)) - 1, Math.max(g + 6, 2)); if (y !== null) o.y = y;   // swimmers float metres above a deep seabed (a diver is between the surface and the seabed)
@@ -1133,6 +1162,7 @@ function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the ki
   if (typeof d.a === 'string' && ACT_CODES.has(d.a)) o.a = d.a;
   if (Number.isInteger(d.as) && d.as >= 0 && d.as <= 1e9) o.as = d.as;
   const t = num(d.t, 0, 1e6); if (t !== null) o.t = t;
+  rec.hpNet = sanitizeHp(d.hp, d.dd);   // old clients send no hp: a full bar
   if (WP) { WP.setRemoteSlot(rec, Number.isInteger(d.wp) && d.wp >= 1 && d.wp <= SLOT_COUNT ? d.wp : 1); WP.setRemoteAds(rec, d.za === 1 ? 1 : 0); }   // weapon in hand (shown from the next frame; the models may still be loading)
   if (typeof d.s === 'string' && seatById(d.s.slice(0, 16))) o.s = d.s.slice(0, 16);
   if (o.as !== undefined) {   // read-out of actions seen from this peer (first sight is a baseline, as in the kit)
@@ -2039,6 +2069,7 @@ function onMqMessage(topic, payload) {
         hitStats.onMe++;
         hitFlash(meRec); meRec.ctrl.knock(dx, dz);
         if (mq) mq.boostUntil = now + 700;
+        hurtMe(HURT.punch, who);
         sendPresence(now, true);
         if (evtOk('*', 'hitlog', 2500)) netLog(null, `${who} 님에게 맞았습니다.`, true);
       } else {
@@ -2081,7 +2112,7 @@ function sendPresence(now, full) {   // >= 10 Hz while anything changes, at once
   if (now - mq.lastSent < (urgent ? 45 : fast ? 60 : 90)) { if (full) mq.pend = true; return; }
   const f = presenceFields(), seat = mySeat ? mySeat.id : null;
   const fishOut = FISH.out && fishing();
-  const sig = [f.x, f.y, f.z, f.r, f.l, f.as, f.s || '', f.w || 0, seat || '', fishOut ? FISH.fc : '', f.wp || 1].join(',');
+  const sig = [f.x, f.y, f.z, f.r, f.l, f.as, f.s || '', f.w || 0, seat || '', fishOut ? FISH.fc : '', f.wp || 1, f.hp, f.dd || 0].join(',');
   if (!urgent && !fast && sig === mq.lastSig && now - mq.lastSent < 1000) return;
   mq.lastSent = now; mq.lastSig = sig; mq.pend = false;
   const claimed = nickState === 'ok' ? claimedNick() : '';
@@ -2374,10 +2405,10 @@ $('entryForm').addEventListener('submit', async (e) => {
   if (nickState === 'ok') onClaimed(); else if (nickState === 'pending') scheduleClaimRetry();
   $('entry').hidden = true;
   if (pv) { pv.dispose(); pv = null; }   // free its WebGL context: the world renderer needs the GPU now
-  for (const id of ['badge', 'hint', 'log', 'bar', 'tools', 'wslots']) $(id).hidden = false;
+  for (const id of ['badge', 'hint', 'log', 'bar', 'tools', 'wslots', 'myHp']) $(id).hidden = false;
   $('acts').hidden = false;   // the action buttons are for the desktop too (keys and mouse still work)
   updateFireHud();
-  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무·낚시 의자 가까이에서 「앉기」 · 바다에서 수영, 「잠수」 꾹 누르면 가라앉음 · 부두 끝에서 점프하면 다이빙 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(물속에선 꾹 눌러 잠수) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1~7 무기(휠로도) · 우클릭 조준·검 궁극기 · R 장전/낚싯대 · 8·9·0 감정 · E 통나무/장작/낚시 의자/사다리 · 부두 끝에서 점프하면 다이빙 · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
+  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무·낚시 의자 가까이에서 「앉기」 · 바다에서 수영, 「잠수」 꾹 누르면 가라앉음 · 부두 끝에서 점프하면 다이빙 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(물속에선 꾹 눌러 잠수) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1~8 무기(휠로도) · 우클릭 조준·검 궁극기 · R 장전/낚싯대 · 9·0·- 감정 · 설정에서 마우스 감도 · E 통나무/장작/낚시 의자/사다리 · 부두 끝에서 점프하면 다이빙 · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
   setTimeout(() => $('hint').classList.add('fade'), 9000);
   canvas.focus({ preventScroll: true });
   tryLock(); refreshLook();
@@ -2409,6 +2440,7 @@ function initSpider(mod) {
       const now = performance.now();
       hitFlash(meRec); meRec.ctrl.knock(h.dx, h.dz, h.power);
       if (mq) mq.boostUntil = now + 700;
+      hurtMe(HURT[h.src === 'swipe' ? 'swipe' : h.src === 'spit' ? 'spit' : 'bite'], '거미');
       sendPresence(now, true);
       if (h.poison) { SLOW.poison = 0.55; SLOW.until = now + 2600; }
       if (evtOk('*', 'bosshitlog', 1500)) netLog(null, h.src === 'swipe' ? '거미의 앞다리에 맞았습니다.' : h.src === 'spit' ? '독침에 맞았습니다. 잠시 느려집니다.' : '새끼 거미에게 물렸습니다.', true);
@@ -2512,15 +2544,57 @@ import('./bf/spider.js').then(initSpider).catch((e) => { console.warn('[bonfire]
 // ---------- weapons (bf/weapons.js; models bf/sword.glb · m4a1.glb · shotgun.glb from tools/weapons/build_weapons.py) ----------
 // 1 bare hands (the kit's chop) · 2 sword (3-hit combo + a flying crescent) · 3 M4A1 (30 rounds, auto) · 4 pump shotgun. Damage lands on the boss and its minions
 // through the same owner-books-it path as the punch; shots, swings, reloads and damage reports ride the `wpn` topic.
-const SLOT_ATTACK = { 1: '내려찍기', 2: '베기', 3: '사격', 4: '사격', 5: '사격', 6: '던지기', 7: '저격' };
+const SLOT_ATTACK = { 1: '내려찍기', 2: '베기', 3: '사격', 4: '사격', 5: '사격', 6: '던지기', 7: '저격', 8: '로켓' };
+// weapon silhouettes for the slot list (viewBox 48x24, filled with the button's text colour)
+const SLOT_ICON = {
+  1: '<path d="M18 6h10a3 3 0 0 1 3 3v2h2a2 2 0 0 1 2 2v3a5 5 0 0 1-5 5h-8a5 5 0 0 1-5-5V9a3 3 0 0 1 1-3z"/>',
+  2: '<path d="M4 13 34 10.5l8 1.5-8 1.5zM34 7h2.5v10H34zM37 11h7v2h-7z"/>',
+  3: '<path d="M2 10h7l2-1h19l1-2h3v2h8v3h-8l-2 1h-4l-1 7h-4l1-7h-5l-2 3h-3l1-3H9l-1 3H3l1-4H2z"/>',
+  4: '<path d="M2 10h30v-1h12v3H32v1H20l-2 2h-6v3H6l2-4H2z"/><rect x="22" y="13" width="9" height="2.5" rx="1"/>',
+  5: '<path d="M12 8h22v4H22l-1 2h-3l-2 6h-5l2-7h-1z"/>',
+  6: '<rect x="15" y="9" width="18" height="13" rx="1.5"/><path d="M23 9h2v13h-2z" fill="#3a1606" opacity=".5"/><path d="M24 9c-4-6-9-3-5 0zm0 0c4-6 9-3 5 0z"/>',
+  7: '<path d="M1 11h6l3-1h16l1-3h8v3h12v2H35l-3 1h-5l-1 6h-3l1-6h-6l-3 3H11l1-3H6l-1 2H1z"/><rect x="19" y="5" width="12" height="3" rx="1.5"/>',
+  8: '<path d="M2 11h30v-1h4l6-2 4 4-4 4-6-2h-4v-1H24l-1 6h-3l1-6h-6l-1 6h-3l1-6H2z"/>',
+};
 const slotBtns = [];
 for (let n = 1; n <= SLOT_COUNT; n++) {
   const b = document.createElement('button'); b.type = 'button'; b.className = 'wslot'; b.setAttribute('aria-pressed', String(n === 1));
-  b.innerHTML = `<kbd>${n}</kbd><span>${WPN_TABLE[n].name}</span><small>${WPN_TABLE[n].hint}</small>`;
+  b.innerHTML = `<kbd>${n}</kbd><svg viewBox="0 0 48 24" fill="currentColor" aria-hidden="true">${SLOT_ICON[n]}</svg>`;
+  b.setAttribute('aria-label', `${n} ${WPN_TABLE[n].name} · ${WPN_TABLE[n].hint}`); b.title = `${n} ${WPN_TABLE[n].name} · ${WPN_TABLE[n].hint}`; b.dataset.slot = String(n);
   b.addEventListener('click', () => { initAudio(); WP.equip(n); canvas.focus({ preventScroll: true }); });
   $('wslots').appendChild(b); slotBtns.push(b);
 }
 $('wslots').addEventListener('mousedown', (e) => e.preventDefault());
+// ---------- health: my HP is decided on my screen (boss attacks, punches), sent as `hp` / `dd` in presence; everyone sees a bar over every head ----------
+const MYHP = newHp(), HPBARS = createHealthBars({ THREE });
+function hurtMe(amount, why) {
+  if (!entered || !meRec) return;
+  const now = performance.now() / 1000, r = hpHit(MYHP, amount, now);
+  if (!r) return;
+  const h = $('hurt'); h.classList.add('on'); setTimeout(() => h.classList.remove('on'), 90);
+  if (WP) WP.sfx(r === 'dead' ? 'down' : 'hurt', 1);
+  if (r === 'dead') { netLog(null, `쓰러졌습니다${why ? ` (${why})` : ''}. ${HPC.respawnT}초 뒤 부활합니다.`, true); if (WP) WP.trigger(false); meRec.ctrl.setMoveScale(0.001); }
+  refreshMyHp(); sendPresence(performance.now(), true);
+}
+function healthFrame(dt) {
+  if (!entered || !meRec) return;
+  const now = performance.now() / 1000;
+  if (hpTick(MYHP, now, dt) === 'respawn') {
+    const sx = (Math.random() - 0.5) * 4, sz = 9 + Math.random() * 2;
+    meRec.ctrl.teleport(sx, sz, 0); me.x = sx; me.z = sz; meRec.ctrl.setMoveScale(1);
+    if (WP) WP.sfx('respawn', 1); netLog(null, '부활했습니다.', true); sendPresence(performance.now(), true);
+  }
+  if (MYHP.dead) { meRec.ctrl.setMoveScale(0.001); $('downT').textContent = String(Math.max(0, Math.ceil(HPC.respawnT - (now - MYHP.deadAt)))); }
+  $('downMsg').hidden = !MYHP.dead;
+  refreshMyHp();
+  HPBARS.update(meRec, MYHP.hp, MYHP.dead, dt, (meRec.label ? meRec.label.position.y : tagY(meRec, 0.3)) + 0.22);
+  for (const rec of others.values()) { const q = rec.hpNet || { hp: HPC.max, dead: false }; HPBARS.update(rec, q.hp, q.dead, dt, (rec.label ? rec.label.position.y : tagY(rec, 0.3)) + 0.22); }
+}
+let myHpShown = -1;
+function refreshMyHp() {
+  const v = Math.round(MYHP.hp); if (v === myHpShown) return; myHpShown = v;
+  $('myHpFill').style.transform = `scaleX(${v / HPC.max})`; $('myHpTxt').textContent = String(v); $('myHp').classList.toggle('low', v <= 30);
+}
 const AMMO = { box: $('ammo'), mag: $('ammoMag'), res: $('ammoRes'), name: $('ammoName'), bar: $('rbar'), fill: $('rfill'), cross: $('cross') };
 let adsSent = false;
 const WPN_HUD = {
@@ -2562,11 +2636,12 @@ const WP = createWeapons({
   groundY: groundY3, heightAt, blocked: (x, z, y) => blocked(x, z, y), waterY,
   me: () => ({ rec: meRec, ctrl: meRec ? meRec.ctrl : null, x: me.x, y: me.y, z: me.z, speed: meRec ? meRec.ctrl.state.speed : 0 }),
   camState: () => ({ yaw: cam.yaw, pitch: cam.pitch, dist: cam.cur }),
+  kickView: (dp, dy) => { cam.pitch = clamp(cam.pitch + dp, mySeat ? -1.0 : -0.5, 1.15); cam.yaw += dy; },   // recoil: the view jumps up (negative pitch) and comes back
   spider: () => SPIDER,
   net: { send: (m) => { if (netLive()) mqPub('wpn', { id: myId, mid: newMid(), ...m }); } },
   log: (t) => logLine(null, t, true),
   audio: () => (actx ? { ctx: actx, dest: sfx } : null),
-  canUse: () => !!(entered && meRec && !mySeat && meRec.ctrl.state.swim !== 2),
+  canUse: () => !!(entered && meRec && !mySeat && meRec.ctrl.state.swim !== 2 && !MYHP.dead),
   hud: WPN_HUD,
 });
 WP.load().catch((e) => { console.warn('[bonfire] weapons: models not available:', e && e.message); if (LOCAL) window.__wpnLoadErr = String((e && e.stack) || e); });
@@ -2600,7 +2675,7 @@ if (location.hostname === '127.0.0.1') {   // local test read-out only
     async lastShotData() { if (!lastShot) return null; const b = new Uint8Array(await lastShot.blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return btoa(s); },
     get info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures }; },
     setCamHook(f) { camHook = f; }, get camera() { return camera; }, hideMe(v) { if (meRec) meRec.av.root.visible = !v; },
-    get wpn() { return WP; }, wpnTune: (slot, k, v) => { const T_ = WP.debug.POSE[slot]; if (T_) T_[k] = v; },
+    get wpn() { return WP; }, get hp() { return { ...MYHP }; }, hurt: (n, w) => hurtMe(n, w), get sens() { return SENS.v; }, wpnTune: (slot, k, v) => { const T_ = WP.debug.POSE[slot]; if (T_) T_[k] = v; },
     get spider() { return SPIDER; }, bossCreate, bossDelete, bossStrike, get slow() { return { ...SLOW }; }, get webSlow() { return SPIDER ? SPIDER.slowAt(me.x, me.z) : 1; },
     get myAp() { return { ...myAp, code: myApCode, ch: myChar, color: myColor }; }, get pv() { return pv; },
     get diag() { return { mqIn, mqPresIn, brokers: mqLiveCount(), others: [...others.keys()], lastSent: mq ? Math.round(performance.now() - mq.lastSent) : null }; },
@@ -2619,7 +2694,8 @@ function frame() {
   if (Math.abs(fuel - lastFuelSet) > 0.004) { lastFuelSet = fuel; fxCall('fire', (f) => f.setFuel(fuel)); if (entered) updateFireHud(); }
   if (entered && meRec) {
     mySpeed = stepLocal(dt);
-    WP.frame(dt, now); WP.afterUpdate(meRec, dt, now);   // weapons: auto fire, reload, the arm pose over the kit's animation
+    WP.frame(dt, now); WP.afterUpdate(meRec, dt, now);
+    healthFrame(dt);   // weapons: auto fire, reload, the arm pose over the kit's animation
     sendPresence(now, false);
     refreshCtx();
     refreshSwimUi();
