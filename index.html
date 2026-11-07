@@ -111,12 +111,12 @@ button, input { font: inherit; color: inherit; }
 #dot.on { background: var(--ember); box-shadow: 0 0 8px var(--ember); }
 #net { color: var(--mist); font-size: 12px; }
 #fireLine { font-family: var(--f-display); color: var(--ember); font-size: 14px; letter-spacing: 0.02em; }
-#hint { top: calc(env(safe-area-inset-top, 0px) + 12px); right: calc(env(safe-area-inset-right, 0px) + 12px); max-width: 400px; text-align: right;
+#hint { top: calc(env(safe-area-inset-top, 0px) + 58px); right: calc(env(safe-area-inset-right, 0px) + 12px); max-width: 400px; text-align: right;
   font-size: 12px; color: var(--sand); line-height: 1.5; transition: opacity 1.2s; text-shadow: 0 1px 3px #000, 0 0 6px rgba(0,0,0,.6); }
 #hint.fade { opacity: 0; }
 #lookHint { left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 10px 18px; border-radius: 999px; background: var(--panel); color: var(--sand); font-size: 14px; pointer-events: none; box-shadow: var(--shadow); white-space: nowrap; }
 body.coarse #lookBtn { display: none; }
-#log { left: calc(env(safe-area-inset-left, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 112px); width: min(380px, calc(100vw - 24px));
+#log { left: calc(env(safe-area-inset-left, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 116px); width: min(380px, calc(100vw - 24px));
   display: grid; gap: 4px; pointer-events: none; font-size: 13px; line-height: 1.45; }
 #log div { text-shadow: 0 1px 3px rgba(10,8,40,.9), 0 0 8px rgba(10,8,40,.7); overflow-wrap: anywhere; transition: opacity 1.5s; }
 #log div.old { opacity: 0.0; }
@@ -134,12 +134,19 @@ body.coarse #lookBtn { display: none; }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled { opacity: 0.45; cursor: default; }
 #waveBtn { border-color: rgba(255, 138, 61, 0.45); }
-#tools { right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 62px); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; max-width: calc(100vw - 24px); }
+/* 설정·옵션 = 오른쪽 위 · 상호작용(풍등·폭죽·보스·춤) = 채팅 칸 바로 위 · 오른쪽 아래 = 전투 버튼만 */
+#tools { right: calc(env(safe-area-inset-right, 0px) + 12px); top: calc(env(safe-area-inset-top, 0px) + 12px); display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; max-width: calc(100vw - 24px); z-index: 11; }
+#tools .btn { padding: 7px 12px; font-size: 13.5px; }
+#tools svg { width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
+#fun { left: calc(env(safe-area-inset-left, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 64px); display: flex; gap: 6px; flex-wrap: wrap; max-width: min(560px, calc(100vw - 180px)); }
+#fun .btn { padding: 7px 13px; font-size: 14px; }
 #ctxBtn { border-color: #ffc28a; background: linear-gradient(180deg, #ffb877, var(--ember-deep)); color: #3a1606; }
 #lanternBtn, #fwBtn { border-color: rgba(255, 210, 150, 0.5); }
-#acts { right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 112px); display: grid; grid-template-columns: repeat(2, 62px); gap: 10px; align-items: end; justify-items: center; }
-#acts .small { width: 54px; height: 54px; font-size: 13px; }
-#acts .big { grid-column: 2; width: 66px; height: 66px; font-size: 16px; }
+#acts { right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 64px); display: grid; grid-template-columns: repeat(3, 58px); gap: 8px; align-items: center; justify-items: center; }
+#acts .small { width: 50px; height: 50px; font-size: 12.5px; }
+#acts .act:not(.small):not(.cast) { width: 58px; height: 58px; font-size: 14px; }
+#acts #punchBtn, #acts .big { width: 66px; height: 66px; font-size: 15px; }
+#acts .big { grid-column: 3; }
 #acts .act { padding: 0; white-space: nowrap; }
 #proneBtn { font-size: 12px; letter-spacing: -0.06em; }
 .act { width: 62px; height: 62px; border-radius: 50%; border: 2px solid rgba(255, 162, 87, 0.8); background: var(--panel); box-shadow: var(--shadow); font-family: var(--f-display); font-size: 15px; cursor: pointer; touch-action: manipulation; }
@@ -173,9 +180,9 @@ body.under #uw { opacity: 1; }
 #bossHp .fill { background: linear-gradient(180deg, #ff6a4a, #c4201e); transition: transform 0.18s ease-out; }
 #bossHp.rage .fill { background: linear-gradient(180deg, #ff9a3c, #e0301a); box-shadow: 0 0 10px rgba(255, 120, 40, 0.8); }
 #bossHp .state { font-size: 12px; color: var(--sand); text-align: center; min-height: 1.1em; text-shadow: 0 1px 3px #000; }
-#setPanel { right: calc(env(safe-area-inset-right, 0px) + 164px); bottom: calc(env(safe-area-inset-bottom, 0px) + 116px); width: min(300px, calc(100vw - 188px)); display: grid; gap: 10px; padding: 14px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
+#setPanel { right: calc(env(safe-area-inset-right, 0px) + 12px); top: calc(env(safe-area-inset-top, 0px) + 58px); width: min(300px, calc(100vw - 188px)); display: grid; gap: 10px; padding: 14px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
 #setPanel[hidden] { display: none; }
-#bossPick { right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 116px); width: min(320px, calc(100vw - 24px)); display: grid; gap: 8px; padding: 12px; background: var(--panel-soft); border: 1px solid rgba(255, 90, 70, 0.5); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
+#bossPick { left: calc(env(safe-area-inset-left, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 110px); width: min(320px, calc(100vw - 24px)); display: grid; gap: 8px; padding: 12px; background: var(--panel-soft); border: 1px solid rgba(255, 90, 70, 0.5); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
 #bossPick[hidden] { display: none; }
 #bossPick .btn { text-align: left; display: grid; gap: 2px; }
 #bossPick .btn small { color: var(--mist); font-size: 12px; }
@@ -233,10 +240,21 @@ body.coarse #wslots { display: none; }
 #cross.ads::before { height: 6px; box-shadow: 0 24px 0 var(--c); } #cross.ads::after { width: 6px; box-shadow: 24px 0 0 var(--c); } #cross.ads { --c: #9dffb0; }
 #cross.ads i { width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px; }
 /* sniper scope: black around a round lens, thin cross hairs with mil dots */
-#scope { position: fixed; inset: 0; pointer-events: none; z-index: 8; opacity: 0; transition: opacity 0.06s; background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(38vh, 38vw), rgba(0,0,0,0.9) calc(min(38vh, 38vw) + 1px), #000 calc(min(38vh, 38vw) + 18px)); }
+#scope { position: fixed; inset: 0; pointer-events: none; z-index: 8; opacity: 0; transition: opacity 0.06s; background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(38vh, 38vw), rgba(0,0,0,0.75) calc(min(38vh, 38vw) + 1px), rgba(0,0,0,0.75) calc(min(38vh, 38vw) + 6px), rgba(4,6,14,0.5) calc(min(38vh, 38vw) + 22px)); }   /* 바깥은 반투명: 주변이 비쳐 보인다 */
 #scope::before, #scope::after { content: ""; position: absolute; background: rgba(0,0,0,0.85); }
 #scope::before { left: 50%; top: calc(50% - min(38vh, 38vw)); width: 2px; height: calc(2 * min(38vh, 38vw)); margin-left: -1px; }
 #scope::after { top: 50%; left: calc(50% - min(38vh, 38vw)); height: 2px; width: calc(2 * min(38vh, 38vw)); margin-top: -1px; }
+/* 1인칭 가늠쇠(소총·산탄총·권총 조준): 화면 아래 가운데에 총 윗면 · 가늠자(뒤) · 가늠쇠(앞) 실루엣 */
+#irons { position: fixed; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 8; opacity: 0; }
+#irons b { position: absolute; display: block; background: #15171c; box-shadow: 0 0 0 1px rgba(255,255,255,0.08); }
+#irons .post { left: -3px; top: 2px; width: 6px; height: 46px; border-radius: 2px 2px 0 0; background: linear-gradient(#111, #2a2d33); }
+#irons .post::after { content: ""; position: absolute; left: 1px; top: 0; width: 4px; height: 4px; border-radius: 50%; background: #ff6a3d; box-shadow: 0 0 5px #ff6a3d; }
+#irons .rear { left: -64px; top: 30px; width: 128px; height: 46px; border-radius: 10px 10px 0 0; background: radial-gradient(circle at 50% 0, transparent 0 22px, #1c1f25 23px); }
+#irons .body { left: -70px; top: 150px; width: 140px; height: 50vh; border-radius: 30px 30px 0 0; opacity: 0.85; background: linear-gradient(#2b2f37, #121418 40%); }
+#irons[data-s="4"] .rear { left: -34px; width: 68px; height: 22px; top: 40px; background: #1c1f25; } #irons[data-s="4"] .post { width: 10px; height: 10px; left: -5px; top: 30px; border-radius: 50%; background: #c9b37a; }
+#irons[data-s="4"] .post::after { display: none; } #irons[data-s="4"] .body { left: -70px; width: 140px; top: 60px; }
+#irons[data-s="5"] .rear { left: -44px; width: 88px; height: 34px; top: 22px; border-radius: 4px; background: linear-gradient(90deg, #1c1f25 0 42%, transparent 42% 58%, #1c1f25 58%); } #irons[data-s="5"] .post { top: 6px; height: 50px; }
+#irons[data-s="5"] .body { left: -60px; width: 120px; top: 54px; border-radius: 14px 14px 0 0; }
 #scope i { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #ff3b30; box-shadow: 0 0 6px #ff3b30; }
 #skill { left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 74px); display: grid; justify-items: center; gap: 4px; pointer-events: none; z-index: 10; font-family: var(--f-display); color: #ffe2bd; text-shadow: 0 1px 3px #000, 0 0 10px rgba(0,0,0,.65); }
 #skill .ring { --p: 1; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; color: #fff; background: conic-gradient(#ff4d3a calc(var(--p) * 360deg), rgba(20, 14, 40, 0.75) 0); border: 2px solid rgba(255, 236, 210, 0.5); }
@@ -263,13 +281,16 @@ body.coarse #ammo b { font-size: 32px; }
 <div id="hint" class="hud" hidden></div>
 <div id="lookHint" class="hud" hidden>화면을 클릭하면 마우스 시점으로 돌아갑니다 · M 끄기</div>
 <div id="log" class="hud" aria-live="polite" hidden></div>
-<div id="tools" class="hud" hidden>
+<div id="fun" class="hud" hidden>
   <button id="ctxBtn" class="btn" type="button" hidden>앉기</button>
-  <button id="lookBtn" class="btn" type="button" aria-pressed="true">마우스 시점 켜짐</button>
-  <button id="shotBtn" class="btn" type="button" aria-label="사진 찍기 (P)" title="사진 찍기 (P)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>사진</button>
   <button id="lanternBtn" class="btn" type="button">풍등 날리기</button>
   <button id="fwBtn" class="btn" type="button">폭죽</button>
   <button id="bossBtn" class="btn" type="button" aria-pressed="false" title="보스를 골라 불러오거나 지웁니다" disabled>보스 생성</button>
+  <button id="emoteBtn" class="btn" type="button" aria-label="감정 표현: 춤" title="감정 표현 (9·0·-)">춤</button>
+</div>
+<div id="tools" class="hud" hidden>
+  <button id="lookBtn" class="btn" type="button" aria-pressed="true">마우스 시점 켜짐</button>
+  <button id="shotBtn" class="btn" type="button" aria-label="사진 찍기 (P)" title="사진 찍기 (P)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>사진</button>
   <button id="setBtn" class="btn" type="button" aria-expanded="false" aria-controls="setPanel">설정</button>
 </div>
 <div id="setPanel" class="hud" role="dialog" aria-label="설정" hidden>
@@ -284,7 +305,7 @@ body.coarse #ammo b { font-size: 32px; }
   <button class="btn" type="button" data-kind="seraph"><b>반천사·반악마</b><small>빛 기둥 · 지옥불 · 비행 강하</small></button>
 </div>
 <div id="bossIntro" class="hud" aria-live="polite"><b id="bossIntroName"></b><small id="bossIntroSub"></small></div>
-<div id="myHp" class="hud" hidden><div class="track"><i id="myHpFill"></i></div><span id="myHpTxt">400</span></div>
+<div id="myHp" class="hud" hidden><div class="track"><i id="myHpFill"></i></div><span id="myHpTxt">1000</span></div>
 <div id="downMsg" class="hud" role="alertdialog" aria-labelledby="downTitle" hidden>
   <div id="downTitle" class="ttl">쓰러졌습니다</div>
   <div id="downWhy" class="why"></div>
@@ -305,6 +326,7 @@ body.coarse #ammo b { font-size: 32px; }
 </div>
 <div id="cross" class="hud" hidden aria-hidden="true"><i></i></div>
 <div id="scope" aria-hidden="true"><i></i></div>
+<div id="irons" aria-hidden="true" data-s="3"><b class="rear"></b><b class="post"></b><b class="body"></b></div>
 <div id="skill" class="hud" hidden><div class="ring" id="skillRing"><b id="skillIcon">死</b></div><div class="nm" id="skillName">궁극기 · 우클릭</div></div>
 <div id="bar" class="hud" hidden>
   <form id="chatForm" autocomplete="off">
@@ -319,7 +341,6 @@ body.coarse #ammo b { font-size: 32px; }
   <button id="wpnBtn" class="act small" type="button" aria-label="무기 바꾸기" title="무기 바꾸기 (숫자 1~8 · 마우스 휠)">맨손</button>
   <button id="altBtn" class="act small" type="button" title="조준 (마우스 오른쪽 누르는 동안) · 검이면 궁극기" hidden>조준</button>
   <button id="reloadBtn" class="act small" type="button" title="장전 (R)" hidden>장전</button>
-  <button id="emoteBtn" class="act small" type="button" aria-label="감정 표현: 춤" title="감정 표현 (9·0·-)">춤</button>
   <button id="proneBtn" class="act small" type="button" title="엎드리기 (Z)">엎드리기</button>
   <button id="rollBtn" class="act" type="button" title="구르기 (C) · 점프 중이면 멀리 날며 구르기">구르기</button>
   <button id="dashBtn" class="act" type="button" title="대시 (Q)">대시</button>
@@ -914,7 +935,7 @@ const feedStick = () => { if (meRec) meRec.ctrl.setStick(joy.x, joy.y); };   // 
 
 // mouse sensitivity (settings menu, saved): 1 = the old feel; the default is half of it
 const SENS = { v: (() => { const q = parseFloat(store.get('bonfire.sens')); return Number.isFinite(q) && q >= 0.1 && q <= 2 ? q : 0.5; })() };
-function orbit(dx, dy, s) { cam.yaw -= dx * s; cam.pitch = clamp(cam.pitch + dy * s * 0.85, mySeat ? -1.0 : -0.5, 1.15); }   // seated: a wider look-up for the sky and the moon
+function orbit(dx, dy, s) { s *= WP ? WP.sensK : 1; cam.yaw -= dx * s; cam.pitch = clamp(cam.pitch + dy * s * 0.85, mySeat ? -1.0 : -0.5, 1.15); }   // seated: a wider look-up for the sky and the moon
 function setStick(show, x, y) { const s = $('stick'); s.hidden = !show; if (show) { s.style.left = x + 'px'; s.style.top = y + 'px'; } }
 canvas.addEventListener('pointerdown', (e) => {
   initAudio();
@@ -1055,8 +1076,9 @@ function camShake(a, dur) { if (reduceMotion) a *= 0.3; if (a >= SHAKE.a * (SHAK
 function updateCamera(dt) {
   const k = 1 - Math.exp(-dt * 10);
   bossCamZ += (bossCamTarget() - bossCamZ) * (1 - Math.exp(-dt * 2.2));
-  const zm = 1 + 2.1 * bossCamZ, camDist = cam.dist * zm * (1 - 0.4 * (WP ? WP.ads : 0));   // aiming pulls the view in over the shoulder   // zoom factor: up to ~3x of the user's chosen distance
-  const sh = WP.shoulder;   // a gun up: the view slides over the right shoulder so the muzzle, the tracers and the crosshair are not hidden behind my own back
+  const fp = WP ? WP.fp : 0;   // 소총·산탄총·권총 조준: 1인칭 가늠쇠 시점(머리 위치)으로 당겨 온다
+  const zm = 1 + 2.1 * bossCamZ, camDist = cam.dist * zm * (1 - 0.4 * (WP && WP.slot !== 6 ? WP.ads : 0));   // 수류탄 겨누기는 당기지 않는다(포물선이 머리에 가리지 않게)   // aiming pulls the view in over the shoulder   // zoom factor: up to ~3x of the user's chosen distance
+  const sh = WP.shoulder * (1 - fp);   // a gun up: the view slides over the right shoulder so the muzzle, the tracers and the crosshair are not hidden behind my own back
   cam.tx += (me.x + Math.cos(cam.yaw) * sh - cam.tx) * k; cam.tz += (me.z - Math.sin(cam.yaw) * sh - cam.tz) * k;
   const st = meRec ? meRec.ctrl.state : null, g = groundY3(me.x, me.z, me.y), swim = !!(st && st.swim === 2), dive = swim ? st.dive : 0;
   const gw = Math.max(g, waterY(me.x, me.z));   // in the air over the sea (a dive off the pier) the view stays above the surface, not the seabed
@@ -1076,9 +1098,14 @@ function updateCamera(dt) {
   cam.cur += (allow - cam.cur) * (allow < cam.cur ? Math.min(1, dt * 18) : Math.min(1, dt * 3));
   const d = cam.cur, cx = cam.tx + dx * d, cz = cam.tz + dz * d, gy = groundY3(cx, cz, me.y);
   camera.position.set(cx, Math.max(gy + 0.3, gy < 0.05 && camUnder < 0.5 ? waterY(cx, cz) + 0.35 : -Infinity, TY + dy * d), cz);   // never under the sand; under the sea only while diving
-  camera.lookAt(cam.tx, TY + 0.1 + Math.max(0, -cam.pitch) * 9 + 3.4 * bossCamZ * (SPIDER ? SPIDER.view.camLift || 1 : 1) + WP.kick * 1.8, cam.tz);
+  const lyT = TY + 0.1 + Math.max(0, -cam.pitch) * 9 + 3.4 * bossCamZ * (SPIDER ? SPIDER.view.camLift || 1 : 1) + WP.kick * 1.8;
+  if (fp > 0.001) {   // 머리(눈 높이 1.55 m)에서 같은 방향을 본다: 3인칭 시선(카메라 → 바라보는 점)을 그대로 옮겨 조준점이 튀지 않게
+    const hx = me.x, hz = me.z, hy = TY + 0.05, lx = cam.tx - camera.position.x, ly = lyT - camera.position.y, lz = cam.tz - camera.position.z, ll = Math.hypot(lx, ly, lz) || 1;
+    const px = camera.position.x + (hx - camera.position.x) * fp, py = camera.position.y + (hy - camera.position.y) * fp, pz = camera.position.z + (hz - camera.position.z) * fp;
+    camera.position.set(px, py, pz); camera.lookAt(px + lx / ll * 30, py + ly / ll * 30 + WP.kick * 0.6 * fp, pz + lz / ll * 30);
+  } else camera.lookAt(cam.tx, lyT, cam.tz);
   if (SHAKE.t > 0) { SHAKE.t = Math.max(0, SHAKE.t - dt); const q = SHAKE.a * (SHAKE.t / SHAKE.dur) * 0.35, tt = performance.now() / 1000; camera.position.x += Math.sin(tt * 61) * q; camera.position.y += Math.sin(tt * 53 + 1) * q; camera.position.z += Math.sin(tt * 47 + 2) * q * 0.6; }   // WP.kick: a shot's recoil lifts the view for a moment   // aim a little higher: the giant's head, not just my feet
-  if (meRec) meRec.av.root.visible = entered && d > 0.9 && !(WP && WP.scope > 0.5);   // through the sniper scope my own body would fill the lens
+  if (meRec) meRec.av.root.visible = entered && d > 0.9 && !(WP && (WP.scope > 0.5 || WP.fp > 0.6));   // through the sniper scope / the iron sights my own body would fill the view   // through the sniper scope my own body would fill the lens
   const fov = WP ? WP.fov(baseFov) : baseFov; if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
   const wy = waterY(camera.position.x, camera.position.z), under = camera.position.y < wy - (uwOn ? 0.0 : 0.04) && gy < wy;
   setUnderwater(under);
@@ -2191,7 +2218,8 @@ for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('altBtn').add
 // in deep water the roll button becomes 「잠수」: hold it to sink, let go to float up (key C does the same; Space swims up)
 for (const ev of ['pointerdown']) $('rollBtn').addEventListener(ev, () => { if (meRec && meRec.ctrl.state.swim === 2) meRec.ctrl.setDive(true); });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('rollBtn').addEventListener(ev, () => { if (meRec) meRec.ctrl.setDive(false); });
-$('acts').addEventListener('mousedown', (e) => e.preventDefault());   // a click must not leave a button focused (Space would press it again)
+$('acts').addEventListener('mousedown', (e) => e.preventDefault());
+for (const id of ['fun', 'tools']) $(id).addEventListener('mousedown', (e) => e.preventDefault());   // a click must not leave a button focused (Space would press it again)
 const EMOTES = [['dance', '춤'], ['cheer', '환호'], ['nod', '끄덕']];
 let emoteI = 0;
 $('emoteBtn').addEventListener('click', () => {   // one button cycles the emotes; its label names the one it plays next
@@ -2448,7 +2476,7 @@ $('entryForm').addEventListener('submit', async (e) => {
   if (nickState === 'ok') onClaimed(); else if (nickState === 'pending') scheduleClaimRetry();
   $('entry').hidden = true;
   if (pv) { pv.dispose(); pv = null; }   // free its WebGL context: the world renderer needs the GPU now
-  for (const id of ['badge', 'hint', 'log', 'bar', 'tools', 'wslots', 'myHp']) $(id).hidden = false;
+  for (const id of ['badge', 'hint', 'log', 'bar', 'tools', 'fun', 'wslots', 'myHp']) $(id).hidden = false;
   $('acts').hidden = false;   // the action buttons are for the desktop too (keys and mouse still work)
   updateFireHud();
   $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무·낚시 의자 가까이에서 「앉기」 · 바다에서 수영, 「잠수」 꾹 누르면 가라앉음 · 부두 끝에서 점프하면 다이빙 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(물속에선 꾹 눌러 잠수) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1~8 무기(휠로도) · 우클릭 조준·검 궁극기 · R 장전/낚싯대 · 9·0·- 감정 · 설정에서 마우스 감도 · E 통나무/장작/낚시 의자/사다리 · 부두 끝에서 점프하면 다이빙 · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
@@ -2489,14 +2517,14 @@ const BOSS_HIT_MSG = {
 };
 function initBosses(spMod, gMod) {
   const meFn = () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2 && !MYHP.dead, x: me.x, y: me.y, z: me.z });
-  const BOSS_DMG_K = 3;
+  const BOSS_DMG_K = 7.5;
   const onHitMe = (h) => {
     if (!entered || !meRec) return;
     const now = performance.now();
     hitFlash(meRec); meRec.ctrl.knock(h.dx, h.dz, h.power);
     if (mq) mq.boostUntil = now + 700;
     const kind = h.boss || 'spider';
-    hurtMe(typeof h.dmg === 'number' ? h.dmg * BOSS_DMG_K : HURT[h.src === 'swipe' ? 'swipe' : h.src === 'spit' ? 'spit' : 'bite'], BOSS_HURT_NAME[kind] || '보스');   // 보스 표(HITS)는 HP 100 기준 → HP 400 에 맞춰 3배(거미 HURT 와 같은 비율)
+    hurtMe(typeof h.dmg === 'number' ? h.dmg * BOSS_DMG_K : HURT[h.src === 'swipe' ? 'swipe' : h.src === 'spit' ? 'spit' : 'bite'], BOSS_HURT_NAME[kind] || '보스');   // 보스 표(HITS)는 HP 100 기준 → HP 1,000 에 맞춰 7.5배(거미 HURT 와 같은 비율)
     if (h.src !== 'burn') camShake(0.5, 0.35);
     sendPresence(now, true);
     if (h.poison) { SLOW.poison = 0.55; SLOW.until = now + 2600; }
@@ -2784,7 +2812,7 @@ const WPN_HUD = {
     slotBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(i + 1 === s)));
     const gun = isGunSlot(s);
     $('punchBtn').textContent = SLOT_ATTACK[s]; $('wpnBtn').textContent = WPN_TABLE[s].name; $('reloadBtn').hidden = !gun;
-    $('altBtn').hidden = !(gun || s === 2); $('altBtn').textContent = s === 2 ? '궁극기' : s === 7 ? '스코프' : '조준';
+    $('altBtn').hidden = !(gun || s === 2 || s === 6); $('altBtn').textContent = s === 2 ? '궁극기' : s === 7 ? '스코프' : s === 6 ? '겨누기' : '조준';
     $('skill').hidden = !(s === 2 || s === 6); $('skillIcon').textContent = s === 2 ? '死' : '●';
     AMMO.box.hidden = !gun; AMMO.cross.hidden = !gun; AMMO.name.textContent = gun ? `${WPN_TABLE[s].name} · R 장전` : '';
     if (!gun) { AMMO.bar.classList.remove('on'); AMMO.cross.classList.remove('hot'); }
@@ -2801,7 +2829,9 @@ const WPN_HUD = {
     if (WP && isGunSlot(WP.slot)) AMMO.name.textContent = on ? `${name} · 장전 중…` : `${name} · R 장전`;
   },
   ads(a, scope, s) {   // aiming: a tighter green crosshair; the sniper's scope fades in over the last part of the zoom
-    AMMO.cross.classList.toggle('ads', a > 0.5); $('scope').style.opacity = scope.toFixed(2); AMMO.cross.style.opacity = scope > 0.5 ? '0' : '';
+    AMMO.cross.classList.toggle('ads', a > 0.5); $('scope').style.opacity = scope.toFixed(2);
+    const fp = WP ? clamp((WP.fp - 0.6) / 0.35, 0, 1) : 0, ir = $('irons'); ir.style.opacity = fp.toFixed(2); if (ir.dataset.s !== String(s)) ir.dataset.s = String(s);   // 1인칭 가늠쇠: 줌 마지막 구간에 나타난다
+    AMMO.cross.style.opacity = scope > 0.5 || fp > 0.5 ? '0' : '';
     const on = a > 0.5; if (on !== adsSent) { adsSent = on; sendPresence(performance.now(), true); }
   },
   skill(s, left, cd) {   // the sword's ultimate / the grenade: cooldown ring

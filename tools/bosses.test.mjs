@@ -57,7 +57,7 @@ for (const k of ['shark', 'golem', 'seraph']) {
   const s = b.snapshot(); ok(s && s.kd === k && s.a === 'spawn' && typeof s.y === 'number', `${k}: owner snapshot`);
   ok(b.damage('boss', 0, 10, 'p') === true && b.view.hp === b.view.maxHp - 10, `${k}: damage books`);
   ok(b.damage('boss', 0, 10, 'p', 300) === false, `${k}: per-attacker gap`);
-  ok(b.damage('boss', 0, 1e6, 'q') === true && b.view.hp === b.view.maxHp - 50, `${k}: one hit is capped at 40`);
+  ok(b.damage('boss', 0, 1e6, 'q') === true && b.view.hp === b.view.maxHp - 10 - 300, `${k}: one hit is capped at 300`);
   b.debug.B.hp = 5; b.damage('boss', 0, 10, 'r');
   ok(b.view.dying && b.view.hp === 0, `${k}: dies at 0`);
   ok(b.hitTest(0, 0, 50, 0).length === 0, `${k}: a dying boss takes no more hits`);

@@ -11,11 +11,11 @@ export const SLOT_KEYS = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4, Digit5: 5
 export const WEAPONS = {
   1: { id: 1, key: 'fist', name: '맨손', hint: '내려찍기', gun: false },
   2: { id: 2, key: 'sword', name: '검', hint: '3연 베기 + 검기', gun: false },
-  3: { id: 3, key: 'rifle', name: 'M4A1', hint: '연사', gun: true, mag: 30, reserve: Infinity, interval: 0.095, auto: true, dmg: 6, pellets: 1, spread: 0.010, range: 160, reloadT: 1.9, reloadEmptyT: 2.5, kick: 0.012 },
-  4: { id: 4, key: 'shotgun', name: '산탄총', hint: '산탄 7발', gun: true, mag: 6, reserve: Infinity, interval: 0.85, auto: false, dmg: 4, pellets: 7, spread: 0.060, range: 55, shellT: 0.42, reloadT: 0.6, kick: 0.05 },
-  5: { id: 5, key: 'pistol', name: '권총', hint: '반자동 12발', gun: true, mag: 12, reserve: Infinity, interval: 0.15, auto: false, dmg: 9, pellets: 1, spread: 0.014, range: 110, reloadT: 1.25, reloadEmptyT: 1.55, kick: 0.02 },
+  3: { id: 3, key: 'rifle', name: 'M4A1', hint: '연사', gun: true, mag: 30, reserve: Infinity, interval: 0.095, auto: true, dmg: 12, pellets: 1, spread: 0.010, range: 160, reloadT: 1.9, reloadEmptyT: 2.5, kick: 0.012 },
+  4: { id: 4, key: 'shotgun', name: '산탄총', hint: '산탄 7발', gun: true, mag: 6, reserve: Infinity, interval: 0.85, auto: false, dmg: 9, pellets: 7, spread: 0.060, range: 55, shellT: 0.42, reloadT: 0.6, kick: 0.05 },
+  5: { id: 5, key: 'pistol', name: '권총', hint: '반자동 12발', gun: true, mag: 12, reserve: Infinity, interval: 0.15, auto: false, dmg: 20, pellets: 1, spread: 0.014, range: 110, reloadT: 1.25, reloadEmptyT: 1.55, kick: 0.02 },
   6: { id: 6, key: 'grenade', name: '수류탄', hint: '선물상자 · 범위 폭발', gun: false, throwable: true },
-  7: { id: 7, key: 'sniper', name: '저격총', hint: '볼트액션 5발', gun: true, mag: 5, reserve: Infinity, interval: 1.25, auto: false, dmg: 70, pellets: 1, spread: 0.050, range: 240, reloadT: 2.6, reloadEmptyT: 2.9, kick: 0.09, bolt: 0.95 },
+  7: { id: 7, key: 'sniper', name: '저격총', hint: '볼트액션 5발', gun: true, mag: 5, reserve: Infinity, interval: 1.25, auto: false, dmg: 180, pellets: 1, spread: 0.050, range: 240, reloadT: 2.6, reloadEmptyT: 2.9, kick: 0.09, bolt: 0.95 },
   8: { id: 8, key: 'rpg', name: 'RPG', hint: '로켓 · 범위 폭발', gun: true, mag: 1, reserve: Infinity, interval: 0.6, auto: false, dmg: 0, pellets: 1, spread: 0.012, range: 140, reloadT: 2.3, reloadEmptyT: 2.3, kick: 0.11, rocket: true },
 };
 export const SLOT_COUNT = 8;
@@ -23,7 +23,7 @@ export const GUN_SLOTS = [3, 4, 5, 7, 8];
 export const isGun = (s) => s === 3 || s === 4 || s === 5 || s === 7 || s === 8;
 
 // ---------- RPG 로켓: 총구에서 카메라 방향(상하 포함)으로 곧게 날아가 닿는 곳(땅·거미·사거리 끝)에서 폭발, 범위 피해 ----------
-export const ROCKET = { speed: 46, g: 1.2, life: 3.2, r: 7.5, dmg: 70, minDmg: 10, arm: 1.2 };
+export const ROCKET = { speed: 46, g: 1.2, life: 3.2, r: 7.5, dmg: 220, minDmg: 30, arm: 1.2 };
 export function rocketStep(p, v, dt) { v[1] -= ROCKET.g * dt; p[0] += v[0] * dt; p[1] += v[1] * dt; p[2] += v[2] * dt; }
 export const rocketDmg = (d) => (d > ROCKET.r ? 0 : Math.round(ROCKET.minDmg + (ROCKET.dmg - ROCKET.minDmg) * (1 - clamp(d / ROCKET.r, 0, 1)) ** 1.2));
 
@@ -63,12 +63,12 @@ function spreadDirAt(dx, dy, dz, m, a) {
 }
 
 // ---------- 조준(우클릭 누르는 동안): 확대 배율 · 퍼짐 배율 · 이동 속도 ----------
-// 소총·산탄총·권총은 약 1.3~1.5배 줌, 저격총은 스코프(6배). 조준하면 탄이 덜 퍼지고(명중률 상승) 저격총은 정확히 한 점으로 간다
+// 소총·산탄총·권총은 1인칭 가늠쇠 시점(fp)으로 1.6~2배 줌, 저격총은 스코프(6배). 조준하면 탄이 덜 퍼지고(명중률 상승) 저격총은 정확히 한 점으로 간다
 export const ADS = {
-  3: { zoom: 1.5, spread: 0.3, move: 0.55 },
+  3: { zoom: 2.0, spread: 0.3, move: 0.55, fp: true },
   8: { zoom: 1.4, spread: 0.3, move: 0.5 },
-  4: { zoom: 1.25, spread: 0.65, move: 0.6 },
-  5: { zoom: 1.35, spread: 0.35, move: 0.65 },
+  4: { zoom: 1.6, spread: 0.65, move: 0.6, fp: true },
+  5: { zoom: 1.8, spread: 0.35, move: 0.65, fp: true },
   7: { zoom: 6, spread: 0, move: 0.35, scope: true },
 };
 // 조준 정도 a(0..1)에서 퍼짐: 서서 쏘기 1 → 조준 ADS.spread. 움직이면 1.5배(조준 중엔 1.15배)
@@ -80,15 +80,19 @@ export function spreadFor(slot, a, moving) {
 // 기본 시야 base(도)에서 조준 a 만큼 확대한 시야(도)
 export const adsFov = (base, slot, a) => { const z = ADS[slot]; if (!z || !(a > 0)) return base; const k = lerp(1, z.zoom, clamp(a, 0, 1)); return 2 * Math.atan(Math.tan(base * Math.PI / 360) / k) * 180 / Math.PI; };
 function lerp(a, b, t) { return a + (b - a) * t; }
+// 조준 중 마우스 감도 배율: 줌 배율에 반비례(저격 6배 줌 → 1/6). 조준 정도 a 로 부드럽게
+export const adsSens = (slot, a) => { const z = ADS[slot]; if (!z || !(a > 0)) return 1; return 1 / lerp(1, z.zoom, clamp(a, 0, 1)); };
+// 1인칭 가늠쇠 시점(소총·산탄총·권총 우클릭): 0..1
+export const adsFp = (slot, a) => (ADS[slot] && ADS[slot].fp ? clamp(a, 0, 1) : 0);
 export const SWITCH_T = 0.15;   // 무기를 바꿀 때 팔이 올라오는 시간(s). 바꾸자마자 쏠 수 있다(애니메이션을 기다리지 않는다)
 export const wrapSlot = (s, dir) => ((s - 1 + (dir > 0 ? 1 : -1) + SLOT_COUNT) % SLOT_COUNT) + 1;
 export const validSlot = (s) => Number.isInteger(s) && s >= 1 && s <= SLOT_COUNT;
 
 // ---------- 검 콤보: 3연 베기. 마지막 한 방이 크고 검기도 커진다 ----------
 export const COMBO = [
-  { dur: 0.42, hit: 0.18, melee: 12, slash: 8, scale: 1.0, reach: 2.6 },
-  { dur: 0.42, hit: 0.18, melee: 12, slash: 8, scale: 1.0, reach: 2.6 },
-  { dur: 0.62, hit: 0.28, melee: 18, slash: 14, scale: 1.55, reach: 3.2 },
+  { dur: 0.42, hit: 0.18, melee: 28, slash: 18, scale: 1.0, reach: 2.6 },
+  { dur: 0.42, hit: 0.18, melee: 28, slash: 18, scale: 1.0, reach: 2.6 },
+  { dur: 0.62, hit: 0.28, melee: 45, slash: 32, scale: 1.55, reach: 3.2 },
 ];
 export const COMBO_WINDOW = 0.55;     // 앞 동작이 끝난 뒤 이 안에 다시 누르면 다음 단계
 export const SLASH = { speed: 24, life: 1.25, r: 2.0, h: 1.0, range: 30 };   // 검기: 초속 24 m, 약 30 m 날아감
@@ -107,7 +111,7 @@ export function swordNext(st, now) {
 }
 
 // ---------- 검 궁극기(우클릭): 아주 빠른 난무 → 「死」 모양 거대 검기. 쿨타임 15 s ----------
-export const ULT = { cd: 15, rushT: 0.9, rushHits: 9, rushDmg: 5, rushReach: 3.6, deathDmg: 80, speed: 30, life: 1.6, r: 4.2, range: 48, size: 5.2 };
+export const ULT = { cd: 15, rushT: 0.9, rushHits: 9, rushDmg: 12, rushReach: 3.6, deathDmg: 250, speed: 30, life: 1.6, r: 4.2, range: 48, size: 5.2 };
 export const ultLeft = (st, now) => Math.max(0, (st.ultAt + ULT.cd) - now);
 export const ultReady = (st, now) => ultLeft(st, now) <= 0 && now >= (st.ultUntil || -1e9);
 export function ultStart(st, now) {
@@ -119,7 +123,7 @@ export function ultStart(st, now) {
 export const ultHitT = (i) => ULT.rushT * Math.pow((i + 1) / ULT.rushHits, 0.85) * 0.92;
 
 // ---------- 수류탄: 던지기 · 포물선 · 튕김 · 지연 폭발 · 범위 피해 ----------
-export const GREN = { speed: 17, up: 0.32, g: 15, fuse: 2.2, cd: 1.1, bounce: 0.42, friction: 0.62, r: 6.5, dmg: 55, minDmg: 8, radius: 0.08 };
+export const GREN = { speed: 17, up: 0.32, g: 15, fuse: 2.2, cd: 1.1, bounce: 0.42, friction: 0.62, r: 6.5, dmg: 150, minDmg: 20, radius: 0.08 };
 // 던지는 속도: 카메라 방향(yaw, pitch)으로 앞·위. pitch 는 카메라 기준(위를 보면 음수)
 // 위를 볼수록 각도가 커지고 던지는 힘도 세진다(아래 0.8배 → 위 1.35배): 높이·멀리
 export const throwPower = (pitch) => 0.8 + 0.55 * clamp((-pitch + 0.5) / 1.0, 0, 1);
@@ -150,6 +154,11 @@ export function grenadeArc(o, v0, ground, maxT = GREN.fuse + 0.6, dt = 1 / 30) {
     if (bounces >= 1 && pts.length > 2 && Math.hypot(v[0], v[1], v[2]) < 0.5) break;
   }
   return { pts, land: land || p.slice() };
+}
+// 궤적을 어디서부터 그리나: 손에서 시작하지만 내 몸(발 px,py,pz 의 캡슐 + 여유 0.25 m) 안을 지나는 앞부분은 건너뛴다. 반환: 첫 점 번호
+export function arcStart(pts, px, py, pz, pad = 0.25) {
+  for (let i = 0; i < pts.length; i++) { const q = pts[i]; if (distToBody(q[0], q[1], q[2], px, py, pz) > pad) return i; }
+  return Math.max(0, pts.length - 2);
 }
 // 폭발 피해: 중심에서 거리 d 에 따라 dmg → minDmg 로 줄고 r 밖은 0
 export const grenadeDmg = (d) => (d > GREN.r ? 0 : Math.round(GREN.minDmg + (GREN.dmg - GREN.minDmg) * (1 - clamp(d / GREN.r, 0, 1)) ** 1.3));
@@ -230,7 +239,7 @@ export function rifleReloadPose(u, empty) {
 // ---------- 피해 표 (받는 쪽 소유자가 이 표로 피해를 정한다: 보낸 사람이 말한 값은 믿지 않는다) ----------
 export const DMG_CD = { punch: 220, sword: 120, slash: 80, rifle: 70, shotgun: 450, pistol: 120, sniper: 900, grenade: 300, rush: 70, death: 600, rocket: 300 };   // 공격자별 최소 간격(ms)
 export function dmgFor(w, how, c, n) {
-  if (w === 1) return { amount: 10, cd: DMG_CD.punch, key: 'punch' };
+  if (w === 1) return { amount: 15, cd: DMG_CD.punch, key: 'punch' };
   if (w === 2) {
     const s = COMBO[clamp(Math.round(c) || 0, 0, 2)];
     return how === 'sl' ? { amount: s.slash, cd: DMG_CD.slash, key: 'slash' } : { amount: s.melee, cd: DMG_CD.sword, key: 'sword' };
@@ -389,9 +398,9 @@ export function reachOk(w, how, dist, bossReach) {
 }
 
 // ---------- 캐릭터 체력: 내 HP 는 내 화면이 정한다(거미·주먹·다른 접속자의 무기에 맞으면 깎이고, 0 이면 쓰러졌다가 부활). 남에게는 위치 정보의 hp 칸(0..100 %)으로 보낸다 ----------
-// 옛 값(100)의 4배. 쓰러지면 respawnT 초 뒤 자동 부활하고, 「즉시 리스폰」 버튼은 btnDelay 초 뒤부터 눌린다(싸우다 연타한 클릭이 바로 부활로 이어지지 않게).
-export const HP = { max: 400, respawnT: 5, btnDelay: 0.6, regenDelay: 6, regen: 16, inv: 2.5 };   // 부활 뒤 2.5 s 무적, 6 s 안 맞으면 초당 16 회복
-export const HURT = { swipe: 66, spit: 36, bite: 21, punch: 15 };   // 거미 · 새끼 거미 · 주먹(옛 22·12·7·8 의 약 3배, 주먹은 아래 PvP 표와 같은 값)
+// 옛 값(100)의 10배. 쓰러지면 respawnT 초 뒤 자동 부활하고, 「즉시 리스폰」 버튼은 btnDelay 초 뒤부터 눌린다(싸우다 연타한 클릭이 바로 부활로 이어지지 않게).
+export const HP = { max: 1000, respawnT: 5, btnDelay: 0.6, regenDelay: 6, regen: 16, inv: 2.5 };   // 부활 뒤 2.5 s 무적, 6 s 안 맞으면 초당 16 회복
+export const HURT = { swipe: 165, spit: 90, bite: 52, punch: 45 };   // 거미 · 새끼 거미 · 주먹(HP 1,000 에 맞춰 옛 400 기준 값의 2.5배, 주먹은 아래 PvP 표와 같은 값)
 export function newHp() { return { hp: HP.max, dead: false, deadAt: -1e9, hitAt: -1e9, invUntil: 0, deaths: 0 }; }
 // 피해를 받는다: 'hit' · 'dead'(이번에 쓰러짐) · null(무적·이미 쓰러짐)
 export function hpHit(h, amount, now) {
@@ -424,8 +433,8 @@ export function sanitizeHp(pct, dd) {
 
 // ---------- 접속자끼리 싸움(PvP): 모든 무기가 다른 접속자의 HP 를 깎는다 ----------
 // 판정은 공격자 화면(자기 화면에 보이는 상대 몸에 맞았나)이고, 맞은 사람 화면이 이 표로 피해를 정한다(보낸 사람이 말한 값은 믿지 않는다).
-// 보스용 피해(dmgFor·ultDmg)에 무기별 배율을 곱한다. HP 400 기준 대략 — 소총 45발 · 권총 31발 · 산탄 6발(근접) · 저격 4발 · 검 3타×4 · 수류탄 3개 · RPG 2발 · 死 2번.
-export const PVP_MULT = { punch: 1.5, sword: 2.5, slash: 2.5, rush: 3, death: 2.5, rifle: 1.5, shotgun: 2.5, pistol: 1.5, sniper: 1.5, grenade: 2.5, rocket: 3 };
+// 보스용 피해(dmgFor·ultDmg)에 무기별 배율을 곱한다. HP 1,000 기준 — 소총 28발 · 권총 20발 · 산탄 6발(근접) · 저격 3발 · 검 3타×3 · 수류탄 3개 · RPG 2발 · 死 2번.
+export const PVP_MULT = { punch: 3, sword: 3, slash: 3, rush: 3, death: 2.5, rifle: 3, shotgun: 2.6, pistol: 2.5, sniper: 2, grenade: 2.3, rocket: 2.5 };
 export function pvpDmgFor(w, how, c, n, x) {
   const d = w === 2 && (x === 'r' || x === 'u') ? ultDmg(x) : dmgFor(w, how, c, n);
   if (!d) return null;

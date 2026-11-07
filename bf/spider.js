@@ -25,7 +25,7 @@ const outranks = (epA, bornA, idA, epB, bornB, idB) => (epA !== epB ? epA > epB 
 // Every length below is in metres at that size; the clips for the patterns play at ACT_TS so a giant's wind-up stays readable.
 const K = 3.8, ACT_TS = 0.75, MOUTH = 2.5 * K;   // MOUTH: how far ahead of the root the face is
 export const BOSS = {
-  hp: 480, hpPerExtra: 160, k: K, bodyR: 0.9 * K, legR: 0.9, hitReach: 8.4 * K, spawnT: 2.6, dieT: 5.0,
+  hp: 4800, hpPerExtra: 1600, k: K, bodyR: 0.9 * K, legR: 0.9, hitReach: 8.4 * K, spawnT: 2.6, dieT: 5.0,
   walk: 5.0, turn: 1.1, melee: 13,
   swipe: { cd: 3.6, reach: 7.0 * K, half: 0.62, contact: 13 / 24 / ACT_TS, dur: 28 / 24 / ACT_TS, minD: 0, maxD: 6.4 * K },
   spit: { cd: 5.6, fire: 16 / 24 / ACT_TS, dur: 30 / 24 / ACT_TS, speed: 24, life: 3.6, radius: 1.5, fan: 0.14, minD: 14, maxD: 70 },
@@ -528,7 +528,7 @@ const feet = [];                                   // per leg { k: tibia start, 
       if (now - last < (typeof cdMs === 'number' ? cdMs : BOSS.dmgCooldown * 1000)) return false;
       if (O.hitAt.size > 400) O.hitAt.clear();
       O.hitAt.set(fromId, now);
-      B.hp = Math.max(0, B.hp - clamp(amount, 1, 40));
+      B.hp = Math.max(0, B.hp - clamp(amount, 1, 300));
       if (boss) { const fast = typeof cdMs === 'number' && cdMs < 150; boss.flash = fast ? Math.max(boss.flash, 0.05) : 0.12; boss.flashK = fast ? 0.3 : 1; }   // a rifle's stream of hits blinks softly instead of holding the boss solid red
       const ft = feet[O.lastFoot] || null;   // the leg the last punch touched (this screen's hit test); otherwise near the body
       if (ft) ctx.fx.spark(ft.a.x + (Math.random() - 0.5), ft.a.y + 0.3, ft.a.z + (Math.random() - 0.5));
@@ -561,7 +561,7 @@ const feet = [];                                   // per leg { k: tibia start, 
   const A_OK = new Set(['i', 'w', 's', 'sw', 'sp', 'wb', 'sm', 'd', 'h']);
   function applySnapshot(d, senderId) {
     if (!d || typeof d !== 'object') return false;
-    const x = finite(d.x, -90, 90), z = finite(d.z, -100, 100), ry = finite(d.r, -7, 7), hp = finite(d.hp, 0, 5000), mh = finite(d.mh, 1, 5000);
+    const x = finite(d.x, -90, 90), z = finite(d.z, -100, 100), ry = finite(d.r, -7, 7), hp = finite(d.hp, 0, 99999), mh = finite(d.mh, 1, 99999);
     const born = finite(d.b, 0, 1e15), ep = finite(d.ep, 0, 1e6), ac = finite(d.ac, 0, 1e9);
     if ([x, z, ry, hp, mh, born, ep, ac].some((v) => v === null) || !A_OK.has(d.a)) return false;
     if (B.active && B.owner) {
