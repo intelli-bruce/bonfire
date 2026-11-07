@@ -191,7 +191,7 @@ body.coarse #ammo b { font-size: 32px; }
 </div>
 <div id="wslots" class="hud" role="group" aria-label="무기 슬롯 (숫자 1~4 · 마우스 휠)" hidden></div>
 <div id="ammo" class="hud" hidden>
-  <div class="nums"><b id="ammoMag">30</b><span class="sep">/</span><span class="res" id="ammoRes">90</span></div>
+  <div class="nums"><b id="ammoMag">30</b><span class="sep">/</span><span class="res" id="ammoRes">∞</span></div>
   <div class="nm" id="ammoName">M4A1 · R 장전</div>
   <div class="rbar" id="rbar"><i id="rfill"></i></div>
 </div>
@@ -858,10 +858,14 @@ $('lookBtn').addEventListener('click', () => setLook(lookMode === 'mouse' ? 'dra
 for (const ev of ['focus', 'blur']) $('chatInput').addEventListener(ev, () => setTimeout(refreshLook, 0));
 // movement and action keys belong to the kit controller (Shift run, Q dash, Space jump, C roll, X sit, Z prone, V wave, 1/2/3 emotes);
 // the page keeps Enter (chat), Escape (leave the chat box), E (sit on a log / add wood) and P (screenshot)
-window.addEventListener('keydown', (e) => {
+// the listener runs in the capture phase and swallows the weapon keys (1~4 and R), so the page's own handling does not depend on what bubbles up to it
+// (browser extensions such as Vimium take digits as counts and `r` as "reload page": exclude this site there as well)
+const weaponKey = (e) => (SLOT_KEYS[e.code] || e.code === 'KeyR') && !e.ctrlKey && !e.metaKey && !e.altKey;
+function onGameKey(e) {
   if (!entered) return;
   initAudio();
   if (typing()) { if (e.key === 'Escape') { document.activeElement.blur(); tryLock(); refreshLook(); } return; }
+  if (weaponKey(e)) { e.preventDefault(); e.stopImmediatePropagation(); }
   if (e.code === 'KeyF' && mySeat && mySeat.fish) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) castRod(); return; }   // on a fishing chair F is the rod, not a chop (this handler runs before the kit's)
   if (e.code === 'KeyF' && WP && WP.slot >= 2) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) leftDown(); return; }   // a weapon in hand: F swings / fires (hold F: a rifle keeps firing); bare hands: the kit's chop
   if (e.key === 'Enter') { const ci = $('chatInput'); if (!ci.disabled) { e.preventDefault(); if (lockedNow()) document.exitPointerLock(); ci.focus(); refreshLook(); } return; }
@@ -872,7 +876,8 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyE') interact();
   else if (e.code === 'KeyP') takeShot();
   else if (e.code === 'KeyR') { if (gunSlot() && !(mySeat && mySeat.fish)) WP.reload(); else castRod(); }   // a gun in hand: reload; otherwise the rod
-});
+}
+window.addEventListener('keydown', onGameKey, true);
 window.addEventListener('keyup', (e) => { if (e.code === 'KeyF') leftUp(); });
 
 let camLift = 0, camUnder = 0, uwOn = false;
@@ -1996,7 +2001,7 @@ function sendPresence(now, full) {   // >= 10 Hz while anything changes, at once
 $('chatForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = cleanText(chatInput.value, 120);
-  if (!text || !netLive()) return;
+  if (!text || !netLive()) { chatInput.blur(); tryLock(); refreshLook(); return; }   // an empty Enter closes the box too: otherwise 1~4 / R keep typing into the chat
   chatInput.value = ''; chatInput.blur(); tryLock(); refreshLook();
   mqPub('chat', { id: myId, mid: newMid(), text }); showBubble(meRec, text); logLine('나', text);
 });
@@ -2403,7 +2408,7 @@ const WPN_HUD = {
   },
   ammo(s, g) {
     if (!g) return;
-    AMMO.mag.textContent = g.mag; AMMO.res.textContent = g.reserve;
+    AMMO.mag.textContent = g.mag; AMMO.res.textContent = Number.isFinite(g.reserve) ? g.reserve : '∞';   // the reserve is unlimited: only the magazine runs out
     AMMO.mag.className = g.mag === 0 ? 'zero' : g.mag <= Math.ceil(WPN_TABLE[s].mag * 0.25) ? 'low' : '';
   },
   aim(kind) { AMMO.cross.classList.toggle('hot', !!kind); },
