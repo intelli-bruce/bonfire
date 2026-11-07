@@ -30,7 +30,7 @@ const bl = (p) => [p[0], p[2], -p[1]];
 // ---------------------------------------------------------------------------------------------------------------------
 export const KINDS = {
   shark: {
-    name: '메갈로돈', title: '심연의 이빨 · 메갈로돈', file: 'shark.glb', hp: 520, hpPerExtra: 170, hitReach: 30, camR: 0.65, camLift: 1.0, lodD: 70,
+    name: '메갈로돈', title: '심연의 이빨 · 메갈로돈', file: 'shark.glb', hp: 5200, hpPerExtra: 1700, hitReach: 30, camR: 0.65, camLift: 1.0, lodD: 70,
     speed: 7.5, turn: 1.4, spawnT: 2.4, dieT: 5.5, fly: false, water: true,
     // 몸 캡슐: [뼈, a(Blender), b(Blender), 반지름, col]
     hull: [['head', [0, 9.6, 0.3], [0, 6.0, 0.3], 1.6], ['head', [0, 6.0, 0.2], [0, 3.0, 0.05], 2.45], ['body', [0, 3.0, 0], [0, -0.5, 0.05], 2.55],
@@ -46,7 +46,7 @@ export const KINDS = {
     ],
   },
   golem: {
-    name: '바위 골렘', title: '태고의 심장 · 바위 골렘', file: 'golem.glb', hp: 640, hpPerExtra: 210, hitReach: 30, camR: 1.0, camLift: 1.2, lodD: 80,
+    name: '바위 골렘', title: '태고의 심장 · 바위 골렘', file: 'golem.glb', hp: 6400, hpPerExtra: 2100, hitReach: 30, camR: 1.0, camLift: 1.2, lodD: 80,
     speed: 3.6, turn: 0.75, spawnT: 3.2, dieT: 6.0, fly: false, water: false,
     hull: [['hips', [0, 0, 6.4], [0, 0.1, 8.6], 3.0, true], ['spine', [-3.0, 0.8, 11.0], [3.0, 0.8, 11.0], 3.2, true], ['spine', [0, -0.8, 11.8], [0, 0.6, 9.0], 3.0],
       ['head', [0, 2.0, 12.2], [0, 3.6, 12.3], 1.6],
@@ -61,7 +61,7 @@ export const KINDS = {
     ],
   },
   seraph: {
-    name: '반천사·반악마', title: '타락한 심판자 · 세라프', file: 'seraph.glb', hp: 600, hpPerExtra: 200, hitReach: 32, camR: 1.0, camLift: 1.6, lodD: 80,
+    name: '반천사·반악마', title: '타락한 심판자 · 세라프', file: 'seraph.glb', hp: 6000, hpPerExtra: 2000, hitReach: 32, camR: 1.0, camLift: 1.6, lodD: 80,
     speed: 6.0, turn: 1.1, spawnT: 3.4, dieT: 6.0, fly: true, water: false, hover: 4.2,
     hull: [['hips', [0, 0, 6.4], [0, 0, 8.6], 1.7], ['chest', [0, 0.1, 8.6], [0, 0.1, 11.4], 2.1], ['chest', [-2.8, 0, 11.6], [2.8, 0, 11.6], 1.25],
       ['head', [0, 0.3, 12.4], [0, 0.4, 14.1], 1.05],
@@ -701,7 +701,7 @@ export function createGiantBoss(ctx, kind) {
     if (now - last < (typeof cdMs === 'number' ? cdMs : 220)) return false;
     if (O.hitAt.size > 400) O.hitAt.clear();
     O.hitAt.set(fromId, now);
-    B.hp = Math.max(0, B.hp - clamp(amount, 1, 40));
+    B.hp = Math.max(0, B.hp - clamp(amount, 1, 300));
     if (rig) { const fast = typeof cdMs === 'number' && cdMs < 150; rig.flash = fast ? Math.max(rig.flash, 0.05) : 0.12; rig.flashK = fast ? 0.3 : 1; }
     if (B.hp <= 0) die(fromId);
     emit('hp', { hp: B.hp, maxHp: B.maxHp });
@@ -724,7 +724,7 @@ export function createGiantBoss(ctx, kind) {
   }
   function applySnapshot(d, senderId) {
     if (!d || typeof d !== 'object' || d.kd !== kind) return false;
-    const x = finite(d.x, -120, 120), z = finite(d.z, -140, 120), y = finite(d.y, -40, 80), ry = finite(d.r, -7, 7), hp = finite(d.hp, 0, 9000), mh = finite(d.mh, 1, 9000);
+    const x = finite(d.x, -120, 120), z = finite(d.z, -140, 120), y = finite(d.y, -40, 80), ry = finite(d.r, -7, 7), hp = finite(d.hp, 0, 99999), mh = finite(d.mh, 1, 99999);
     const born = finite(d.b, 0, 1e15), ep = finite(d.ep, 0, 1e6), ac = finite(d.ac, 0, 1e9);
     if ([x, z, y, ry, hp, mh, born, ep, ac].some((v) => v === null) || !ACTS[kind].has(d.a)) return false;
     if (B.active && B.owner) {

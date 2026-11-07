@@ -183,6 +183,7 @@ export function createWeapons(ctx) {
     const wp = wpOf(rec); wp.slot = slot; wp.draw = slot >= 2 ? 1 : 0; if (slot >= 2) instOf(rec, slot);
     if (isGun(slot)) { const g = my.guns[slot]; if (g && g.reload) g.reload.t0 = now0(); }
     if (!isGun(slot)) my.adsHeld = false;
+    if (slot !== 6) my.gAim = false;
     refreshHud();
     if (!quiet) sfx('equip', 1);
     ctx.hud.slot(slot);
@@ -228,6 +229,13 @@ export function createWeapons(ctx) {
     else if (kind === 'bolt') { burst(0.07, 2400, 1400, 2.4, 0.3); tone(600, 380, 0.05, 0.12, 'square'); }
     else if (kind === 'throw') { burst(0.22, 500, 1800, 1.2, 0.22); }
     else if (kind === 'clink') { tone(1500, 1100, 0.06, 0.12, 'triangle'); }
+    else if (kind === 'party') {   // 선물 폭발: 펑(종이 터짐) + 반짝 아르페지오 + 짤랑 + 바스락(색종이)
+      const at = (dly, f0, f1, dur, gain, type = 'sine') => { const o = ac.createOscillator(), g = ac.createGain(), t0 = t + dly; o.type = type; o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain * level, t0 + 0.006); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); o.connect(g); g.connect(a.dest); o.start(t0); o.stop(t0 + dur + 0.03); };
+      burst(0.12, 5200, 900, 0.7, 0.9, 'lowpass'); tone(220, 70, 0.14, 0.55, 'triangle');
+      [1046.5, 1318.5, 1568, 2093].forEach((f, i) => { at(0.06 + i * 0.07, f, f * 0.995, 0.32, 0.16, 'triangle'); at(0.06 + i * 0.07, f * 2, f * 2, 0.18, 0.05); });
+      for (let i = 0; i < 6; i++) at(0.12 + rnd() * 0.5, 3000 + rnd() * 2500, 2600, 0.09, 0.05, 'sine');
+      burst(0.7, 7000, 3500, 0.5, 0.12, 'highpass');
+    }
     else if (kind === 'boom') { burst(0.9, 1400, 60, 0.4, 1.0, 'lowpass'); tone(70, 22, 0.8, 1.0); burst(0.25, 3000, 600, 0.6, 0.4); }
     else if (kind === 'ult') { burst(0.6, 600, 4200, 0.9, 0.35); tone(220, 880, 0.5, 0.18, 'sawtooth'); }
     else if (kind === 'rpg') { burst(0.55, 1800, 220, 0.5, 0.9, 'lowpass'); tone(160, 40, 0.4, 0.6, 'sawtooth'); burst(0.9, 900, 3000, 0.7, 0.35); }   // 쾅 + 로켓 쉬익
@@ -329,6 +337,19 @@ export function createWeapons(ctx) {
     fxs.boomMat = new T.MeshBasicMaterial({ color: '#ffb347', transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending, fog: false });
     fxs.ringGeo = new T.RingGeometry(0.82, 1, 48);
     fxs.ringMat = new T.MeshBasicMaterial({ color: '#ffe0a0', transparent: true, opacity: 0.85, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false });
+    // 선물 폭발(축하): 색종이·리본·포장지 조각(인스턴스 평면 하나) + 반짝이(점). 풀을 돌려 쓴다
+    {
+      const N = 420, geo = new T.PlaneGeometry(1, 1), mat = new T.MeshBasicMaterial({ side: T.DoubleSide, fog: false, transparent: true, opacity: 1, depthWrite: false });
+      fxs.conf = new T.InstancedMesh(geo, mat, N); fxs.conf.frustumCulled = false; fxs.conf.count = N; fxs.conf.renderOrder = 6;
+      fxs.confP = []; const hide = new T.Matrix4().makeScale(0, 0, 0);
+      for (let i = 0; i < N; i++) { fxs.conf.setMatrixAt(i, hide); fxs.conf.setColorAt(i, new T.Color('#ffffff')); fxs.confP.push({ life: 0, p: new T.Vector3(), v: new T.Vector3(), r: new T.Euler(), w: new T.Vector3(), sx: 0.1, sy: 0.1 }); }
+      fxs.conf.instanceMatrix.setUsage(T.DynamicDrawUsage); scene.add(fxs.conf); fxs.confN = 0; fxs.confLive = 0;
+      const SN = 200, sg = new T.BufferGeometry(); fxs.sparkPos = new Float32Array(SN * 3).fill(-999); fxs.sparkCol = new Float32Array(SN * 3);
+      sg.setAttribute('position', new T.BufferAttribute(fxs.sparkPos, 3)); sg.setAttribute('color', new T.BufferAttribute(fxs.sparkCol, 3));
+      fxs.spark = new T.Points(sg, new T.PointsMaterial({ size: 0.22, vertexColors: true, transparent: true, opacity: 1, depthWrite: false, blending: T.AdditiveBlending, fog: false }));
+      fxs.spark.frustumCulled = false; fxs.spark.renderOrder = 7; scene.add(fxs.spark);
+      fxs.sparkP = Array.from({ length: SN }, () => ({ life: 0, p: new T.Vector3(), v: new T.Vector3(), c: new T.Color(), tw: 0 })); fxs.sparkN = 0; fxs.sparkLive = 0;
+    }
     // 수류탄 궤적 미리보기(점선) + 착지 원
     const ag = new T.BufferGeometry(); fxs.arcPos = new T.Float32BufferAttribute(new Float32Array(96 * 3), 3); ag.setAttribute('position', fxs.arcPos);
     fxs.arc = new T.Line(ag, new T.LineDashedMaterial({ color: '#fff3c4', dashSize: 0.28, gapSize: 0.16, transparent: true, opacity: 0.9, depthTest: false, fog: false }));
@@ -485,11 +506,12 @@ export function createWeapons(ctx) {
     my.trig = !!down;
     if (down) { my.lastTrigAt = now0(); attackPress(); }
   }
-  // 우클릭(누르는 동안): 총은 조준 줌, 검은 궁극기
+  // 우클릭(누르는 동안): 총은 조준 줌, 검은 궁극기, 수류탄은 던질 자세(포물선 표시)
   function alt(down) {
-    if (!down) { my.adsHeld = false; return false; }
+    if (!down) { my.adsHeld = false; my.gAim = false; return false; }
     if (!canAct()) return false;
     if (isGun(my.slot)) { my.adsHeld = true; return true; }
+    if (my.slot === 6) { my.gAim = true; return true; }   // 수류탄: 누르는 동안 던지는 자세 + 포물선
     if (my.slot === 2) return ultimate(now0());
     return false;
   }
@@ -748,16 +770,19 @@ export function createWeapons(ctx) {
   }
   function explode(p, mine, w = 6) {
     const [x, y, z] = p, RAD = w === 8 ? C.ROCKET.r : C.GREN.r;
-    const b = { t: 0, x, y, z, R: RAD };
+    const b = { t: 0, x, y, z, R: RAD, party: w === 6 };
     b.ball = new T.Mesh(fxs.boomGeo, fxs.boomMat.clone()); b.ball.position.set(x, y + 0.3, z); scene.add(b.ball);
     b.ring = new T.Mesh(fxs.ringGeo, fxs.ringMat.clone()); b.ring.rotation.x = -Math.PI / 2; b.ring.position.set(x, ctx.groundY(x, z, y + 0.5) + 0.08, z); scene.add(b.ring);
+    if (b.party) { b.ball.material.color.set('#fff2c0'); b.ring.material.color.set('#ff8ad8'); confetti(x, y + 0.4, z); }
     b.flash = new T.Sprite(fxs.flashMat.clone()); b.flash.position.set(x, y + 0.6, z); b.flash.scale.setScalar(7); b.flash.renderOrder = 7; scene.add(b.flash);
     booms.push(b);
     fxs.light.position.set(x, y + 1, z); fxs.light.intensity = 30; fxs.light.distance = 30; fxs.lightT = 0.22;
-    for (let i = 0; i < 4; i++) ctx.fx.poof(x + (rnd() - 0.5) * 2, y + 0.2, z + (rnd() - 0.5) * 2, 6);
-    for (let i = 0; i < 6; i++) ctx.fx.spark(x + (rnd() - 0.5) * 2.4, y + 0.3 + rnd() * 1.6, z + (rnd() - 0.5) * 2.4);
+    if (!b.party) {
+      for (let i = 0; i < 4; i++) ctx.fx.poof(x + (rnd() - 0.5) * 2, y + 0.2, z + (rnd() - 0.5) * 2, 6);
+      for (let i = 0; i < 6; i++) ctx.fx.spark(x + (rnd() - 0.5) * 2.4, y + 0.3 + rnd() * 1.6, z + (rnd() - 0.5) * 2.4);
+    }
     if (ctx.waterY(x, z) > y - 0.3) ctx.fx.crown(x, ctx.waterY(x, z), z, 18);
-    const lv = lvlAt(x, y, z, 70); sfx('boom', mine ? Math.max(0.6, lv) : lv);
+    const lv = lvlAt(x, y, z, 70); sfx(b.party ? 'party' : 'boom', mine ? Math.max(0.6, lv) : lv);
     kickAdd(0.5 * lvlAt(x, y, z, 22));
     my.stat.booms = (my.stat.booms || 0) + 1;
     if (!mine) return;
@@ -769,14 +794,72 @@ export function createWeapons(ctx) {
       reportHit(w, 0, false, h.kind, h.id, Math.max(0, r - 0.8));
     }
   }
-  // ---- 궤적 미리보기(수류탄을 들고 있을 때): 손 → 첫 착지 + 튕김, 착지 원
+  // ---- 선물 폭발: 색종이(작은 네모) · 리본(가늘고 긴 띠) · 포장지 조각(큰 네모) · 반짝이
+  const PARTY = ['#ff4f7b', '#ffd23f', '#3fd0ff', '#7dff6a', '#b07aff', '#ff8a3d', '#ffffff', '#ff5ad1'];
+  function confetti(x, y, z) {
+    const P = fxs.confP, M = P.length, col = new T.Color();
+    for (let i = 0; i < 110; i++) {
+      const qi = fxs.confN = (fxs.confN + 1) % M, q = P[qi], kind = i < 70 ? 0 : i < 92 ? 1 : 2;   // 0 색종이 · 1 리본 · 2 포장지
+      const a = rnd() * Math.PI * 2, up = 0.35 + rnd() * 0.65, sp = (kind === 2 ? 5 : 7) + rnd() * 6;
+      q.p.set(x + (rnd() - 0.5) * 0.6, y + rnd() * 0.4, z + (rnd() - 0.5) * 0.6);
+      q.v.set(Math.cos(a) * Math.cos(up) * sp, Math.sin(up) * sp * 1.3 + 2, Math.sin(a) * Math.cos(up) * sp);
+      q.r.set(rnd() * 6, rnd() * 6, rnd() * 6); q.w.set(rnd() * 14 - 7, rnd() * 14 - 7, rnd() * 14 - 7);
+      q.sx = kind === 0 ? 0.13 : kind === 1 ? 0.06 : 0.3 + rnd() * 0.15; q.sy = kind === 0 ? 0.09 : kind === 1 ? 0.55 + rnd() * 0.4 : 0.22 + rnd() * 0.12;
+      q.kind = kind; q.life = 2.6 + rnd() * 1.4; q.life0 = q.life;
+      fxs.conf.setColorAt(qi, col.set(kind === 2 ? (rnd() < 0.5 ? '#d8263c' : '#1f9d55') : PARTY[(rnd() * PARTY.length) | 0]));   // 포장지는 성탄 빨강·초록
+    }
+    fxs.conf.instanceColor.needsUpdate = true; fxs.confLive = 4.2;
+    const S = fxs.sparkP;
+    for (let i = 0; i < 70; i++) {
+      const q = S[fxs.sparkN = (fxs.sparkN + 1) % S.length], a = rnd() * Math.PI * 2, e = rnd() * Math.PI * 0.5, sp = 3 + rnd() * 8;
+      q.p.set(x, y + 0.3, z); q.v.set(Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp + 3, Math.sin(a) * Math.cos(e) * sp);
+      q.c.set(PARTY[(rnd() * PARTY.length) | 0]).lerp(new T.Color('#ffffff'), 0.4); q.life = 1.0 + rnd() * 1.2; q.life0 = q.life; q.tw = rnd() * 10;
+    }
+    fxs.sparkLive = 2.4;
+  }
+  const _m4 = new T.Matrix4(), _q = new T.Quaternion(), _s = new T.Vector3(), _hide = new T.Matrix4().makeScale(0, 0, 0);
+  function updateParty(dt) {
+    if (fxs.confLive > 0) {
+      fxs.confLive -= dt;
+      const P = fxs.confP;
+      for (let i = 0; i < P.length; i++) {
+        const q = P[i];
+        if (q.life <= 0) { if (q.life0) { fxs.conf.setMatrixAt(i, _hide); q.life0 = 0; } continue; }
+        q.life -= dt;
+        const drag = q.kind === 0 ? 2.2 : q.kind === 1 ? 1.6 : 2.6;   // 종이: 공기 저항이 커서 팔랑팔랑 천천히 내려온다
+        q.v.multiplyScalar(Math.exp(-drag * dt)); q.v.y -= (q.kind === 2 ? 5 : 3.2) * dt;
+        q.p.addScaledVector(q.v, dt); q.p.x += Math.sin(q.life * 5 + i) * 0.6 * dt;
+        const gy = ctx.groundY(q.p.x, q.p.z, q.p.y + 0.3) + 0.03; if (q.p.y < gy) { q.p.y = gy; q.v.set(0, 0, 0); q.w.multiplyScalar(0.0); }
+        q.r.x += q.w.x * dt; q.r.y += q.w.y * dt; q.r.z += q.w.z * dt;
+        const fade = Math.min(1, q.life / 0.5);
+        _s.set(q.sx * fade, q.sy * fade, 1); _q.setFromEuler(q.r); _m4.compose(q.p, _q, _s); fxs.conf.setMatrixAt(i, _m4);
+        if (q.life <= 0) { fxs.conf.setMatrixAt(i, _hide); q.life0 = 0; }
+      }
+      fxs.conf.instanceMatrix.needsUpdate = true;
+    }
+    if (fxs.sparkLive > 0) {
+      fxs.sparkLive -= dt;
+      const S = fxs.sparkP, pos = fxs.sparkPos, cl = fxs.sparkCol;
+      for (let i = 0; i < S.length; i++) {
+        const q = S[i];
+        if (q.life <= 0) { pos[i * 3 + 1] = -999; continue; }
+        q.life -= dt; q.v.multiplyScalar(Math.exp(-2.4 * dt)); q.v.y -= 2.5 * dt; q.p.addScaledVector(q.v, dt);
+        const tw = 0.55 + 0.45 * Math.sin(q.tw + q.life * 30), f = Math.min(1, q.life / 0.4) * tw;
+        pos[i * 3] = q.p.x; pos[i * 3 + 1] = q.life > 0 ? q.p.y : -999; pos[i * 3 + 2] = q.p.z; cl[i * 3] = q.c.r * f; cl[i * 3 + 1] = q.c.g * f; cl[i * 3 + 2] = q.c.b * f;
+      }
+      fxs.spark.geometry.attributes.position.needsUpdate = true; fxs.spark.geometry.attributes.color.needsUpdate = true;
+    }
+  }
+  // ---- 궤적 미리보기(수류탄 + 우클릭을 누르는 동안): 손 → 첫 착지 + 튕김, 착지 원. 내 몸 안을 지나는 앞부분은 그리지 않는다
   function updateArc(show) {
     if (!fxs) return;
-    if (!show) { fxs.arc.visible = false; fxs.arcDots.visible = false; fxs.land.visible = false; return; }
-    const cs = ctx.camState(), rec = ctx.me().rec, o = handWorld(rec, v1).toArray();
+    if (!show) { fxs.arc.visible = false; fxs.arcDots.visible = false; fxs.land.visible = false; view.arcOn = false; return; }
+    const cs = ctx.camState(), rec = ctx.me().rec, o = handWorld(rec, v1).toArray(), rp = rec.av.root.position;
     const r = C.grenadeArc(o, C.throwVel(cs.yaw, cs.pitch), (x, z, y) => ctx.groundY(x, z, y));
-    const P = fxs.arcPos, n = Math.min(r.pts.length, P.count);
-    for (let i = 0; i < P.count; i++) { const q = r.pts[Math.min(i, n - 1)]; P.setXYZ(i, q[0], q[1], q[2]); }
+    const i0 = C.arcStart(r.pts, rp.x, rp.y, rp.z);
+    const P = fxs.arcPos, pts = r.pts.slice(i0), n = Math.max(2, Math.min(pts.length, P.count));
+    for (let i = 0; i < P.count; i++) { const q = pts[Math.min(i, pts.length - 1)]; P.setXYZ(i, q[0], q[1], q[2]); }
+    view.arcOn = true; view.arcI0 = i0;
     P.needsUpdate = true; fxs.arc.geometry.setDrawRange(0, n); fxs.arc.computeLineDistances(); fxs.arc.visible = true; fxs.arcDots.visible = true;
     fxs.land.position.set(r.land[0], r.land[1] - C.GREN.radius + 0.06, r.land[2]); fxs.land.visible = true;
     view.arcLand = r.land;
@@ -800,7 +883,7 @@ export function createWeapons(ctx) {
     // 총이 올라가 있는 동안(쏜 뒤 2 s · 방아쇠를 쥔 동안 · 조준 중)과 검을 휘두르는 동안 몸이 카메라를 향한다
     const gun = isGun(my.slot), wpr = rec.wp || {}, ulting = my.slot === 2 && !!wpr.ult, swinging = my.slot === 2 && (!!wpr.swing || ulting);
     // 조준(우클릭 누르는 동안): 0..1 로 부드럽게. 장전 중·총을 내린 동안은 풀린다
-    const gg = my.guns[my.slot], adsT = gun && my.adsHeld && canAct() && !(gg && gg.reload) && !lowered(rec) ? 1 : 0;
+    const gg = my.guns[my.slot], adsT = ((gun && my.adsHeld && !(gg && gg.reload)) || (my.slot === 6 && my.gAim)) && canAct() && !lowered(rec) ? 1 : 0;   // 수류탄 조준도 같은 값(za 로 다른 탭에 던질 자세가 보인다)
     view.ads += (adsT - view.ads) * (1 - Math.exp(-dt * (adsT ? 13 : 16))); if (view.ads < 0.002) view.ads = 0;
     view.scope = my.slot === 7 ? clamp((view.ads - 0.72) / 0.25, 0, 1) : 0;
     if (ctx.hud.ads) ctx.hud.ads(view.ads, view.scope, my.slot);
@@ -813,7 +896,7 @@ export function createWeapons(ctx) {
     if (gun && canAct() && C.needsAutoReload(my.guns[my.slot], t)) reload();
     if (!my.warm) { my.warm = true; for (const s of MODEL_SLOTS) instOf(rec, s); }   // 무기를 미리 만들어 둔다: 처음 바꿀 때 끊기지 않게
     // 수류탄 궤적 미리보기
-    updateArc(my.slot === 6 && canAct() && !lowered(rec));
+    updateArc(my.slot === 6 && my.gAim && canAct() && !lowered(rec));
     // 궁극기·수류탄 쿨타임 HUD (10 Hz)
     view.ult = C.ultLeft(my.sword, t); view.gren = Math.max(0, my.gren.nextAt - t);
     if (ctx.hud.skill && (my.aimTick || 0) % 6 === 0) ctx.hud.skill(my.slot, my.slot === 2 ? view.ult : my.slot === 6 ? view.gren : 0, my.slot === 2 ? C.ULT.cd : C.GREN.cd);
@@ -907,6 +990,9 @@ export function createWeapons(ctx) {
       if (wp.throwT !== undefined) {
         wp.throwT += dt; const u = wp.throwT / 0.8;
         if (u >= 1) wp.throwT = undefined; else { const k = sampleKF(KF_THROW, u); r = k.r; l = k.l; tor = k.tor; }
+      } else {   // 우클릭(조준) 중: 팔을 뒤로 젖혀 던질 자세로 멈춘다(왼손은 앞으로 겨눔)
+        const ga = mine ? view.ads : (wp.ads || 0);
+        if (ga > 0.02) { const k = sampleKF(KF_THROW, 0.3); r = lerp3(r, k.r, ga); l = lerp3(l, [-80, 0, -30], ga); tor = lerp3(tor, k.tor, ga); }
       }
     } else {   // 총: 조준 방향으로 팔을 들고(고각/부각), 반동으로 위로 튄다
       wp.elev += (wp.elevT - wp.elev) * (1 - Math.exp(-dt * 8));
@@ -981,6 +1067,7 @@ export function createWeapons(ctx) {
 
   // ===================================================================== 효과 갱신
   function updateFx(dt) {
+    if (fxs) updateParty(dt);
     if (!fxs) return;
     rocketFrame(dt);
     for (const t of trs) {   // 날아가는 탄: 첫 프레임은 총구에 붙은 채로 보이고, 그 뒤부터 날아간다
@@ -1017,8 +1104,8 @@ export function createWeapons(ctx) {
     }
     for (let i = booms.length - 1; i >= 0; i--) {   // 폭발: 불덩이 0.45 s 커지며 사라짐 · 충격파 고리 0.6 s · 섬광 0.12 s
       const b = booms[i]; b.t += dt;
-      const u = b.t / 0.45, R = 0.6 + b.R * 0.55 * Math.sqrt(clamp(u, 0, 1));
-      b.ball.scale.setScalar(R); b.ball.material.opacity = 0.95 * clamp(1 - u, 0, 1); b.ball.material.color.setHSL(0.08 - 0.05 * clamp(u, 0, 1), 1, 0.6 - 0.25 * clamp(u, 0, 1));
+      const u = b.t / (b.party ? 0.25 : 0.45), R = (b.party ? 0.4 : 0.6) + b.R * (b.party ? 0.3 : 0.55) * Math.sqrt(clamp(u, 0, 1));
+      b.ball.scale.setScalar(R); b.ball.material.opacity = 0.95 * clamp(1 - u, 0, 1); if (!b.party) b.ball.material.color.setHSL(0.08 - 0.05 * clamp(u, 0, 1), 1, 0.6 - 0.25 * clamp(u, 0, 1));
       const ru = b.t / 0.6; b.ring.scale.setScalar(0.5 + b.R * ru); b.ring.material.opacity = 0.85 * clamp(1 - ru, 0, 1);
       b.flash.material.opacity = clamp(1 - b.t / 0.12, 0, 1); b.flash.visible = b.t < 0.12;
       if (b.t > 0.6) { scene.remove(b.ball, b.ring, b.flash); b.ball.material.dispose(); b.ring.material.dispose(); b.flash.material.dispose(); booms.splice(i, 1); }
@@ -1162,7 +1249,7 @@ export function createWeapons(ctx) {
 
   return {
     load, equip, cycle, trigger, alt, reload, frame, afterUpdate, onNet, setRemoteSlot, dispose, attackPress,
-    get ads() { return view.ads; }, get scope() { return view.scope; }, fov: (base) => C.adsFov(base, my.slot, view.ads), setRemoteAds: (rec, a) => { const wp = wpOf(rec); wp.ads = a; },
+    get ads() { return view.ads; }, get scope() { return view.scope; }, get sensK() { return C.adsSens(my.slot, view.ads); }, get fp() { return C.adsFp(my.slot, view.ads); }, get arcOn() { return !!view.arcOn; }, get gAim() { return !!my.gAim; }, fov: (base) => C.adsFov(base, my.slot, view.ads), setRemoteAds: (rec, a) => { const wp = wpOf(rec); wp.ads = a; },
     get slot() { return my.slot; }, get shoulder() { return view.shoulder; }, get view() { return view; }, get ready() { return ready; }, get kick() { return kickCam; }, get guns() { return my.guns; },
     get sword() { return my.sword; }, kickAdd, attachRec: (rec) => wpOf(rec), instOf, sfx,
     debug: { pvpHurt, playerRay, playersNear, my, trs, cas, slashes, nades, booms, deaths, rockets, spawnRocket, aimElev, shotLog, handCache, POSE, KF, computeAim, worldRay, spawnSlash, flashAt, tracer, muzzleWorld, explode, get fxs() { return fxs; } },

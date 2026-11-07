@@ -141,7 +141,7 @@ console.warn = () => {};
 
 // 5) 피해 표: 보내는 사람이 말한 값은 쓰지 않는다
 {
-  ok(C.dmgFor(1, 'm', 0, 1).amount === 10, 'punch 10');
+  ok(C.dmgFor(1, 'm', 0, 1).amount === 15, 'punch 15');
   ok(C.dmgFor(2, 'm', 2, 1).amount === C.COMBO[2].melee && C.dmgFor(2, 'sl', 0, 1).amount === C.COMBO[0].slash, 'sword melee / slash by combo step');
   ok(C.dmgFor(3, 'm', 0, 1).amount === C.WEAPONS[3].dmg, 'rifle per bullet');
   ok(C.dmgFor(4, 'm', 0, 99).amount === C.WEAPONS[4].dmg * C.WEAPONS[4].pellets, 'shotgun: pellets capped at 7');
@@ -221,7 +221,7 @@ console.warn = () => {};
   ok(sp.damage('boss', 0, 6, 'p|rifle', 70) === true && sp.damage('boss', 0, 6, 'p|rifle', 70) === false, 'the same weapon key is rate limited');
   ok(sp.damage('boss', 0, 14, 'p|sword', 150) === true && sp.view.hp === hp0 - 6 - 14, 'another weapon key of the same player is its own bucket');
   ok(sp.damage('boss', 0, 28, 'q|shotgun', 450) === true && sp.view.hp === hp0 - 6 - 14 - 28, 'a shotgun blast of 28 lands in one hit');
-  ok(sp.damage('boss', 0, 999, 'r|x', 100) === true && sp.view.hp === hp0 - 6 - 14 - 28 - 40, 'a single hit is still capped (40)');
+  ok(sp.damage('boss', 0, 999, 'r|x', 100) === true && sp.view.hp === hp0 - 6 - 14 - 28 - 300, 'a single hit is still capped (300)');
   ok(sp.damage('minion', 5, 10, 'p|rifle', 70) === true && dbg.B.minions[0].hp === 10, 'minion takes weapon damage');
   ok(sp.damage('minion', 5, 10, 'p|rifle', 70) === true && dbg.B.minions.every((m) => m.id !== 5 ? true : m.hp <= 0), 'and dies');
   dbg.B.hp = 3; dbg.O.hitAt.clear();
@@ -329,8 +329,8 @@ console.warn = () => {};
   ok(A.length === 7 && A.every((d, i) => d.every((q, j) => q === B[i][j])), 'shotgun pattern is the same on both screens');
   ok(A.slice(1).every((d) => { const ang = Math.acos(-d[2]); return ang > 0.005 && ang < 0.07; }), 'pellets spread around the centre within the cone');
   // 체력: 옛 100 의 4배, 5 초 뒤 자동 부활, 「즉시 리스폰」 은 0.6 초 뒤부터
-  ok(C.HP.max === 400 && C.HP.respawnT === 5 && C.HP.btnDelay > 0 && C.HP.btnDelay < 1, 'HP 400 (4x the old 100), auto respawn after 5 s');
-  ok(C.HURT.swipe === 66 && C.HURT.spit === 36 && C.HURT.bite === 21, 'spider damage scaled with the new HP (about 3x)');
+  ok(C.HP.max === 1000 && C.HP.respawnT === 5 && C.HP.btnDelay > 0 && C.HP.btnDelay < 1, 'HP 1000 (10x the old 100), auto respawn after 5 s');
+  ok(C.HURT.swipe === 165 && C.HURT.spit === 90 && C.HURT.bite === 52, 'spider damage scaled with the new HP (2.5x of the HP 400 values)');
   const h = C.newHp(); ok(C.hpHit(h, 30, 0) === 'hit' && h.hp === C.HP.max - 30, 'a hit takes HP');
   ok(C.hpHit(h, C.HP.max, 1) === 'dead' && h.dead && h.hp === 0, 'HP 0 = down');
   ok(C.hpHit(h, 10, 1.5) === null, 'no damage while down');
@@ -338,7 +338,7 @@ console.warn = () => {};
   ok(!C.canInstantRespawn(h, 1 + C.HP.btnDelay - 0.05) && C.canInstantRespawn(h, 1 + C.HP.btnDelay + 0.01) && !C.canInstantRespawn(C.newHp(), 9), 'instant respawn button: not at once, never when alive');
   ok(C.hpTick(h, 1 + C.HP.respawnT - 0.1, 0.016) === null && C.hpTick(h, 1 + C.HP.respawnT + 0.01, 0.016) === 'respawn' && h.hp === C.HP.max && !h.dead, 'no button press: auto respawn with full HP after 5 s');
   ok(C.hpHit(h, 10, 1 + C.HP.respawnT + 0.5) === null, 'a short shield after respawn');
-  const ib = C.newHp(); C.hpHit(ib, 999, 10);
+  const ib = C.newHp(); C.hpHit(ib, C.HP.max, 10);
   ok(C.hpRespawn(ib, 10.7) && !ib.dead && ib.hp === C.HP.max && C.hpHit(ib, 50, 11) === null && C.hpHit(ib, 50, 10.7 + C.HP.inv + 0.1) === 'hit' && !C.hpRespawn(ib, 20), 'instant respawn: full HP + shield, only from the down state');
   ok(C.hpTick(ib, 100, 0.016) === null, 'a revived player is not revived twice');
   const r = C.newHp(); C.hpHit(r, 50, 0); const r0 = r.hp; C.hpTick(r, C.HP.regenDelay + 1, 1); ok(r.hp > r0, 'HP regenerates when out of combat');
@@ -348,6 +348,18 @@ console.warn = () => {};
   ok(/hp: hpPct\(MYHP\)/.test(html) && /rec\.hpNet = sanitizeHp\(d\.hp, d\.dd\)/.test(html), 'HP rides presence both ways');
   ok(/SENS = \{ v: [^\n]*: 0\.5; \}\)\(\) \}/.test(html) && /0\.0035 \* SENS\.v/.test(html) && /store\.set\('bonfire\.sens'/.test(html), 'mouse sensitivity: saved, default half of the old one');
   ok((html.match(/^  [1-8]: '<(path|rect)/gm) || []).length === 8, 'eight weapon silhouettes');
+}
+
+// 16) v5: 조준 감도(줌 배율 반비례) · 1인칭 가늠쇠 · 수류탄 궤적은 몸 밖에서 시작 · 무기별 데미지 차등 · HP 1,000
+{
+  ok(C.adsSens(7, 1) < 0.2 && C.adsSens(7, 0) === 1 && C.adsSens(3, 1) === 1 / C.ADS[3].zoom && C.adsSens(2, 1) === 1, 'aim sensitivity falls with the zoom (sniper 1/6)');
+  ok(C.adsFp(3, 1) === 1 && C.adsFp(4, 1) === 1 && C.adsFp(5, 0.5) === 0.5 && C.adsFp(7, 1) === 0 && C.adsFp(8, 1) === 0, 'rifle / shotgun / pistol aim from the iron sights');
+  ok(C.ADS[3].zoom >= 1.8 && C.ADS[4].zoom > 1.25 && C.ADS[5].zoom > 1.35, 'closer zoom than before');
+  const arc = C.grenadeArc([0.3, 1.2, 0], C.throwVel(0, 0), () => 0), i0 = C.arcStart(arc.pts, 0, 0, 0);
+  ok(i0 > 0 && arc.pts.slice(i0).every((q) => C.distToBody(q[0], q[1], q[2], 0, 0, 0) > 0.25), 'grenade arc starts outside my body');
+  const D = (w, c, n, x) => C.dmgFor(w, 'm', c, n).amount;
+  ok(D(7, 0, 1) > D(4, 0, 7) && D(4, 0, 7) > D(5, 0, 1) && D(5, 0, 1) > D(3, 0, 1) && D(2, 2, 1) > D(2, 0, 1) && D(2, 0, 1) > D(1, 0, 1), 'boss damage differs by weapon');
+  ok(C.HP.max === 1000, 'player HP 1,000');
 }
 
 // 15) PvP: 모든 무기가 다른 접속자의 HP 를 깎는다(공격자 판정 → 맞은 쪽이 표로 피해 결정) · 몸 판정 · 메시지 · 거리·간격 검증
@@ -361,8 +373,8 @@ console.warn = () => {};
   ok(by.punch === C.HURT.punch, 'fist: the punch event and the table agree');
   ok(rows.every(([, d]) => d.amount < HPM), 'no weapon one-shots a full-HP player');
   const hits = (amt) => Math.ceil(HPM / amt);
-  ok(hits(by.rifle) >= 30 && hits(by.rifle) <= 60 && hits(by.pistol) >= 20 && hits(by.pistol) <= 45, 'rifle / pistol: dozens of hits (about 4-5 s of fire)');
-  ok(hits(by.sniper) === 4 && hits(by.rocket) === 2 && hits(by.death) === 2 && hits(by.grenade) === 3, 'sniper 4 shots · RPG 2 · 死 2 · gift grenade 3');
+  ok(hits(by.rifle) >= 20 && hits(by.rifle) <= 40 && hits(by.pistol) >= 15 && hits(by.pistol) <= 30, 'rifle / pistol: dozens of hits (about 4-5 s of fire)');
+  ok(hits(by.sniper) === 3 && hits(by.rocket) === 2 && hits(by.death) === 2 && hits(by.grenade) === 3, 'sniper 3 shots · RPG 2 · 死 2 · gift grenade 3');
   ok(hits(by.shotgun) >= 5 && hits(by.shotgun) <= 8 && hits(by.sword3) <= 12 && hits(by.slash) <= 25, 'shotgun a handful of blasts · sword a dozen swings');
   ok(by.sniper > by.shotgun && by.rocket > by.sniper && by.rifle < by.pistol && by.punch < by.sword, 'heavier weapons hit harder');
   // 거리 감쇠: 폭발은 가까울수록 센 피해, 반경 밖은 0
@@ -422,8 +434,11 @@ console.warn = () => {};
   ok(/e\.key === 'Enter' && MYHP\.dead/.test(html) && /document\.exitPointerLock\(\)/.test(html.slice(html.indexOf('function hurtMe'), html.indexOf('function hurtByPlayer'))), 'Enter respawns while down; the cursor is released for the button');
   ok(/deathFx\(rec, q\.dead, false\)/.test(html) && /deathFx\(meRec, MYHP\.dead, true\)/.test(html) && /GHOSTS\.spawn\(/.test(html) && /WP\.sfx\('boing'/.test(html) && /WP\.sfx\('ghost'/.test(html), 'ghost + sounds fire for me and for everyone else (from presence)');
   ok(/players: pvpPlayers, canBeHit:[^\n]*hurtPlayer: hurtByPlayer/.test(html) && /rec\.mq \|\| !rec\.rid \|\| \(rec\.hpNet && rec\.hpNet\.dead\)/.test(html), 'weapons see only live, real players');
-  const m = html.match(/#setPanel \{ right: calc\(env\(safe-area-inset-right, 0px\) \+ (\d+)px\)/), acts = html.match(/#acts \{ right: calc\(env\(safe-area-inset-right, 0px\) \+ (\d+)px\)[^}]*repeat\(2, (\d+)px\); gap: (\d+)px/);
-  ok(m && acts && +m[1] >= +acts[1] + 2 * +acts[2] + +acts[3], 'settings panel sits left of the action-button columns (no overlap on desktop)');
+  const css = (id) => (html.match(new RegExp('\\n#' + id + ' \\{([^}]*)\\}')) || [])[1] || '';
+  ok(/top:/.test(css('setPanel')) && /top:/.test(css('tools')) && !/top:/.test(css('acts')), 'settings / options sit top right, away from the bottom-right combat buttons');
+  ok(/bottom:/.test(css('fun')) && /left:/.test(css('fun')) && ['lanternBtn', 'fwBtn', 'bossBtn'].every((id) => html.indexOf('id="' + id + '"') > html.indexOf('<div id="fun"') && html.indexOf('id="' + id + '"') < html.indexOf('<div id="tools"')), 'lanterns / fireworks / boss buttons sit above the chat');
+  const actsHtml = html.slice(html.indexOf('<div id="acts"'), html.indexOf('</div>', html.indexOf('<div id="acts"')));
+  ok(!/emoteBtn|lanternBtn|setBtn/.test(actsHtml), 'bottom right holds combat buttons only');
 }
 console.log(`${n - fails}/${n} weapon checks passed`);
 if (fails) process.exit(1);

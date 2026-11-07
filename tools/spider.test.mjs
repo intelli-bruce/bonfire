@@ -66,7 +66,7 @@ const snap = (o = {}) => ({ id: 'aaa', n: 1, b: 1000, ep: 0, hp: 400, mh: 480, x
   ok(sp.snapshot().n === 2, 'sequence number grows');
   ok(sp.damage('boss', 0, 10, 'p1') === true && sp.view.hp === BOSS.hp - 10, 'a hit takes 10');
   ok(sp.damage('boss', 0, 10, 'p1') === false, 'same attacker inside the cooldown is ignored');
-  ok(sp.damage('boss', 0, 999, 'p2') === true && sp.view.hp === BOSS.hp - 10 - 40, 'one hit is capped at 40 (a shotgun blast is 28)');
+  ok(sp.damage('boss', 0, 999, 'p2') === true && sp.view.hp === BOSS.hp - 10 - 300, 'one hit is capped at 300 (the biggest hit, 死, is 250)');
   ok(sp.damage('minion', 3, 10, 'p1') === true && dbg.B.minions.find((m) => m.id === 3).hp === 10, 'minion takes damage');
   dbg.B.hp = 5; dbg.O.hitAt.clear();
   ok(sp.damage('boss', 0, 10, 'p3') === true && sp.view.dying && sp.view.hp === 0, 'death: hp 0, dying');
