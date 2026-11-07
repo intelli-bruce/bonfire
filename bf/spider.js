@@ -18,23 +18,27 @@ const finite = (v, a, b) => (typeof v === 'number' && Number.isFinite(v) ? clamp
 const beats = (stA, idA, stB, idB) => stA < stB || (stA === stB && idA < idB);
 const outranks = (epA, bornA, idA, epB, bornB, idB) => (epA !== epB ? epA > epB : beats(bornA, idA, bornB, idB));   // higher epoch wins; same epoch: earlier birth, then smaller id
 
+// The model is built at K = BOSS_K in tools/spider/build_spider.py: the head tops out near 12.7 m, about 8.5x a 1.5 m player (the first version was 3 m).
+// Every length below is in metres at that size; the clips for the patterns play at ACT_TS so a giant's wind-up stays readable.
+const K = 3.8, ACT_TS = 0.75, MOUTH = 2.5 * K;   // MOUTH: how far ahead of the root the face is
 export const BOSS = {
-  hp: 480, hpPerExtra: 160, bodyR: 2.1, spawnT: 1.8, dieT: 4.2,
-  walk: 3.0, turn: 2.2, melee: 3.4,
-  swipe: { cd: 3.2, reach: 6.2, half: 1.25, contact: 13 / 24, dur: 28 / 24, minD: 0, maxD: 5.4 },
-  spit: { cd: 5.6, fire: 16 / 24, dur: 30 / 24, speed: 17, life: 2.2, radius: 0.75, fan: 0.2, minD: 5.5, maxD: 34 },
-  web: { cd: 13, fire: 16 / 24, dur: 30 / 24, flight: 0.75, radius: 2.7, life: 11, slow: 0.42, minD: 6, maxD: 30, max: 5 },
-  summon: { cd: 17, fire: 30 / 24, dur: 48 / 24, count: 3, cap: 6 },
-  gap: 0.7, rageAt: 0.35, dmgCooldown: 0.22,
+  hp: 480, hpPerExtra: 160, k: K, bodyR: 0.9 * K, legR: 0.9, hitReach: 8.4 * K, spawnT: 2.6, dieT: 5.0,
+  walk: 5.0, turn: 1.1, melee: 13,
+  swipe: { cd: 3.6, reach: 7.0 * K, half: 0.62, contact: 13 / 24 / ACT_TS, dur: 28 / 24 / ACT_TS, minD: 0, maxD: 6.4 * K },
+  spit: { cd: 5.6, fire: 16 / 24 / ACT_TS, dur: 30 / 24 / ACT_TS, speed: 24, life: 3.6, radius: 1.5, fan: 0.14, minD: 14, maxD: 70 },
+  web: { cd: 13, fire: 16 / 24 / ACT_TS, dur: 30 / 24 / ACT_TS, flight: 1.1, radius: 6, life: 11, slow: 0.42, minD: 18, maxD: 60, max: 5 },
+  summon: { cd: 17, fire: 30 / 24 / ACT_TS, dur: 48 / 24 / ACT_TS, count: 3, cap: 6 },
+  gap: 0.8, rageAt: 0.35, dmgCooldown: 0.22,
 };
-export const MINI = { hp: 20, speed: 3.6, life: 28, hitR: 0.95, atkD: 1.5, hitCd: 0.9 };
+export const MINI = { hp: 20, speed: 3.6, life: 28, hitR: 1.05, atkD: 1.7, hitCd: 0.9 };
+const LEGS = ['L1', 'L2', 'L3', 'L4', 'R1', 'R2', 'R3', 'R4'];
 const ONE_SHOT = { sw: 'swipe', sp: 'spit', wb: 'spit', sm: 'summon', d: 'die', h: 'hurt' };
 
 export function createSpiderBoss(ctx) {
   const { THREE, scene } = ctx;
-  const B = { active: false, owner: false, ownerId: '', ep: 0, born: 0, x: 0, z: 0, ry: 0, hp: 0, maxHp: 0, a: 'i', ac: 0, sa: 0, wt: null, webs: [], minions: [], seq: 0, spawnT: 0, dieT: 0, rage: false };
+  const B = { active: false, owner: false, ownerId: '', ep: 0, born: 0, x: 0, z: 0, ry: 0, hp: 0, maxHp: 0, a: 'i', ac: 0, sa: 0, sd: 40, wt: null, webs: [], minions: [], seq: 0, spawnT: 0, dieT: 0, rage: false };
   const R = { tx: 0, tz: 0, try_: 0, lastAc: 0, lastSnap: 0 };       // replica-side targets
-  const O = { act: null, cd: { sw: 0, sp: 2.2, wb: 6, sm: 8 }, gap: 0, webId: 0, minId: 0, hitAt: new Map(), lastBy: '' };   // owner-side AI
+  const O = { act: null, cd: { sw: 0, sp: 2.2, wb: 6, sm: 8 }, gap: 0, webId: 0, minId: 0, hitAt: new Map(), lastBy: '', lastFoot: -1 };   // owner-side AI
   let assets = null, loading = null, loadFailed = false;
   let boss = null;                                   // { root, mixer, clips, cur, os, jaw, mats }
   const timers = [];                                 // { t, fn }
@@ -43,6 +47,7 @@ export function createSpiderBoss(ctx) {
   const webVis = new Map();                          // id -> { m, age }
   const minVis = new Map();                          // id -> visual record
   const ghosts = [];                                 // dying minions (visual only)
+const feet = [];                                   // per leg { k: tibia start, a: ankle, e: foot tip } world positions, refreshed every frame (hit tests and push-out)
   const listeners = {};
   const emit = (k, v) => { for (const f of listeners[k] || []) { try { f(v); } catch (e) { /* listener */ } } };
   const tmpV = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
@@ -60,11 +65,11 @@ export function createSpiderBoss(ctx) {
       const [b, m] = await Promise.all([get('spider.glb'), get('spider_mini.glb')]);
       assets = { boss: b, mini: m, SU };
       // shared projectile / web resources
-      assets.needleGeo = new THREE.ConeGeometry(0.1, 0.85, 6).rotateX(Math.PI / 2);   // tip along +Z
+      assets.needleGeo = new THREE.ConeGeometry(0.2, 1.7, 6).rotateX(Math.PI / 2);   // tip along +Z
       assets.needleMat = new THREE.MeshBasicMaterial({ color: '#b6ff4a' });
-      assets.glowGeo = new THREE.SphereGeometry(0.26, 10, 8);
+      assets.glowGeo = new THREE.SphereGeometry(0.5, 10, 8);
       assets.glowMat = new THREE.MeshBasicMaterial({ color: '#5dff2a', transparent: true, opacity: 0.45, depthWrite: false });
-      assets.ballGeo = new THREE.SphereGeometry(0.3, 10, 8);
+      assets.ballGeo = new THREE.SphereGeometry(0.7, 10, 8);
       assets.ballMat = new THREE.MeshBasicMaterial({ color: '#eaf2ff' });
       assets.webTex = makeWebTexture();
       assets.webGeo = new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2);
@@ -105,13 +110,15 @@ export function createSpiderBoss(ctx) {
     const mixer = new THREE.AnimationMixer(root);
     const clips = {};
     for (const c of gltf.animations) clips[c.name] = mixer.clipAction(c);
-    let jaw = null; root.traverse((o) => { if (o.isBone && o.name === 'jaw') jaw = o; });
+    let jaw = null; const byName = {}; root.traverse((o) => { if (o.isBone && o.name === 'jaw') jaw = o; if (o.name) byName[o.name] = o; });
+    // per leg: tibia start (knee 2), metatarsus start (ankle), foot tip (`_e` marker bone) — the hit/push read-out below
+    const legs = LEGS.map((l) => ({ t: byName[l + '_t'], m: byName[l + '_m'], e: byName[l + '_e'] })).filter((q) => q.t && q.m && q.e);
     const mats = new Set(); root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) mats.add(m); });
     // night scene without an environment map: metal would render black, and a little self-light keeps the dark shell readable
-    for (const m of mats) { if (!m.isMeshStandardMaterial) continue; m.metalness = Math.min(m.metalness, 0.05); if (m.emissive.getHex() === 0) m.emissive.copy(m.color).multiplyScalar(/skin|lip/.test(m.name) ? 0.18 : 0.3); }
+    for (const m of mats) { if (!m.isMeshStandardMaterial) continue; m.metalness = Math.min(m.metalness, 0.05); if (m.emissive.getHex() === 0) m.emissive.copy(m.color).multiplyScalar(/lip/.test(m.name) ? 0.18 : 0.36); }
     const base = new Map(); for (const m of mats) base.set(m, { e: m.emissive ? m.emissive.clone() : null, i: m.emissiveIntensity });
     scene.add(root);
-    return { root, mixer, clips, cur: null, os: null, jaw, mats, base, flash: 0 };
+    return { root, mixer, clips, cur: null, os: null, jaw, legs, mats, base, flash: 0 };
   }
   function setLoop(rig, name, ts = 1) {
     const a = rig.clips[name]; if (!a) return;
@@ -155,6 +162,7 @@ export function createSpiderBoss(ctx) {
     O.act = null; O.cd = { sw: 0, sp: 2.2, wb: 6, sm: 8 }; O.gap = 0.8; O.hitAt.clear();
     timers.length = 0;
     if (boss) { disposeRig(boss); boss = null; }
+    feet.length = 0;
     for (const p of proj) scene.remove(p.g); proj.length = 0;
     for (const a of arcs) scene.remove(a.m); arcs.length = 0;
     for (const [, v] of webVis) { scene.remove(v.m); v.m.material.dispose(); } webVis.clear();
@@ -212,7 +220,7 @@ export function createSpiderBoss(ctx) {
     // shared by the owner (starting a pattern) and replicas (the owner's counter moved): visuals + timed effects
     const cfg = name === 'sw' ? BOSS.swipe : name === 'sp' ? BOSS.spit : name === 'wb' ? BOSS.web : BOSS.summon;
     B.a = name;
-    if (boss) { playOnce(boss, ONE_SHOT[name], 1); }
+    if (boss) { playOnce(boss, ONE_SHOT[name], ACT_TS); }
     if (name === 'sw') {
       timers.push({ t: BOSS.swipe.contact, fn: () => swipeContact() });
     } else if (name === 'sp') {
@@ -221,7 +229,7 @@ export function createSpiderBoss(ctx) {
       timers.push({ t: BOSS.web.fire, fn: () => throwWeb(wt) });
     } else if (name === 'sm') {
       if (!fromNet) timers.push({ t: BOSS.summon.fire, fn: () => ownerSummon() });
-      timers.push({ t: 0.3, fn: () => ctx.fx.poof(B.x, ctx.heightAt(B.x, B.z), B.z, 4) });
+      timers.push({ t: 0.4, fn: () => ctx.fx.poof(B.x, ctx.heightAt(B.x, B.z), B.z, 6) });
     }
     return cfg;
   }
@@ -229,8 +237,11 @@ export function createSpiderBoss(ctx) {
     const cfg = name === 'sw' ? BOSS.swipe : name === 'sp' ? BOSS.spit : name === 'wb' ? BOSS.web : BOSS.summon;
     const k = B.rage ? 0.7 : 1;
     O.cd[name] = cfg.cd * k; O.act = { name, t: 0, dur: cfg.dur, track: name !== 'sm' };
-    const dx = tg ? tg.p.x - B.x : 0, dz = tg ? tg.p.z - B.z : 0;
+    const mx = B.x - Math.sin(B.ry) * MOUTH, mz = B.z - Math.cos(B.ry) * MOUTH;   // the needles leave the mouth, not the root
+    const ox = name === 'sp' ? mx : B.x, oz = name === 'sp' ? mz : B.z;
+    const dx = tg ? tg.p.x - ox : 0, dz = tg ? tg.p.z - oz : 0;
     B.sa = faceTo(dx, dz);   // world yaw of the aim (same convention as ry)
+    B.sd = tg ? clamp(Math.hypot(dx, dz), 6, 90) : 40;   // spit range: sets the needle's drop angle
     B.wt = name === 'wb' && tg ? [r2(tg.p.x), r2(tg.p.z)] : null;
     B.ac++; startAction(name, B.sa, B.wt, false);
   }
@@ -238,7 +249,7 @@ export function createSpiderBoss(ctx) {
     if (!B.owner || B.dieT > 0) return;
     const n = Math.min(BOSS.summon.count, BOSS.summon.cap - B.minions.length);
     for (let i = 0; i < n; i++) {
-      const a = B.ry + (i - (n - 1) / 2) * 0.95 + (Math.random() - 0.5) * 0.3, r = 3.0 + Math.random() * 0.8;   // in front of the boss, fanned out
+      const a = B.ry + (i - (n - 1) / 2) * 0.6 + (Math.random() - 0.5) * 0.25, r = MOUTH + 2 + Math.random() * 2.5;   // in front of the face, fanned out
       let x = B.x - Math.sin(a) * r, z = B.z - Math.cos(a) * r;
       if (!ctx.canStand(x, z)) { x = B.x; z = B.z; }
       B.minions.push({ id: ++O.minId, x, z, ry: a, hp: MINI.hp, a: 'i', life: MINI.life, atk: 0, tx: x, tz: z });
@@ -286,26 +297,30 @@ export function createSpiderBoss(ctx) {
 
   // ---------- shared effects ----------
   function mouthPos(out) {
-    if (boss && boss.jaw) { boss.jaw.getWorldPosition(out); out.x += -Math.sin(B.ry) * 0.7; out.z += -Math.cos(B.ry) * 0.7; out.y -= 0.1; return out; }
-    return out.set(B.x - Math.sin(B.ry) * 2.2, ctx.heightAt(B.x, B.z) + 2.2, B.z - Math.cos(B.ry) * 2.2);
+    if (boss && boss.jaw) { boss.jaw.getWorldPosition(out); out.x += -Math.sin(B.ry) * 0.85 * K; out.z += -Math.cos(B.ry) * 0.85 * K; out.y -= 0.4; return out; }
+    return out.set(B.x - Math.sin(B.ry) * MOUTH, ctx.heightAt(B.x, B.z) + 2.0 * K, B.z - Math.cos(B.ry) * MOUTH);
   }
   function swipeContact() {
     const cfg = BOSS.swipe;
-    ctx.fx.thump(0.9);
-    // knock-up dust at the claws
+    ctx.fx.thump(1);
+    // knock-up dust at the two claws (they land 5.6 K ahead, 0.9 K apart)
     const fx = -Math.sin(B.ry), fz = -Math.cos(B.ry);
-    ctx.fx.poof(B.x + fx * 4.4, ctx.heightAt(B.x + fx * 4.4, B.z + fz * 4.4) + 0.05, B.z + fz * 4.4, 5);
+    for (const sg of [-1, 1]) {
+      const px = B.x + fx * 5.6 * K - fz * sg * 0.9 * K, pz = B.z + fz * 5.6 * K + fx * sg * 0.9 * K;
+      ctx.fx.poof(px, ctx.heightAt(px, pz) + 0.05, pz, 6);
+    }
     if (!ctx.me().ok || myHit.swipe > 0) return;
     const m = ctx.me(), dx = m.x - B.x, dz = m.z - B.z, d = Math.hypot(dx, dz);
-    if (d > cfg.reach || d < 0.3 || Math.abs(m.y - ctx.heightAt(B.x, B.z)) > 2.4) return;
+    if (d > cfg.reach || d < 0.3 || m.y - ctx.heightAt(m.x, m.z) > 3.2) return;   // (a high jump clears it)
     if (Math.abs(wrapA(faceTo(dx, dz) - B.ry)) > cfg.half) return;
     myHit.swipe = 0.6;
-    ctx.onHitMe({ src: 'swipe', dx: dx / d, dz: dz / d, power: 1.7 });
+    ctx.onHitMe({ src: 'swipe', dx: dx / d, dz: dz / d, power: 2.0 });
   }
   function fireSpit(aim) {
     if (!assets) return;
     const o = mouthPos(new THREE.Vector3());
-    const n = 3;
+    const n = 3, G = 3.0, tt = Math.max(0.3, (B.sd || 40) / BOSS.spit.speed);   // flight time to the target; gravity G (below) is the same one
+    const vy0 = (ctx.heightAt(B.x, B.z) + 0.9 - o.y + 0.5 * G * tt * tt) / tt;   // drop angle so the needle reaches chest height at the aim distance
     for (let i = 0; i < n; i++) {
       const a = aim + (i - 1) * BOSS.spit.fan;
       const g = new THREE.Group();
@@ -314,7 +329,7 @@ export function createSpiderBoss(ctx) {
       g.position.copy(o); scene.add(g);
       const vx = -Math.sin(a) * BOSS.spit.speed, vz = -Math.cos(a) * BOSS.spit.speed;
       g.rotation.y = Math.atan2(vx, vz);
-      proj.push({ g, vx, vz, vy: -0.9 + (Math.random() - 0.5) * 0.3, life: BOSS.spit.life });
+      proj.push({ g, vx, vz, vy: vy0 + (Math.random() - 0.5) * 0.4, life: BOSS.spit.life });
     }
     ctx.fx.thump(0.5);
   }
@@ -358,6 +373,19 @@ export function createSpiderBoss(ctx) {
   }
 
   // ---------- per-frame ----------
+  function readFeet() {   // world positions of the knee/ankle/tip markers: the legs are what a player can reach, so they are the hit and push-out shapes
+    boss.root.updateMatrixWorld(true);
+    boss.legs.forEach((q, i) => {
+      const f = feet[i] || (feet[i] = { k: new THREE.Vector3(), a: new THREE.Vector3(), e: new THREE.Vector3() });
+      q.t.getWorldPosition(f.k); q.m.getWorldPosition(f.a); q.e.getWorldPosition(f.e);
+    });
+    feet.length = boss.legs.length;
+  }
+  function segDist(px, py, pz, a, b) {   // distance from a point to the segment a-b
+    const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z, l2 = abx * abx + aby * aby + abz * abz || 1;
+    const u = clamp(((px - a.x) * abx + (py - a.y) * aby + (pz - a.z) * abz) / l2, 0, 1);
+    return Math.hypot(px - (a.x + abx * u), py - (a.y + aby * u), pz - (a.z + abz * u));
+  }
   function update(dt, t) {
     for (const k in myHit) myHit[k] = Math.max(0, myHit[k] - dt);
     if (!B.active) return;
@@ -383,11 +411,18 @@ export function createSpiderBoss(ctx) {
     // boss visual
     if (boss) {
       const g = ctx.heightAt(B.x, B.z), sp = B.spawnT > 0 ? clamp(1 - B.spawnT / BOSS.spawnT, 0, 1) : 1, se = 1 - (1 - sp) * (1 - sp);
-      boss.root.position.set(B.x, g - (1 - se) * 2.2, B.z); boss.root.rotation.y = B.ry; boss.root.scale.setScalar(0.35 + 0.65 * se);
+      // the body is ~40 m long on a sloped beach: stand on the mean ground and tilt (nose / right side) with it, otherwise the far legs hang in the air or sink
+      const fx = -Math.sin(B.ry), fz = -Math.cos(B.ry), rx = Math.cos(B.ry), rz = -Math.sin(B.ry);
+      const hF = ctx.heightAt(B.x + fx * 14, B.z + fz * 14), hB = ctx.heightAt(B.x - fx * 14, B.z - fz * 14), hR = ctx.heightAt(B.x + rx * 16, B.z + rz * 16), hL = ctx.heightAt(B.x - rx * 16, B.z - rz * 16);
+      const gy = (g * 2 + hF + hB + hR + hL) / 6, tp = Math.atan2(hF - hB, 28), tr = Math.atan2(hR - hL, 32);
+      if (boss.tp === undefined) { boss.tp = tp; boss.tr = tr; }
+      const ks = Math.min(1, dt * 3); boss.tp += (tp - boss.tp) * ks; boss.tr += (tr - boss.tr) * ks;
+      boss.root.position.set(B.x, gy - (1 - se) * K * 2.4, B.z); boss.root.rotation.order = 'YXZ'; boss.root.rotation.set(boss.tp, B.ry, boss.tr); boss.root.scale.setScalar(0.35 + 0.65 * se);
       if (B.a === 'd') { if (boss.cur !== 'die') { boss.os = null; playOnce(boss, 'die', 1, true); } }
-      else if (!boss.os) setLoop(boss, B.a === 'w' ? 'walk' : 'idle', B.a === 'w' ? (BOSS.walk * (B.rage ? 1.25 : 1)) / 3.4 : 1);
+      else if (!boss.os) setLoop(boss, B.a === 'w' ? 'walk' : 'idle', B.a === 'w' ? (BOSS.walk * (B.rage ? 1.25 : 1)) / (3.4 * K) : 1);   // the walk clip covers 3.4 K per cycle
       tickRig(boss, dt);
-      if (B.spawnT > 0 && Math.random() < dt * 14) ctx.fx.poof(B.x + (Math.random() - 0.5) * 4, g + 0.05, B.z + (Math.random() - 0.5) * 4, 2);
+      readFeet();
+      if (B.spawnT > 0 && Math.random() < dt * 14) ctx.fx.poof(B.x + (Math.random() - 0.5) * K * 2.2, g + 0.05, B.z + (Math.random() - 0.5) * K * 2.2, 2);
     }
     // projectiles (every client simulates them; only my own body is tested)
     for (let i = proj.length - 1; i >= 0; i--) {
@@ -396,7 +431,7 @@ export function createSpiderBoss(ctx) {
       const gy = ctx.heightAt(p.g.position.x, p.g.position.z);
       let dead = p.life <= 0 || p.g.position.y < gy + 0.1;
       const m = ctx.me();
-      if (!dead && m.ok && myHit.spit <= 0 && Math.hypot(p.g.position.x - m.x, p.g.position.z - m.z) < BOSS.spit.radius && Math.abs(p.g.position.y - (m.y + 0.8)) < 1.3) {
+      if (!dead && m.ok && myHit.spit <= 0 && Math.hypot(p.g.position.x - m.x, p.g.position.z - m.z) < BOSS.spit.radius && Math.abs(p.g.position.y - (m.y + 0.8)) < 1.8) {
         const l = Math.hypot(p.vx, p.vz) || 1; myHit.spit = 0.5;
         ctx.onHitMe({ src: 'spit', dx: p.vx / l, dz: p.vz / l, power: 0.7, poison: true }); dead = true;
       }
@@ -404,7 +439,7 @@ export function createSpiderBoss(ctx) {
     }
     for (let i = arcs.length - 1; i >= 0; i--) {
       const a = arcs[i]; a.t += dt; const u = Math.min(1, a.t / a.dur);
-      a.m.position.set(a.sx + (a.tx - a.sx) * u, a.sy + (a.ty - a.sy) * u + Math.sin(u * Math.PI) * 3.2, a.sz + (a.tz - a.sz) * u);
+      a.m.position.set(a.sx + (a.tx - a.sx) * u, a.sy + (a.ty - a.sy) * u + Math.sin(u * Math.PI) * 9, a.sz + (a.tz - a.sz) * u);
       if (u >= 1) { landWeb(a); scene.remove(a.m); arcs.splice(i, 1); }
     }
     // webs: age runs locally on everyone (the owner's stream re-bases it)
@@ -435,19 +470,20 @@ export function createSpiderBoss(ctx) {
     }
     for (const [id, v] of minVis) if (!mseen.has(id)) dropMinion(id, v);
     for (let i = ghosts.length - 1; i >= 0; i--) { const g = ghosts[i]; g.t -= dt; tickRig(g.rig, dt); if (g.t <= 0) { disposeRig(g.rig); ghosts.splice(i, 1); } }
-    // I cannot walk through the body
-    const me = ctx.me();
-    if (me.ok && B.dieT <= 0 && B.a !== 'd') {
-      const dx = me.x - B.x, dz = me.z - B.z, d = Math.hypot(dx, dz);
-      if (d < BOSS.bodyR && me.y < ctx.heightAt(B.x, B.z) + 2.3) { const l = d > 0.05 ? d : 1; ctx.pushMe(B.x + (d > 0.05 ? dx / l : 1) * BOSS.bodyR, B.z + (d > 0.05 ? dz / l : 0) * BOSS.bodyR); }
-    }
+    // No push-out: the body is ~9 m overhead and the legs are thin, so I may walk under the belly and between the legs (a punch on a leg still lands).
   }
 
   // ---------- combat from the players ----------
   function hitTest(cx, cz, radius, y) {
     const out = [];
     if (!B.active) return out;
-    if (B.spawnT <= 0 && B.a !== 'd' && B.dieT <= 0 && Math.hypot(cx - B.x, cz - B.z) < BOSS.bodyR + 0.6 + radius && Math.abs(y - ctx.heightAt(B.x, B.z)) < 3.2) out.push({ kind: 'boss', id: 0 });
+    if (B.spawnT <= 0 && B.a !== 'd' && B.dieT <= 0) {
+      if (feet.length) {   // the model is in: a punch lands if it reaches a lower leg (tibia or metatarsus), the part a player can touch
+        const py = y + 0.9; let best = -1, bd = BOSS.legR + radius + 0.35;
+        feet.forEach((f, i) => { const d = Math.min(segDist(cx, py, cz, f.k, f.a), segDist(cx, py, cz, f.a, f.e)); if (d < bd) { bd = d; best = i; } });
+        if (best >= 0) { O.lastFoot = best; out.push({ kind: 'boss', id: 0 }); }
+      } else if (Math.hypot(cx - B.x, cz - B.z) < BOSS.bodyR + 0.6 + radius && Math.abs(y - ctx.heightAt(B.x, B.z)) < 3.2) out.push({ kind: 'boss', id: 0 });
+    }
     for (const m of B.minions) { const v = minVis.get(m.id), px = v ? v.x : m.x, pz = v ? v.z : m.z; if (Math.hypot(cx - px, cz - pz) < 0.45 + radius) out.push({ kind: 'minion', id: m.id }); }
     return out;
   }
@@ -460,7 +496,9 @@ export function createSpiderBoss(ctx) {
       O.hitAt.set(fromId, now);
       B.hp = Math.max(0, B.hp - clamp(amount, 1, 25));
       if (boss) boss.flash = 0.12;
-      ctx.fx.spark(B.x + (Math.random() - 0.5) * 2, ctx.heightAt(B.x, B.z) + 1.6, B.z + (Math.random() - 0.5) * 2);
+      const ft = feet[O.lastFoot] || null;   // the leg the last punch touched (this screen's hit test); otherwise near the body
+      if (ft) ctx.fx.spark(ft.a.x + (Math.random() - 0.5), ft.a.y + 0.3, ft.a.z + (Math.random() - 0.5));
+      else ctx.fx.spark(B.x + (Math.random() - 0.5) * 2, ctx.heightAt(B.x, B.z) + 1.6, B.z + (Math.random() - 0.5) * 2);
       if (B.hp <= 0) { B.a = 'd'; B.dieT = BOSS.dieT; B.ac++; O.act = null; timers.length = 0; B.minions = []; ctx.fx.thump(1); emit('die', { by: fromId }); }
       emit('hp', { hp: B.hp, maxHp: B.maxHp });
       return true;
@@ -481,7 +519,7 @@ export function createSpiderBoss(ctx) {
   function snapshot() {
     if (!B.active || !B.owner) return null;
     return {
-      id: ctx.myId, n: ++B.seq, b: B.born, ep: B.ep, hp: Math.round(B.hp), mh: B.maxHp, x: r2(B.x), z: r2(B.z), r: r2(B.ry), a: B.a, ac: B.ac, sa: r2(B.sa), wt: B.wt,
+      id: ctx.myId, n: ++B.seq, b: B.born, ep: B.ep, hp: Math.round(B.hp), mh: B.maxHp, x: r2(B.x), z: r2(B.z), r: r2(B.ry), a: B.a, ac: B.ac, sa: r2(B.sa), sd: r2(B.sd), wt: B.wt,
       w: B.webs.slice(0, 7).map((w) => [w.id, r2(w.x), r2(w.z), r2(w.age)]),
       m: B.minions.slice(0, 8).map((m) => [m.id, r2(m.x), r2(m.z), r2(m.ry), m.hp, m.a]),
     };
@@ -508,7 +546,7 @@ export function createSpiderBoss(ctx) {
       const adv = ac - R.lastAc; R.lastAc = ac;
       if (adv > 0 && adv < 6 && (d.a === 'sw' || d.a === 'sp' || d.a === 'wb' || d.a === 'sm')) {
         const aim = finite(d.sa, -7, 7) ?? ry, wt = Array.isArray(d.wt) ? d.wt : null;
-        B.sa = aim; B.wt = wt; startAction(d.a, aim, wt, true);
+        B.sa = aim; B.sd = finite(d.sd, 0, 200) ?? 40; B.wt = wt; startAction(d.a, aim, wt, true);
       }
     }
     // webs and minions come as lists (a new id appears, a missing id goes)

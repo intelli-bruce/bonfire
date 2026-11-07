@@ -126,10 +126,10 @@ body.under #uw { opacity: 1; }
 /* boss: toggle button + the HP bar at the top centre */
 #bossBtn { border-color: rgba(255, 90, 70, 0.6); }
 #bossBtn[aria-pressed="true"] { background: rgba(120, 28, 36, 0.9); }
-#bossHp { left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 12px); width: min(520px, calc(100vw - 24px)); pointer-events: none; display: grid; gap: 5px; z-index: 11; }
+#bossHp { left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 12px); width: min(620px, calc(100vw - 24px)); pointer-events: none; display: grid; gap: 5px; z-index: 11; }
 #bossHp .name { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--f-display); font-size: 15px; color: #ffe2bd; text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.7); }
 #bossHp .name small { font-family: var(--f-ui); font-size: 12px; color: var(--mist); }
-#bossHp .track { position: relative; height: 16px; border-radius: 999px; background: rgba(20, 14, 40, 0.78); border: 1px solid rgba(255, 236, 210, 0.3); box-shadow: var(--shadow); overflow: hidden; }
+#bossHp .track { position: relative; height: 18px; border-radius: 999px; background: rgba(20, 14, 40, 0.78); border: 1px solid rgba(255, 236, 210, 0.3); box-shadow: var(--shadow); overflow: hidden; }
 #bossHp .ghost, #bossHp .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; transform-origin: left center; border-radius: 999px; }
 #bossHp .ghost { background: rgba(255, 220, 160, 0.55); transition: transform 0.9s ease-out 0.25s; }
 #bossHp .fill { background: linear-gradient(180deg, #ff6a4a, #c4201e); transition: transform 0.18s ease-out; }
@@ -837,8 +837,16 @@ function setUnderwater(on) {   // the camera is below the surface: emerald haze 
   for (const o of scene.children) if (/^sky-/.test(o.name)) o.visible = !on;   // the sky dome paints the whole background first: under the surface only the water haze shows
   fb.sky.visible = !on;
 }
+let bossCamZ = 0;   // 0..1: how much the camera has pulled back and up for the giant spider (smoothed)
+function bossCamTarget() {   // the boss is ~13 m tall and ~45 m wide: while it is within ~55 m the view widens so the whole body fits next to me
+  if (!SPIDER || !SPIDER.active || SPIDER.view.dying) return 0;
+  const v = SPIDER.view, d = Math.hypot(v.x - me.x, v.z - me.z);
+  return clamp((58 - d) / 22, 0, 1);
+}
 function updateCamera(dt) {
   const k = 1 - Math.exp(-dt * 10);
+  bossCamZ += (bossCamTarget() - bossCamZ) * (1 - Math.exp(-dt * 2.2));
+  const zm = 1 + 2.1 * bossCamZ, camDist = cam.dist * zm;   // zoom factor: up to ~3x of the user's chosen distance
   cam.tx += (me.x - cam.tx) * k; cam.tz += (me.z - cam.tz) * k;
   const st = meRec ? meRec.ctrl.state : null, g = groundY3(me.x, me.z, me.y), swim = !!(st && st.swim === 2), dive = swim ? st.dive : 0;
   const gw = Math.max(g, waterY(me.x, me.z));   // in the air over the sea (a dive off the pier) the view stays above the surface, not the seabed
@@ -850,15 +858,15 @@ function updateCamera(dt) {
   camLift += (lift - camLift) * (1 - Math.exp(-dt * 8));
   const TY = cam.ty + camLift;
   const cp = Math.cos(cam.pitch), dx = Math.sin(cam.yaw) * cp, dy = Math.sin(cam.pitch), dz = Math.cos(cam.yaw) * cp;
-  let allow = cam.dist;
-  for (let d = 0.3; d <= cam.dist + 1e-6; d += 0.25) {   // keep the whole boom above the sand / the planks (+0.3 m)
+  let allow = camDist;
+  for (let d = 0.3; d <= camDist + 1e-6; d += 0.25) {   // keep the whole boom above the sand / the planks (+0.3 m)
     const px = cam.tx + dx * d, pz = cam.tz + dz * d;
     if (TY + dy * d < groundY3(px, pz, me.y) + 0.3) { allow = Math.max(0.8, d - 0.3); break; }
   }
   cam.cur += (allow - cam.cur) * (allow < cam.cur ? Math.min(1, dt * 18) : Math.min(1, dt * 3));
   const d = cam.cur, cx = cam.tx + dx * d, cz = cam.tz + dz * d, gy = groundY3(cx, cz, me.y);
   camera.position.set(cx, Math.max(gy + 0.3, gy < 0.05 && camUnder < 0.5 ? waterY(cx, cz) + 0.35 : -Infinity, TY + dy * d), cz);   // never under the sand; under the sea only while diving
-  camera.lookAt(cam.tx, TY + 0.1 + Math.max(0, -cam.pitch) * 9, cam.tz);
+  camera.lookAt(cam.tx, TY + 0.1 + Math.max(0, -cam.pitch) * 9 + 3.4 * bossCamZ, cam.tz);   // aim a little higher: the giant's head, not just my feet
   if (meRec) meRec.av.root.visible = entered && d > 0.9;
   const wy = waterY(camera.position.x, camera.position.z), under = camera.position.y < wy - (uwOn ? 0.0 : 0.04) && gy < wy;
   setUnderwater(under);
@@ -2223,11 +2231,13 @@ function initSpider(mod) {
 function bossCreate() {
   if (!SPIDER || SPIDER.active || !entered || !meRec) return;
   let spot = null;
-  for (const da of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, Math.PI]) {
-    const a = me.ry + da, x = me.x - Math.sin(a) * 15, z = me.z - Math.cos(a) * 15;
-    if (bossLandOk(x, z)) { spot = { x, z }; break; }
+  // the root: the face ends up ~20 m from me. The body is ~40 m long, so prefer a spot whose ground is fairly level all round (the beach rises into a hill behind)
+  const level = (x, z) => { let lo = 1e9, hi = -1e9; for (const [dx, dz] of [[0, 0], [14, 0], [-14, 0], [0, 14], [0, -14]]) { const h = heightAt(x + dx, z + dz); lo = Math.min(lo, h); hi = Math.max(hi, h); } return hi - lo; };
+  outer: for (const r of [30, 24, 36]) for (const da of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, Math.PI]) {
+    const a = me.ry + da, x = me.x - Math.sin(a) * r, z = me.z - Math.cos(a) * r;
+    if (bossLandOk(x, z) && level(x, z) < 3.2) { spot = { x, z }; break outer; }
   }
-  if (!spot) spot = { x: 0, z: 22 };
+  if (!spot) spot = { x: 0, z: 18 };
   SPIDER.spawn(spot.x, spot.z, Math.atan2(-(me.x - spot.x), -(me.z - spot.z)));
   bossSendNow();
 }
@@ -2250,7 +2260,7 @@ function onBossMessage(key, rec, id, d) {   // sub === 'boss' from a known peer
     const kind = d.t === 'minion' ? 'minion' : d.t === 'boss' ? 'boss' : null, i = num(d.i, 0, 1e9);
     if (!kind || i === null) return;
     const v = SPIDER.view, s = rec.ctrl.state;
-    if (Math.hypot(s.x - v.x, s.z - v.z) > 11) return;   // reach (boss radius + punch reach + lag slack)
+    if (Math.hypot(s.x - v.x, s.z - v.z) > SPIDER.BOSS.hitReach + 4) return;   // reach (leg span + punch reach + lag slack)
     SPIDER.damage(kind, Math.round(i), 10, id);
     return;
   }

@@ -1,9 +1,10 @@
 """
-인면 거미 보스 + 새끼 거미 절차적 모델링·리깅·애니메이션 → glb
+인면 거미 보스 + 새끼 거미 절차적 모델링·리깅·애니메이션 → glb  (귀여운 얼굴 · 거대 크기 · 듬성한 잔털)
 
 실행:  blender -b --factory-startup --python tools/spider/build_spider.py -- <boss|mini|both> [--out bf] [--preview <dir>]
 
 - 순수 bpy/bmesh/mathutils. 외부 에셋 없음(유료·다운로드 없음).
+- 보스는 K=BOSS_K 배(머리 꼭대기 약 12~13 m = 캐릭터 1.5 m 의 8~9배). 새끼는 K=MINI_K.
 - 모델은 +Y(Blender) 가 앞. glb 로 내보내면 three.js 의 -Z 가 앞이다(캐릭터 ry=0 과 같은 방향).
 - 뼈대: root / body / head / jaw / fangL·R / palpL·R / abdomen + 다리 8개 × (coxa, femur, tibia, metatarsus).
 - 다리 포즈는 Blender IK/bake 를 쓰지 않고 파이썬에서 직접 푼다(2링크 IK + 대퇴 고각 탐색) → 뼈별 변환 행렬을 구해 키프레임.
@@ -14,6 +15,8 @@ import bpy, bmesh, math, sys, os, random
 from mathutils import Vector, Matrix, Quaternion, Euler
 
 FPS = 24
+BOSS_K = 3.8      # 보스 배율(원본 0.85 의 약 4.5배)
+MINI_K = 0.16
 
 # ----------------------------------------------------------------------------------------------------------------------
 # 인자
@@ -34,20 +37,21 @@ def lin(h):
     return tuple(((x + 0.055) / 1.055) ** 2.4 if x > 0.04045 else x / 12.92 for x in c)
 
 PALETTE = {   # name: (hex, roughness, metallic, emissive hex or None, emissive strength)
-    'chitin':   ('#4d3468', 0.42, 0.0, None, 0),       # 껍질: 짙은 보라(환경맵 없는 장면에서 검게 죽지 않도록 금속성 0)
-    'chitin2':  ('#5c3b4a', 0.5, 0.0, None, 0),       # 복부 바탕
-    'joint':    ('#c4601f', 0.5, 0.1, '#ff6a1a', 0.25),  # 관절 띠: 주황
-    'fur':      ('#92704a', 0.92, 0.0, None, 0),       # 털
-    'skin':     ('#d6c3ae', 0.58, 0.0, None, 0),       # 얼굴 피부(밀랍 같은 창백함)
-    'skin2':    ('#9a7c78', 0.6, 0.0, None, 0),        # 눈두덩·콧구멍(그늘진 피부)
-    'lip':      ('#7d2d3d', 0.5, 0.0, None, 0),
-    'sclera':   ('#f0e8c0', 0.25, 0.0, None, 0),
-    'iris':     ('#ff6a1a', 0.3, 0.0, '#ff5a10', 2.2),
-    'pupil':    ('#050205', 0.2, 0.0, None, 0),
-    'eye':      ('#600808', 0.15, 0.0, '#ff2020', 1.6),  # 이마의 겹눈: 붉게 빛남
-    'fang':     ('#e3c98a', 0.3, 0.0, None, 0),
-    'mouth':    ('#2a0710', 0.7, 0.0, '#40060c', 0.3),
-    'mark':     ('#c8102e', 0.4, 0.0, '#e0102a', 0.9),   # 등의 모래시계 무늬
+    'chitin':   ('#6b4d9a', 0.5, 0.0, None, 0),        # 껍질: 말랑한 보라(밤 장면에서도 보이도록 밝게, 금속성 0)
+    'chitin2':  ('#8a5b9c', 0.55, 0.0, None, 0),       # 복부 바탕
+    'joint':    ('#e8863a', 0.5, 0.0, '#ff8a2a', 0.2),  # 관절 구: 따뜻한 주황
+    'fur':      ('#d9b27c', 0.9, 0.0, None, 0),        # 잔털: 밝은 살구빛
+    'skin':     ('#ffe6d2', 0.6, 0.0, None, 0),        # 얼굴: 복숭아 크림색
+    'skin2':    ('#e3b9a0', 0.6, 0.0, None, 0),
+    'lip':      ('#8e3a4c', 0.5, 0.0, None, 0),        # 웃는 입선
+    'sclera':   ('#fffaf0', 0.2, 0.0, None, 0),        # 눈 흰자
+    'iris':     ('#b8651c', 0.3, 0.0, '#d9791a', 0.5),  # 홍채: 호박색
+    'pupil':    ('#08040c', 0.15, 0.0, None, 0),
+    'spark':    ('#ffffff', 0.1, 0.0, '#ffffff', 1.2),  # 눈에 비친 반짝임
+    'blush':    ('#ff9db0', 0.8, 0.0, '#ff7f9a', 0.25), # 볼터치
+    'fang':     ('#fff4dc', 0.35, 0.0, None, 0),       # 작은 송곳니
+    'mouth':    ('#3a0b18', 0.7, 0.0, '#40060c', 0.3),
+    'mark':     ('#ff8fb1', 0.45, 0.0, '#ff6f9c', 0.5),  # 등의 분홍 물방울 무늬
 }
 
 def make_materials(names):
@@ -154,8 +158,8 @@ LEN_SCALE = [1.15, 1.0, 0.95, 1.08]
 LF, LT, LM = 2.1, 2.5, 2.9          # 대퇴·경골·중족골
 REACH = [4.5, 4.9, 4.9, 4.6]        # 고관절 끝(coxa 끝) → 발 수평 거리
 COXA = 0.45
-HEAD_C = Vector((0, 1.55, 2.5))      # 얼굴 중심
-HEAD_R = (0.80, 0.74, 0.96)
+HEAD_C = Vector((0, 1.8, 2.45))      # 얼굴 중심
+HEAD_R = (0.98, 0.86, 0.90)         # 폭이 높이보다 넓은 둥근 얼굴
 
 def leg_info(leg):
     i = int(leg[1]) - 1; sg = -1 if leg[0] == 'L' else 1
@@ -187,10 +191,10 @@ class Rig:
             'body': ('root', Vector((0, -0.3, 2.3)) * K, Vector((0, 0.7, 2.3)) * K),
             'head': ('body', Vector((0, 1.0, 2.45)) * K, Vector((0, 1.9, 2.45)) * K),
             'jaw': ('head', (c + Vector((0, -0.15, -0.4))) * K, (c + Vector((0, 0.6, -0.75))) * K),
-            'fangL': ('head', (c + Vector((-0.24, 0.55, -0.45))) * K, (c + Vector((-0.2, 0.72, -1.5))) * K),
-            'fangR': ('head', (c + Vector((0.24, 0.55, -0.45))) * K, (c + Vector((0.2, 0.72, -1.5))) * K),
-            'palpL': ('head', (c + Vector((-0.62, 0.2, -0.3))) * K, (c + Vector((-0.85, 1.1, -1.0))) * K),
-            'palpR': ('head', (c + Vector((0.62, 0.2, -0.3))) * K, (c + Vector((0.85, 1.1, -1.0))) * K),
+            'fangL': ('head', (c + Vector((-0.24, 0.62, -0.50))) * K, (c + Vector((-0.22, 0.70, -0.95))) * K),
+            'fangR': ('head', (c + Vector((0.24, 0.62, -0.50))) * K, (c + Vector((0.22, 0.70, -0.95))) * K),
+            'palpL': ('head', (c + Vector((-0.78, 0.3, -0.5))) * K, (c + Vector((-1.0, 0.8, -0.95))) * K),
+            'palpR': ('head', (c + Vector((0.78, 0.3, -0.5))) * K, (c + Vector((1.0, 0.8, -0.95))) * K),
             'abdomen': ('body', Vector((0, -0.7, 2.45)) * K, Vector((0, -2.6, 2.7)) * K),
         }
         self.Rm = {}   # 뼈 기준 행렬 (Blender 가 만든 뒤 채움)
@@ -409,175 +413,143 @@ ANIMS_BOSS = [('idle', 48, True), ('walk', 24, True), ('swipe', 28, False), ('sp
 ANIMS_MINI = [('idle', 24, True), ('walk', 24, True), ('attack', 28, False), ('die', 36, False)]
 
 # ----------------------------------------------------------------------------------------------------------------------
-# 얼굴 조각
+# 얼굴 조각 — 둥글고 귀여운 얼굴(크고 동그란 눈 · 볼터치 · 웃는 입 · 작은 송곳니)
 # ----------------------------------------------------------------------------------------------------------------------
-def G(x, z, cx, cz, sx, sz): return math.exp(-(((x - cx) / sx) ** 2 + ((z - cz) / sz) ** 2))
-FACE = [   # (cx, cz, sx, sz, amp[m])  정규화 좌표(x/rx, z/rz)
-    (-0.38, 0.12, 0.19, 0.13, -0.13), (0.38, 0.12, 0.19, 0.13, -0.13),       # 눈구멍
-    (-0.38, 0.36, 0.26, 0.075, 0.14), (0.38, 0.36, 0.26, 0.075, 0.14),       # 눈썹뼈
-    (0.0, 0.04, 0.075, 0.26, 0.17),                                           # 콧대
-    (0.0, -0.20, 0.15, 0.115, 0.22),                                          # 코끝
-    (-0.15, -0.25, 0.075, 0.065, 0.10), (0.15, -0.25, 0.075, 0.065, 0.10),   # 콧방울
-    (-0.60, -0.12, 0.21, 0.17, 0.11), (0.60, -0.12, 0.21, 0.17, 0.11),       # 광대
-    (-0.50, -0.45, 0.17, 0.14, -0.07), (0.50, -0.45, 0.17, 0.14, -0.07),     # 볼 패임
-    (0.0, -0.47, 0.27, 0.05, 0.075), (0.0, -0.63, 0.26, 0.055, 0.09),        # 윗입술·아랫입술
-    (0.0, -0.55, 0.32, 0.017, -0.085),                                         # 입 선
-    (0.0, -0.88, 0.22, 0.12, 0.12),                                            # 턱
-    (0.0, 0.64, 0.50, 0.22, 0.05),                                             # 이마
-]
-
-def sculpt_head(b, mat_main, mat_lip, K, detail):
+def sculpt_head(b, K, detail):
     c = HEAD_C * K; rx, ry, rz = (HEAD_R[0] * K, HEAD_R[1] * K, HEAD_R[2] * K)
-    seg, rings = (48, 32) if detail else (14, 9)
+    seg, rings = (40, 28) if detail else (14, 9)
     m = Matrix.Translation(c) @ Matrix.Diagonal((rx, ry, rz, 1.0))
     r = bmesh.ops.create_uvsphere(b.bm, u_segments=seg, v_segments=rings, radius=1.0, matrix=m)
     verts = r['verts']; dl = b.dl
-    b.ao = {}   # 정점별 가짜 AO(눈구멍·입 선·볼 패임이 어둡게) → 정점 색으로 내보냄. 밤 장면에서 얼굴 굴곡이 보이도록
     for v in verts:
         p = v.co - c; nx, ny, nz = p.x / rx, p.y / ry, p.z / rz
-        if detail:
-            fr = smoothstep(0.15, 0.7, ny)
-            d = sum(a * G(nx, nz, cx, cz, sx, sz) for cx, cz, sx, sz, a in FACE) * K * fr
-            v.co.y += d
-            b.ao[v] = max(0.5, min(1.0, 0.97 + 1.4 * d / K))
-            v.co.x = c.x + (v.co.x - c.x) * (1 - 0.30 * smoothstep(0.05, -0.95, nz))   # 아래로 갈수록 좁아지는 턱
+        v.co.x = c.x + (v.co.x - c.x) * (1 - 0.12 * smoothstep(0.05, -0.95, nz))   # 아래로 갈수록 살짝 좁아지는 둥근 턱
         # 턱 가중치: 입 선 아래 앞쪽만
         wj = smoothstep(-0.50, -0.66, nz) * smoothstep(-0.25, 0.30, ny)
         v[dl][b.gi['jaw']] = wj; v[dl][b.gi['head']] = 1.0 - wj
     faces = set()
     for v in verts: faces.update(v.link_faces)
     for f in faces:
-        f.smooth = True
-        # 입술 영역은 입술색
-        cen = f.calc_center_median() - c
-        nx, ny, nz = cen.x / rx, cen.y / ry, cen.z / rz
-        lip = detail and ny > 0.2 and abs(nx) < 0.32 and -0.68 < nz < -0.44
-        shade = detail and ny > 0.2 and (G(abs(nx), nz, 0.38, 0.12, 0.2, 0.14) > 0.45 or G(abs(nx), nz, 0.15, -0.28, 0.07, 0.05) > 0.5)
-        f.material_index = b.mi[mat_lip if lip else ('skin2' if shade else mat_main)]
+        f.smooth = True; f.material_index = b.mi['skin']
     return c, rx, ry, rz
 
 def face_surface_y(c, rx, ry, rz, nx, nz, K):
     return c.y + ry * math.sqrt(max(0.0, 1 - nx * nx - nz * nz))
 
+def hair(b, pos, d, L, r, bone):
+    b.cone(pos, pos + d * L, r, bone, 'fur', sides=4)
+
 def build_boss_mesh(rig, mats, detail=True):
-    K = rig.K; rng = random.Random(7); mini = not detail
+    K = rig.K; rng = random.Random(11)
     b = Builder(rig.names, mats)
     S = lambda v: Vector(v) * K
     sides = 10 if detail else 5
     # -- 흉부·복부 ------------------------------------------------------------------------------------------------
-    b.sphere(S((0, 0.1, 2.35)), (0.95 * K, 1.2 * K, 0.82 * K), 'body', 'chitin', seg=24 if detail else 10, rings=16 if detail else 6)
+    tc, tr = S((0, 0.1, 2.35)), (0.95 * K, 1.2 * K, 0.82 * K)
+    b.sphere(tc, tr, 'body', 'chitin', seg=24 if detail else 10, rings=16 if detail else 6)
     b.sphere(S((0, -0.2, 2.75)), (0.55 * K, 0.7 * K, 0.4 * K), 'body', 'chitin', seg=16 if detail else 8, rings=10 if detail else 5)   # 등딱지 융기
     # 복부
     ac, ar = S((0, -2.4, 2.65)), (1.3 * K, 1.95 * K, 1.3 * K)
     seg_a, rings_a = (40, 26) if detail else (12, 8)
     ab = bmesh.ops.create_uvsphere(b.bm, u_segments=seg_a, v_segments=rings_a, radius=1.0, matrix=Matrix.Translation(ac) @ Matrix.Diagonal((ar[0], ar[1], ar[2], 1.0)))['verts']
     b.tag(ab, 'abdomen', 'chitin2')
-    # 모래시계 무늬 (등 쪽 면)
+    # 등 쪽 분홍 물방울 무늬 5개(표면 법선에 맞춘 납작한 타원)
     if detail:
-        for v in ab:
-            for f in v.link_faces:
-                cen = f.calc_center_median() - ac
-                nx, ny, nz = cen.x / ar[0], cen.y / ar[1], cen.z / ar[2]
-                if nz > 0.45 and abs(ny) < 0.62 and abs(nx) < 0.14 + 0.55 * abs(ny):
-                    f.material_index = b.mi['mark']
-    # 복부 털
-    n_hair = 750 if detail else 0
-    for _ in range(n_hair):
-        th = rng.uniform(0, math.pi); ph = rng.uniform(0, 2 * math.pi)
-        nrm = Vector((math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph) * 1.0, math.cos(th)))
-        if nrm.z < -0.35: continue
-        pos = ac + Vector((nrm.x * ar[0], nrm.y * ar[1], nrm.z * ar[2])) * 0.985
-        d = (nrm + Vector((0, -0.55, 0.15))).normalized()
-        L = rng.uniform(0.2, 0.42) * K
-        b.cone(pos, pos + d * L, 0.032 * K, 'abdomen', 'fur', sides=4)
-    # 방적돌기
+        for nx_, ny_, rr in ((0.0, 0.02, 0.27), (-0.34, 0.40, 0.19), (0.34, 0.40, 0.19), (-0.38, -0.40, 0.2), (0.38, -0.40, 0.2)):
+            nz_ = math.sqrt(max(0.0, 1 - nx_ * nx_ - ny_ * ny_))
+            n = Vector((nx_ / ar[0], ny_ / ar[1], nz_ / ar[2])).normalized()
+            pos = ac + Vector((nx_ * ar[0], ny_ * ar[1], nz_ * ar[2])) * 0.995
+            b.sphere(pos, (rr * ar[0], 0.05 * K, rr * ar[0]), 'abdomen', 'mark', seg=16, rings=8, rot=Vector((0, 1, 0)).rotation_difference(n).to_matrix())
+    # 잔털: 복부·흉부에 듬성듬성(성능·인상 모두 가볍게)
     if detail:
-        for x in (-0.18, 0.0, 0.18):
-            b.cone(S((x, -4.25, 2.45)), S((x * 1.4, -4.85, 2.35)), 0.11 * K, 'abdomen', 'chitin', sides=6)
-    # -- 머리(사람 얼굴) -------------------------------------------------------------------------------------------
-    c, rx, ry, rz = sculpt_head(b, 'skin', 'lip', K, detail)
+        for _ in range(48):                     # 복부
+            th = rng.uniform(0, math.pi * 0.62); ph = rng.uniform(0, 2 * math.pi)
+            nrm = Vector((math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), math.cos(th)))
+            pos = ac + Vector((nrm.x * ar[0], nrm.y * ar[1], nrm.z * ar[2])) * 0.99
+            hair(b, pos, (nrm + Vector((0, -0.35, 0.1))).normalized(), rng.uniform(0.10, 0.17) * K, 0.026 * K, 'abdomen')
+        for _ in range(16):                     # 흉부(앞쪽은 머리가 가리므로 제외)
+            th = rng.uniform(0, math.pi * 0.5); ph = rng.uniform(0, 2 * math.pi)
+            nrm = Vector((math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), math.cos(th)))
+            if nrm.y > 0.55: continue
+            pos = tc + Vector((nrm.x * tr[0], nrm.y * tr[1], nrm.z * tr[2])) * 0.99
+            hair(b, pos, (nrm + Vector((0, -0.2, 0.1))).normalized(), rng.uniform(0.09, 0.15) * K, 0.024 * K, 'body')
+    # -- 머리(둥근 얼굴) --------------------------------------------------------------------------------------------
+    c, rx, ry, rz = sculpt_head(b, K, detail)
     def fp(nx, nz, off=0.0):   # 얼굴 좌표 → 3D (표면)
         return Vector((c.x + nx * rx, face_surface_y(c, rx, ry, rz, nx, nz, K) + off, c.z + nz * rz))
-    # 입 속
+    def seg_(hi, lo): return hi if detail else lo
+    # 크고 동그란 눈(흰자 + 호박색 홍채 + 큰 눈동자 + 반짝임 두 점)
+    for sg in (-1, 1):
+        ex, ez = 0.46, 0.14
+        ec = Vector((c.x + sg * ex * rx, c.y + ry * math.sqrt(max(0.0, 1 - ex * ex - ez * ez)) - 0.16 * K, c.z + ez * rz))
+        R_ = 0.31 * K
+        b.sphere(ec, (R_, R_, R_), 'head', 'sclera', seg=seg_(22, 10), rings=seg_(16, 7))
+        b.sphere(ec + Vector((0, 0.255 * K, 0)), (0.205 * K, 0.075 * K, 0.205 * K), 'head', 'iris', seg=seg_(18, 8), rings=seg_(10, 5))
+        b.sphere(ec + Vector((0, 0.30 * K, 0)), (0.125 * K, 0.05 * K, 0.125 * K), 'head', 'pupil', seg=seg_(14, 6), rings=seg_(8, 4))
+        b.sphere(ec + Vector((-0.065 * K, 0.335 * K, 0.08 * K)), (0.055 * K,) * 3, 'head', 'spark', seg=seg_(10, 6), rings=seg_(7, 4))
+        if detail:
+            b.sphere(ec + Vector((0.07 * K, 0.335 * K, -0.075 * K)), (0.03 * K,) * 3, 'head', 'spark', seg=8, rings=6)
     if detail:
-        b.sphere(Vector((c.x, c.y + ry * 0.62, c.z - 0.545 * rz)), (0.20 * K, 0.18 * K, 0.075 * K), 'head', 'mouth', seg=14, rings=8)
-        # 이빨
-        for k in range(11):
-            nx = -0.26 + 0.052 * k
-            p = fp(nx, -0.535, 0.015 * K)
-            b.cone(p + Vector((0, 0, 0.0)), p + Vector((0, 0.01 * K, -0.075 * K)), 0.016 * K, 'head', 'fang', sides=4)
-        # 사람 눈
+        # 볼터치(표면 법선에 맞춘 납작한 타원)
         for sg in (-1, 1):
-            ec = Vector((c.x + sg * 0.40 * rx, c.y + ry * 0.76 - 0.07 * K, c.z + 0.12 * rz))
-            ec = Vector((c.x + sg * 0.38 * rx, c.y + ry * math.sqrt(max(0, 1 - 0.38 ** 2 - 0.12 ** 2)) - 0.13 * K - 0.02 * K, ec.z))
-            b.sphere(ec, (0.19 * K,) * 3, 'head', 'sclera', seg=18, rings=12)
-            b.sphere(ec + Vector((0, 0.125 * K, 0.0)), (0.125 * K, 0.10 * K, 0.125 * K), 'head', 'iris', seg=16, rings=10)
-            b.sphere(ec + Vector((0, 0.21 * K, 0.0)), (0.034 * K, 0.03 * K, 0.105 * K), 'head', 'pupil', seg=8, rings=6)
-        # 이마·관자놀이의 겹눈 6개
-        for nx, nz, r_ in ((-0.20, 0.68, 0.075), (0.20, 0.68, 0.075), (-0.50, 0.62, 0.09), (0.50, 0.62, 0.09), (-0.76, 0.34, 0.07), (0.76, 0.34, 0.07)):
-            p = fp(nx, nz, -0.01 * K)
-            b.sphere(p, (r_ * K,) * 3, 'head', 'eye', seg=10, rings=7)
-        # 머리 뒤 갈기
-        for _ in range(70):
-            th = rng.uniform(math.pi * 0.05, math.pi * 0.85); ph = rng.uniform(math.pi * 0.55, math.pi * 1.45)
-            nrm = Vector((math.sin(th) * math.cos(ph) * -1, -abs(math.sin(th) * math.sin(ph)) - 0.2, math.cos(th)))
-            nrm = Vector((math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), math.cos(th)))
-            if nrm.y > -0.1: nrm.y = -nrm.y - 0.1
-            nrm.normalize()
-            pos = c + Vector((nrm.x * rx, nrm.y * ry, nrm.z * rz)) * 0.97
-            d = (nrm + Vector((0, -0.3, 0.2))).normalized()
-            b.cone(pos, pos + d * rng.uniform(0.25, 0.55) * K, 0.03 * K, 'head', 'fur', sides=4)
-    else:
-        for sg in (-1, 1):
-            b.sphere(fp(sg * 0.36, 0.14, 0.0), (0.12 * K,) * 3, 'head', 'iris', seg=8, rings=6)
-        for nx, nz in ((-0.22, 0.60), (0.22, 0.60)):
-            b.sphere(fp(nx, nz, 0.0), (0.07 * K,) * 3, 'head', 'eye', seg=6, rings=4)
-    # 엄니 + 큰 아래턱 받침
+            nx_, nz_ = sg * 0.68, -0.20
+            ny_ = math.sqrt(max(0.0, 1 - nx_ * nx_ - nz_ * nz_))
+            n = Vector((nx_ / rx, ny_ / ry, nz_ / rz)).normalized()
+            pos = fp(nx_, nz_, -0.012 * K)
+            b.sphere(pos, (0.19 * K, 0.04 * K, 0.12 * K), 'head', 'blush', seg=14, rings=8, rot=Vector((0, 1, 0)).rotation_difference(n).to_matrix())
+        # 웃는 입선(양 끝이 올라간 곡선) + 입 속(턱이 벌어질 때만 보임)
+        pts, rs = [], []
+        for k in range(9):
+            nx_ = -0.24 + 0.06 * k
+            nz_ = -0.43 - 0.085 * (1 - (nx_ / 0.24) ** 2)
+            pts.append(fp(nx_, nz_, 0.006 * K)); rs.append(0.024 * K)
+        b.tube(pts, rs, 'head', 'lip', sides=5)
+        b.sphere(Vector((c.x, c.y + ry * 0.50, c.z - 0.50 * rz)), (0.30 * K, 0.19 * K, 0.085 * K), 'head', 'mouth', seg=14, rings=8)
+        # 머리 위 삐죽 털 세 가닥
+        for dx, L in ((-0.35, 0.22), (0.0, 0.32), (0.35, 0.22)):
+            pos = c + Vector((dx * rx * 0.5, -0.05 * ry, rz * 0.985))
+            hair(b, pos, Vector((dx * 0.9, -0.15, 1.0)).normalized(), L * K, 0.03 * K, 'head')
+    # 작은 송곳니 + 볼 옆 작은 더듬이 손
     for sg, bone in ((-1, 'fangL'), (1, 'fangR')):
-        base = fp(sg * 0.30, -0.46, -0.02 * K) + Vector((0, 0.05 * K, -0.02 * K))
-        b.sphere(base, (0.13 * K, 0.12 * K, 0.12 * K), bone, 'chitin', seg=10 if detail else 6, rings=7 if detail else 4)
-        pts = [base + Vector((0, 0, 0)), base + Vector((-sg * 0.01, 0.08, -0.4)) * K, base + Vector((-sg * 0.05, 0.15, -0.8)) * K, base + Vector((-sg * 0.13, 0.17, -1.12)) * K]
-        b.tube(pts, [0.095 * K, 0.07 * K, 0.04 * K, 0.008 * K], bone, 'fang', sides=8 if detail else 5)
+        base = fp(sg * 0.24, -0.50, -0.012 * K)
+        pts = [base, base + Vector((-sg * 0.005, 0.035, -0.20)) * K, base + Vector((-sg * 0.01, 0.06, -0.38)) * K]
+        b.tube(pts, [0.075 * K, 0.045 * K, 0.006 * K], bone, 'fang', sides=seg_(8, 5))
         pbone = 'palpL' if sg < 0 else 'palpR'
-        a = c + Vector((sg * 0.62, 0.2, -0.3)) * K
-        pp = [a, a + Vector((sg * 0.12, 0.35, -0.3)) * K, a + Vector((sg * 0.22, 0.72, -0.62)) * K]
-        b.tube(pp, [0.1 * K, 0.085 * K, 0.06 * K], pbone, 'chitin', sides=sides)
-        b.sphere(pp[-1] + Vector((0, 0.02, -0.02)) * K, (0.11 * K, 0.14 * K, 0.11 * K), pbone, 'chitin2', seg=10 if detail else 6, rings=7 if detail else 4)
+        a = c + Vector((sg * 0.78, 0.3, -0.5)) * K
+        pp = [a, a + Vector((sg * 0.10, 0.25, -0.22)) * K, a + Vector((sg * 0.18, 0.50, -0.44)) * K]
+        b.tube(pp, [0.11 * K, 0.095 * K, 0.075 * K], pbone, 'chitin', sides=sides)
+        b.sphere(pp[-1] + Vector((0, 0.03, -0.02)) * K, (0.13 * K, 0.15 * K, 0.13 * K), pbone, 'chitin2', seg=seg_(12, 6), rings=seg_(8, 4))
     # -- 다리 -------------------------------------------------------------------------------------------------------
     for leg in LEGS:
         h0, h1, kk, k2, t = rig.rest_pts[leg]
         i, sg, d_out = leg_info(leg)
-        # coxa: 굵은 관절구
-        k_ = K * (1.0 if mini else 1.3)   # 보스는 다리를 굵게(멀리서도 보이도록)
+        k_ = K * 1.15   # 굵고 둥글게(멀리서도 보이도록)
         b.sphere(h0, (0.2 * k_, 0.2 * k_, 0.2 * k_), f'{leg}_c', 'chitin', seg=10 if detail else 6, rings=7 if detail else 4)
         b.tube([h0, h1], [0.17 * k_, 0.15 * k_], f'{leg}_c', 'chitin', sides=sides)
-        # femur: 가운데가 불룩한 마디
-        def seg_pts(a, c_, rs, bone, band):
+        def seg_pts(a, c_, rs, bone):
             n = len(rs)
             pts = [a + (c_ - a) * (j / (n - 1)) for j in range(n)]
             b.tube(pts, rs, bone, 'chitin', sides=sides)
             return pts
-        seg_pts(h1, kk, [0.14 * k_, 0.17 * k_, 0.19 * k_, 0.16 * k_, 0.13 * k_] if detail else [0.14 * k_, 0.18 * k_, 0.13 * k_], f'{leg}_f', False)
+        seg_pts(h1, kk, [0.14 * k_, 0.17 * k_, 0.19 * k_, 0.16 * k_, 0.13 * k_] if detail else [0.14 * k_, 0.18 * k_, 0.13 * k_], f'{leg}_f')
         b.sphere(kk, (0.2 * k_,) * 3, f'{leg}_f', 'joint', seg=10 if detail else 6, rings=7 if detail else 4)                    # 무릎 구
-        seg_pts(kk, k2, [0.12 * k_, 0.15 * k_, 0.16 * k_, 0.14 * k_, 0.11 * k_] if detail else [0.12 * k_, 0.16 * k_, 0.11 * k_], f'{leg}_t', False)
+        seg_pts(kk, k2, [0.12 * k_, 0.15 * k_, 0.16 * k_, 0.14 * k_, 0.11 * k_] if detail else [0.12 * k_, 0.16 * k_, 0.11 * k_], f'{leg}_t')
         b.sphere(k2, (0.165 * k_,) * 3, f'{leg}_t', 'joint', seg=10 if detail else 6, rings=7 if detail else 4)
-        seg_pts(k2, t, [0.11 * k_, 0.115 * k_, 0.1 * k_, 0.07 * k_, 0.04 * k_, 0.012 * k_] if detail else [0.11 * k_, 0.07 * k_, 0.012 * k_], f'{leg}_m', False)
-        # 털(가시)
+        seg_pts(k2, t, [0.11 * k_, 0.115 * k_, 0.1 * k_, 0.07 * k_, 0.04 * k_, 0.012 * k_] if detail else [0.11 * k_, 0.07 * k_, 0.012 * k_], f'{leg}_m')
+        # 잔털: 마디마다 두세 가닥만
         if detail:
             for (a, c_, bone) in ((h1, kk, f'{leg}_f'), (kk, k2, f'{leg}_t'), (k2, t, f'{leg}_m')):
                 ax = (c_ - a); L = ax.length; axn = ax.normalized(); u, w = perp_basis(axn)
-                for _ in range(16):
-                    tt = rng.uniform(0.1, 0.9); ang = rng.uniform(0, 2 * math.pi)
-                    rad_ = (0.15 if bone.endswith('_f') else 0.14 if bone.endswith('_t') else 0.09 * (1 - tt * 0.6)) * k_
+                for _ in range(3):
+                    tt = rng.uniform(0.15, 0.85); ang = rng.uniform(0, 2 * math.pi)
+                    rad_ = (0.17 if bone.endswith('_f') else 0.15 if bone.endswith('_t') else 0.09 * (1 - tt * 0.6)) * k_
                     dirp = (u * math.cos(ang) + w * math.sin(ang))
                     p0 = a + axn * (L * tt) + dirp * rad_ * 0.9
-                    b.cone(p0, p0 + (dirp + axn * 0.35).normalized() * rng.uniform(0.18, 0.32) * k_, 0.026 * k_, bone, 'fur', sides=4)
-    # 정점 색(COLOR_0): 머리 정점은 AO, 나머지는 흰색
+                    hair(b, p0, (dirp + axn * 0.4).normalized(), rng.uniform(0.10, 0.17) * k_, 0.026 * k_, bone)
+    # 정점 색(COLOR_0): 전부 흰색(그림자 없음)
     cl = b.bm.loops.layers.color.new('Col')
     for f in b.bm.faces:
-        for lp in f.loops:
-            a = b.ao.get(lp.vert, 1.0) if hasattr(b, 'ao') else 1.0
-            lp[cl] = (a, a, a, 1.0)
+        for lp in f.loops: lp[cl] = (1.0, 1.0, 1.0, 1.0)
     return b
 
 def build_mini_mesh(rig, mats):
@@ -593,11 +565,11 @@ def reset_scene():
 
 def build(kind, out_dir, prev_dir):
     mini = kind == 'mini'
-    K = 0.14 if mini else 0.85
+    K = MINI_K if mini else BOSS_K
     reset_scene()
     scene = bpy.context.scene; scene.render.fps = FPS
     rig = Rig(K, mini)
-    mat_names = ['chitin', 'chitin2', 'joint', 'fur', 'skin', 'skin2', 'lip', 'sclera', 'iris', 'pupil', 'eye', 'fang', 'mouth', 'mark']
+    mat_names = ['chitin', 'chitin2', 'joint', 'fur', 'skin', 'lip', 'sclera', 'iris', 'pupil', 'spark', 'blush', 'fang', 'mouth', 'mark']
     mats = make_materials(mat_names)
 
     # 1) 뼈대 (휴식 자세 = idle 0프레임)
@@ -619,6 +591,8 @@ def build(kind, out_dir, prev_dir):
         h0, h1, kk, k2, t = rig.rest_pts[leg]
         add(f'{leg}_c', h0, h1, 'body'); add(f'{leg}_f', h1, kk, f'{leg}_c'); add(f'{leg}_t', kk, k2, f'{leg}_f'); add(f'{leg}_m', k2, t, f'{leg}_t')
         rig.parent_of[f'{leg}_c'] = 'body'; rig.parent_of[f'{leg}_f'] = f'{leg}_c'; rig.parent_of[f'{leg}_t'] = f'{leg}_f'; rig.parent_of[f'{leg}_m'] = f'{leg}_t'
+        # 발끝 표지 뼈(`{leg}_e`): 가중치·키프레임 없이 중족골 끝에 붙어 있어 게임이 발 위치(타격·밀어냄 판정)를 읽는다
+        add(f'{leg}_e', t, t + (t - k2).normalized() * 0.05 * K, f'{leg}_m')
     bpy.ops.object.mode_set(mode='OBJECT')
     rig.bone_rest = {}
     for n in rig.names:
@@ -708,7 +682,7 @@ def render_previews(kind, rig, arm, obj, out):
     shots = [('front', 'idle', 0, (0, 14, 3.2), (0, 0, 2.2), 38), ('side', 'idle', 0, (13, -1.5, 3.6), (0, -0.8, 2.2), 38), ('top', 'idle', 0, (0.01, -1, 17), (0, -0.5, 0), 34),
              ('swipe', 'swipe', 13, (-9, 12, 4.5), (0, 2.5, 2.4), 40), ('spit', 'spit', 15, (7, 11, 2.8), (0, 1.5, 2.4), 40), ('summon', 'summon', 30, (0, 13, 3.4), (0, 0, 3.4), 38),
              ('walk', 'walk', 6, (11, 6, 3.6), (0, 0, 2.0), 38), ('die', 'die', 36, (8, 8, 3.8), (0, 0, 1.2), 38),
-             ('face', 'idle', 0, (0.0, 4.6, 2.6), (0, 1.9, 2.4), 36), ('face2', 'idle', 0, (1.6, 4.3, 2.5), (0, 1.9, 2.3), 36), ('face_open', 'spit', 15, (1.8, 4.7, 2.2), (0, 1.6, 2.2), 36)]
+             ('face', 'idle', 0, (0.0, 6.2, 2.6), (0, 2.2, 2.45), 36), ('face2', 'idle', 0, (2.5, 5.8, 2.8), (0, 2.2, 2.35), 36), ('face_open', 'spit', 15, (2.3, 6.0, 2.0), (0, 2.0, 2.1), 36)]
     for (nm, an, fr, cp, tp, lens) in shots:
         st = anim_state(rig, an, fr); P = rig.eval_pose(st); Bm = rig.basis(P)
         for bn_, mtx in Bm.items(): arm.pose.bones[bn_].matrix_basis = mtx
