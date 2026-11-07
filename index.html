@@ -2347,9 +2347,11 @@ document.body.classList.toggle('coarse', coarse);
   function buildHairRow() {
     const host = $('hairs'); host.textContent = ''; rows.hairs = [];
     AP.hairsFor(myAp.g).forEach((h) => mkChip(host, h.name, () => myAp.h === h.i, () => { myAp.h = h.i; }));
+    // clothes are per gender too (a man gets no skirt / dress); a one-piece greys out the bottoms row
+    const th = $('tops'), bh = $('bottoms'); th.textContent = ''; bh.textContent = ''; rows.tops = []; rows.bottoms = [];
+    AP.topsFor(myAp.g).forEach((t) => mkChip(th, t.name, () => myAp.t === t.i, () => { myAp.t = t.i; }));
+    AP.bottomsFor(myAp.g).forEach((t) => mkChip(bh, t.name, () => myAp.b === t.i && !AP.TOPS[myAp.t].dress, () => { myAp.b = t.i; if (AP.TOPS[myAp.t].dress) myAp.t = 0; }));
   }
-  AP.TOPS.forEach((t, i) => mkChip($('tops'), t.name, () => myAp.t === i, () => { myAp.t = i; }));
-  AP.BOTTOMS.forEach((t, i) => mkChip($('bottoms'), t.name, () => myAp.b === i, () => { myAp.b = i; }));
   AP.SHOES.forEach((t, i) => mkChip($('shoes'), t.name, () => myAp.s === i, () => { myAp.s = i; }));
   AP.PALETTE_KEYS.forEach((k, ci) => AP.PALETTES[k].forEach((c, i) => mkSwatch($('c-' + k), c, () => myAp.c[ci] === i, () => { myAp.c[ci] = i; })));
   buildHairRow();

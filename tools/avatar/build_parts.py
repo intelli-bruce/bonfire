@@ -19,6 +19,8 @@ TOP_CELL = (2, 2)
 BOTTOM_CELL = (2, 5)
 SHOE_CELL = (2, 3)
 DARK_CELL = (3, 0)
+TRIM_CELL = (3, 1)     # 흰색 고정(산타 털·셔츠 앞판) — JS ROLE.TRIM
+GOLD_CELL = (3, 2)     # 금색 고정(버클) — JS ROLE.ACCENT
 
 def G(x, y, z):
     """모델 좌표(x 오른쪽, y 위, z 앞) → Blender(Z 위, -Y 앞)."""
@@ -99,15 +101,16 @@ def cap(p, top=0.08, back_low=0.40, side_low=0.54, thick=0.035):
     """윗면·뒤·옆머리: 이마(y0.51 눈 위)까지 내려오는 앞머리는 윗면이 앞쪽 z0.175 까지 덮는다."""
     p.box((0, 0.665, -0.004), (0.355, top, 0.345), 0.02)   # 앞은 얼굴(z0.16)보다 0.008 만 튀어나와 모자챙처럼 보이지 않게
     hb = 0.65 - back_low
-    p.box((0, back_low + hb / 2, -0.1675), (0.355, hb, thick), 0.014)
+    bv = min(0.014, thick * 0.35)   # a bevel wider than half the shell folds it inside out (see-through hair)
+    p.box((0, back_low + hb / 2, -0.16 - thick / 2), (0.355, hb, thick), bv)
     sh = 0.655 - side_low
     for sx in (1, -1):
-        p.box((sx * 0.1675, side_low + sh / 2, -0.01), (thick, sh, 0.33), 0.012)
+        p.box((sx * (0.16 + thick / 2), side_low + sh / 2, -0.01), (thick, sh, 0.33), bv)
 
 def build_hairs(col):
     out = []
     # 짧게 깎은
-    p = Part('hair_crop', HAIR_CELL); cap(p, top=0.055, back_low=0.50, side_low=0.58, thick=0.03); out.append(p.build(col))
+    p = Part('hair_crop', HAIR_CELL); cap(p, top=0.055, back_low=0.42, side_low=0.50, thick=0.03); out.append(p.build(col))
     # 단발: 턱선 길이, 옆으로 뺨을 가림
     p = Part('hair_bob', HAIR_CELL); cap(p, back_low=0.37, side_low=0.40)
     for sx in (1, -1): p.box((sx * 0.1725, 0.52, 0.04), (0.035, 0.26, 0.16), 0.012)
@@ -134,7 +137,7 @@ def build_hairs(col):
         p.box((sx * 0.262, 0.30, -0.04), (0.08, 0.07, 0.09), 0.02, rot=(0, 0, -sx * 8))
     out.append(p.build(col))
     # 뾰족 머리
-    p = Part('hair_spiky', HAIR_CELL); cap(p, top=0.06, back_low=0.50, side_low=0.58, thick=0.03)
+    p = Part('hair_spiky', HAIR_CELL); cap(p, top=0.06, back_low=0.42, side_low=0.50, thick=0.03)
     for (x, z, tx, tz, h) in ((0, 0.0, 0, 0, 0.17), (0.095, 0.05, 14, -14, 0.14), (-0.095, 0.05, 14, 14, 0.14), (0.09, -0.09, -14, -12, 0.13), (-0.09, -0.09, -14, 12, 0.13), (0, 0.11, 22, 0, 0.12)):
         p.cone((x, 0.69, z), 0.07, 0.008, h, 4, rot=(tx, 0, tz))
     out.append(p.build(col))
@@ -143,10 +146,23 @@ def build_hairs(col):
     p.ellipsoid((0, 0.605, -0.055), (0.265, 0.235, 0.225), 2)
     out.append(p.build(col))
     # 모히칸
-    p = Part('hair_mohawk', HAIR_CELL); cap(p, top=0.04, back_low=0.52, side_low=0.60, thick=0.025)
+    p = Part('hair_mohawk', HAIR_CELL); cap(p, top=0.04, back_low=0.42, side_low=0.52, thick=0.026)
     p.box((0, 0.735, -0.015), (0.06, 0.13, 0.30), 0.022)
     p.box((0, 0.78, 0.07), (0.05, 0.09, 0.10), 0.02)
     p.box((0, 0.745, -0.17), (0.05, 0.12, 0.07), 0.02, rot=(18, 0, 0))
+    out.append(p.build(col))
+    # 투블럭: 옆·뒤는 아주 짧게(얇은 껍질), 윗머리는 두툼하게 얹어 앞으로 살짝 내림
+    p = Part('hair_twoblock', HAIR_CELL); cap(p, top=0.03, back_low=0.40, side_low=0.46, thick=0.024)
+    p.box((0, 0.705, -0.01), (0.33, 0.085, 0.34), 0.03)
+    p.box((0, 0.665, 0.165), (0.28, 0.05, 0.03), 0.012, rot=(12, 0, 0))     # 앞머리 끝
+    out.append(p.build(col))
+    # 웨이브: 어깨 아래까지 내려오는 물결(뒤·옆을 굵은 덩어리로 층층이)
+    p = Part('hair_wave', HAIR_CELL); cap(p, back_low=0.30, side_low=0.40)
+    for i, y in enumerate((0.50, 0.40, 0.30, 0.22)):
+        dz = 0.012 if i % 2 else -0.008
+        p.ellipsoid((0, y, -0.19 + dz), (0.20 - i * 0.008, 0.065, 0.045), 1)
+        for sx in (1, -1):
+            p.ellipsoid((sx * (0.182 + (0.012 if i % 2 else 0)), y + 0.03, 0.0), (0.04, 0.065, 0.11), 1)
     out.append(p.build(col))
     return out
 
@@ -162,14 +178,58 @@ def build_tops(col):
     p.box((0, 0.215, 0.087), (0.15, 0.07, 0.022), 0.01)                        # 배 앞 주머니
     for sx in (1, -1): p.box((sx * 0.032, 0.285, 0.088), (0.014, 0.075, 0.014), 0.005, cell=DARK_CELL)   # 모자 끈
     out.append(p.build(col))
+    # 코트: 몸통을 한 겹 감싸는 상자(맨살·몸통이 안 비침) + 무릎 위까지 내려오는 닫힌 자락 + 깃 + 단추 두 줄
     p = Part('top_coat', TOP_CELL)
-    p.box((0, 0.125, -0.135), (0.32, 0.14, 0.075), 0.02)                       # 코트 뒤 자락
+    p.box((0, 0.262, -0.029), (0.282, 0.19, 0.244), 0.016)                     # 몸판(몸통 x±0.126, z-0.138~0.08 을 덮음)
+    p.box((0, 0.118, -0.165), (0.33, 0.13, 0.03), 0.012)                       # 뒤 자락
     for sx in (1, -1):
-        p.box((sx * 0.148, 0.125, -0.03), (0.05, 0.14, 0.20), 0.02)             # 옆 자락(앞은 열림)
-        p.box((sx * 0.115, 0.335, 0.075), (0.06, 0.075, 0.035), 0.012, rot=(-8, 0, sx * 14))   # 앞 깃
-        p.box((sx * 0.128, 0.335, -0.03), (0.05, 0.06, 0.22), 0.018)
-    p.box((0, 0.35, -0.125), (0.28, 0.07, 0.07), 0.02)                         # 뒷깃
-    for yy in (0.27, 0.215): p.box((0, yy, 0.088), (0.03, 0.03, 0.014), 0.006, cell=DARK_CELL)   # 단추
+        p.box((sx * 0.158, 0.118, -0.03), (0.03, 0.13, 0.28), 0.012)            # 옆 자락
+        p.box((sx * 0.078, 0.118, 0.106), (0.15, 0.13, 0.03), 0.012)            # 앞 자락(가운데서 겹침)
+        p.box((sx * 0.06, 0.315, 0.096), (0.06, 0.07, 0.022), 0.008, rot=(0, 0, sx * 28))   # 앞 깃(라펠)
+    p.box((0, 0.36, -0.12), (0.27, 0.05, 0.06), 0.015)                         # 뒷깃
+    for yy in (0.27, 0.22, 0.15):
+        for sx in (1, -1): p.box((sx * 0.035, yy, 0.098), (0.022, 0.022, 0.012), 0.005, cell=DARK_CELL)   # 단추 두 줄
+    p.box((0, 0.195, 0.0), (0.29, 0.025, 0.258), 0.006, cell=DARK_CELL)        # 허리띠
+    out.append(p.build(col))
+    # 셔츠: 칼라 + 단추 여밈선
+    p = Part('top_shirt', TOP_CELL)
+    for sx in (1, -1): p.box((sx * 0.045, 0.33, 0.088), (0.075, 0.04, 0.02), 0.008, rot=(0, 0, -sx * 22))
+    p.box((0, 0.345, -0.03), (0.21, 0.035, 0.2), 0.01)                         # 목 둘레 깃
+    p.box((0, 0.255, 0.083), (0.012, 0.15, 0.008), 0.003, cell=DARK_CELL)      # 여밈선
+    for yy in (0.29, 0.245, 0.20): p.box((0, yy, 0.088), (0.016, 0.016, 0.008), 0.004, cell=TRIM_CELL)
+    p.box((0, 0.183, -0.029), (0.262, 0.018, 0.228), 0.004, cell=DARK_CELL)    # 벨트
+    out.append(p.build(col))
+    # 정장: 재킷 몸판 + 라펠 + 흰 셔츠 앞판 + 넥타이(짙은색)
+    p = Part('top_suit', TOP_CELL)
+    p.box((0, 0.262, -0.029), (0.276, 0.19, 0.238), 0.014)
+    p.box((0, 0.27, 0.091), (0.075, 0.13, 0.006), 0.002, cell=TRIM_CELL)       # 셔츠 앞판(V)
+    p.box((0, 0.265, 0.096), (0.022, 0.12, 0.008), 0.003, cell=DARK_CELL)      # 넥타이
+    p.box((0, 0.335, 0.097), (0.03, 0.022, 0.01), 0.004, cell=DARK_CELL)       # 매듭
+    for sx in (1, -1): p.box((sx * 0.055, 0.29, 0.096), (0.045, 0.11, 0.012), 0.004, rot=(0, 0, sx * 14))   # 라펠
+    p.box((0, 0.165, -0.029), (0.282, 0.04, 0.244), 0.01)                      # 재킷 밑단
+    for yy in (0.215, 0.185): p.box((0.0, yy, 0.1), (0.018, 0.018, 0.008), 0.004, cell=DARK_CELL)
+    out.append(p.build(col))
+    # 패딩: 몸통을 감싼 누빔 세 겹 + 높은 깃
+    p = Part('top_puffer', TOP_CELL)
+    for i, yy in enumerate((0.205, 0.26, 0.315)):
+        p.box((0, yy, -0.029), (0.30, 0.062, 0.262), 0.026)
+    p.box((0, 0.36, -0.035), (0.24, 0.05, 0.22), 0.02)                         # 깃
+    p.box((0, 0.26, 0.105), (0.012, 0.17, 0.008), 0.003, cell=DARK_CELL)       # 지퍼
+    out.append(p.build(col))
+    # 산타 옷: 흰 털 밑단·깃·여밈 + 검은 벨트 + 금 버클 (색은 고른 상의 색, 흰 털·버클은 고정)
+    p = Part('top_santa', TOP_CELL)
+    p.box((0, 0.262, -0.029), (0.27, 0.17, 0.232), 0.014)
+    p.box((0, 0.17, -0.029), (0.30, 0.04, 0.262), 0.016, cell=TRIM_CELL)       # 밑단 털
+    p.box((0, 0.35, -0.03), (0.26, 0.04, 0.24), 0.016, cell=TRIM_CELL)         # 깃 털
+    p.box((0, 0.27, 0.091), (0.04, 0.14, 0.012), 0.006, cell=TRIM_CELL)        # 앞 여밈 털
+    p.box((0, 0.215, -0.029), (0.286, 0.03, 0.25), 0.006, cell=DARK_CELL)      # 벨트
+    p.box((0, 0.215, 0.098), (0.05, 0.04, 0.012), 0.004, cell=GOLD_CELL)       # 버클
+    out.append(p.build(col))
+    # 니트: 목폴라 + 밑단·가로 골
+    p = Part('top_knit', TOP_CELL)
+    p.box((0, 0.36, -0.03), (0.2, 0.05, 0.18), 0.02)                           # 목폴라
+    p.box((0, 0.183, -0.029), (0.275, 0.03, 0.24), 0.01)                       # 밑단 골
+    for yy in (0.23, 0.27, 0.31): p.box((0, yy, -0.029), (0.262, 0.012, 0.228), 0.004)
     out.append(p.build(col))
     return out
 
@@ -178,7 +238,14 @@ def build_bottoms(col):
     p = Part('bottom_skirt', BOTTOM_CELL)
     p.box((0, 0.135, -0.03), (0.44, 0.13, 0.42), 0.012, taper=(0.68, 0.70))
     p.box((0, 0.081, -0.03), (0.445, 0.014, 0.425), 0.006)
-    return [p.build(col)]
+    out = [p.build(col)]
+    # 원피스 자락: 치마보다 길고 넓게(종아리 위까지), 허리에 리본 띠
+    p = Part('dress_skirt', TOP_CELL)
+    p.box((0, 0.118, -0.03), (0.47, 0.17, 0.44), 0.012, taper=(0.62, 0.64))
+    p.box((0, 0.036, -0.03), (0.475, 0.012, 0.445), 0.005)
+    p.box((0, 0.2, -0.03), (0.27, 0.026, 0.236), 0.006, cell=TRIM_CELL)       # 허리 띠
+    out.append(p.build(col))
+    return out
 
 # 부츠: 정강이 상자(x 0.01~0.16, y0.03~0.13)와 발 상자(x 0.02~0.15, y0~0.09)를 감싼다
 def build_boots(col):

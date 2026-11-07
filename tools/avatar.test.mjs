@@ -67,6 +67,25 @@ const rng = (seed) => { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s 
   ok(A.partNames({ ...d, h: 2 })[0] === 'hair_bob' && A.partNames(d).length === 0, 'Blender hair is a part, a Kenney hair is not');
 }
 
+// 4b) 성별별 옷 목록: 남자는 치마·원피스·니트 없음, 여자는 셔츠·정장 없음, 옛 저장값(남자+치마)은 긴바지로 대체
+{
+  const ids = (l) => l.map((t) => t.id);
+  const tm = ids(A.topsFor('m')), tf = ids(A.topsFor('f')), bm = ids(A.bottomsFor('m')), bf = ids(A.bottomsFor('f'));
+  for (const id of ['tee', 'hood', 'coat', 'shirt', 'suit', 'puffer', 'santa']) ok(tm.includes(id), `male tops include ${id}`);
+  for (const id of ['tee', 'coat', 'knit', 'dress', 'puffer', 'santa']) ok(tf.includes(id), `female tops include ${id}`);
+  ok(!tm.includes('dress') && !tm.includes('knit') && !bm.includes('skirt'), 'no skirt / dress / knit for men');
+  ok(!tf.includes('suit') && !tf.includes('shirt') && bf.includes('skirt'), 'no suit / shirt for women, skirts are');
+  const old = A.decodeAppearance('a1m6020' + '11611');   // an old saved code: male, short hair, tee, skirt, sneakers
+  ok(old && old.b === 0 && old.g === 'm', `old male+skirt code decodes to trousers (got ${JSON.stringify(old)})`);
+  ok(A.sanitizeAppearance({ g: 'f', h: 0, t: 5, b: 0, s: 0, c: [0, 0, 0, 0, 0] }).t === 0, 'a suit on a woman falls back to a tee');
+  const r = rng(5); let fit = true;
+  for (let i = 0; i < 300; i++) { const a = A.randomAppearance(r); fit = fit && A.topAllowed(a.t, a.g) && A.bottomAllowed(a.b, a.g); }
+  ok(fit, 'random looks always fit the gender');
+  const dress = A.sanitizeAppearance({ g: 'f', h: 0, t: 9, b: 0, s: 0, c: [1, 1, 3, 2, 0] }), rc = A.roleColors(dress), R = A.ROLE;
+  ok(rc[R.BOTTOM] === rc[R.TOP] && rc[R.UPLEG] === rc[R.SKIN] && A.partNames(dress).includes('dress_skirt') && !A.partNames({ ...dress, b: 2 }).includes('bottom_skirt'), 'a dress: one colour, its own skirt, no second skirt');
+  ok(rc[R.TRIM] === '#f4f1ea' && rc[R.ACCENT] !== rc[R.TOP], 'trim / accent are fixed colours');
+}
+
 // 5) 실제 Kenney 모델: 머리(얼굴·귀·눈·머리카락) 와 몸(역할) 분류
 const DIR = 'bf/kit/assets/kenney-mini-characters/';
 const FILES = { bun: 'character-female-b.glb', glasses: 'character-male-a.glb', curly: 'character-female-f.glb', overalls: 'character-male-e.glb', beard: 'character-male-b.glb' };
@@ -90,12 +109,15 @@ const meshOf = (g, mi) => { const p = g.j.meshes[mi].primitives[0]; return { P: 
   const R = A.ROLE;
   ok(skin === '3,7', `female-b skin cell is 3,7 (got ${skin})`);
   ok(cnt[R.NONE] === undefined, `female-b body: every vertex has a role (none: ${cnt[R.NONE]})`);
-  for (const [name, r] of Object.entries(R)) if (r) ok(name === "HAIR" || cnt[r] > 0, `female-b body has ${name} vertices (${cnt[r] || 0})`);
+  for (const [name, r] of Object.entries(R)) if (r) ok(["HAIR", "TRIM", "ACCENT"].includes(name) || cnt[r] > 0, `female-b body has ${name} vertices (${cnt[r] || 0})`);
   // symmetry: left and right are classed alike
   const side = (s) => { let c = 0; for (let v = 0; v < roles.length; v++) if (Math.sign(bm.P[v * 3]) === s && roles[v] === R.SHOE) c++; return c; };
   ok(side(1) === side(-1) && side(1) > 0, 'both shoes are shoes');
   const sleeveMaxY = Math.max(...[...roles].map((r, v) => (r === R.SLEEVE ? bm.P[v * 3 + 1] : -1))), sleeveMinAbsX = Math.min(...[...roles].map((r, v) => (r === R.SLEEVE ? Math.abs(bm.P[v * 3]) : 9)));
   ok(sleeveMinAbsX > 0.09 && sleeveMaxY < 0.4, `sleeves sit out at the arms (min |x| ${sleeveMinAbsX.toFixed(3)})`);
+  // the base model wears a crop top: its midriff must be the top, not skin (no bare belly under a coat / tee)
+  let belly = 0; for (let v = 0; v < roles.length; v++) { const y = bm.P[v * 3 + 1], x = bm.P[v * 3]; if (Math.abs(x) < 0.12 && y > 0.17 && y < 0.26 && roles[v] === R.SKIN) belly++; }
+  ok(belly === 0, `no bare midriff (skin vertices on the belly: ${belly})`);
   const soles = [...roles].filter((r) => r === R.SOLE).length, shoes = [...roles].filter((r) => r === R.SHOE).length;
   ok(soles > 0 && shoes > 0, `a shoe has a dark sole (${soles}) and a coloured upper (${shoes})`);
 }
