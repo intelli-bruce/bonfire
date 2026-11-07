@@ -192,11 +192,11 @@ export function createHydraBoss(ctx) {
   }
   const baseY = (x, z) => ctx.heightAt(x, z);
   const standOk = (x, z) => ctx.canStand(x, z);
-  function spawn(x, z, ry) {
+  function spawn(x, z, ry, born) {
     if (B.active) return false;
     const n = Math.max(1, ctx.players().length);
     resetState();
-    B.active = true; B.owner = true; B.ownerId = ctx.myId; B.ep = 0; B.born = Date.now(); B.seq = 0;
+    B.active = true; B.owner = true; B.ownerId = ctx.myId; B.ep = 0; B.born = born > 0 ? born : Date.now(); B.seq = 0;
     B.x = x; B.z = z; B.ry = ry; B.y = baseY(x, z); B.maxHp = B.hp = D.hp + D.hpPerExtra * (n - 1);
     B.hMax = Math.round(B.maxHp * D.headShare); B.hh = [B.hMax, B.hMax, B.hMax];
     B.a = 'spawn'; B.spawnT = D.spawnT; B.ac++;

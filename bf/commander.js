@@ -10,6 +10,7 @@ import { applyLook, spring, breath } from './bosslook.js';
 // 효과음은 모두 합성(ctx.audio() → { actx, out, buf })이라 녹음 파일이 없다.
 
 import { rayCapsule } from './weapons-core.js';
+import { bossVfx } from './bossfx.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -185,11 +186,11 @@ export function createCommanderBoss(ctx) {
   }
   const baseY = (x, z) => ctx.heightAt(x, z);
   const standOk = (x, z) => ctx.canStand(x, z);
-  function spawn(x, z, ry) {
+  function spawn(x, z, ry, born) {
     if (B.active) return false;
     const n = Math.max(1, ctx.players().length);
     resetState();
-    B.active = true; B.owner = true; B.ownerId = ctx.myId; B.ep = 0; B.born = Date.now(); B.seq = 0;
+    B.active = true; B.owner = true; B.ownerId = ctx.myId; B.ep = 0; B.born = born > 0 ? born : Date.now(); B.seq = 0;
     B.x = x; B.z = z; B.ry = ry; B.y = baseY(x, z); B.maxHp = B.hp = D.hp + D.hpPerExtra * (n - 1);
     B.a = 'spawn'; B.spawnT = D.spawnT; B.ac++;
     R.tx = x; R.tz = z; R.ty = B.y; R.try_ = ry; R.lastSnap = performance.now();
@@ -294,6 +295,7 @@ export function createCommanderBoss(ctx) {
         snd('impact', cx, cz); ctx.shake(1.3, 1.1);
         addFx({ type: 'ring', x: cx, z: cz, r0: 2, r1: 14, t: 0, life: 0.9, hit: true, dmg: 'quake', color: '#ffd28a' });
         for (let i = 0; i < 8; i++) ctx.fx.poof(cx + (Math.random() - 0.5) * 6, g(cx, cz) + 0.2, cz + (Math.random() - 0.5) * 6, 6);
+        VX.impact(cx, g(cx, cz), cz, { color: '#ffd28a', hot: '#ffffff', sparks: 36, smokeKind: 'dust', smokeN: 18, size: 1.6 }); VX.burst('debris', cx, g(cx, cz), cz, { n: 30 });
         for (const q of a.pt) addFx({ type: 'fissure', x: cx, z: cz, dir: B.ry + q[0], t: 0, life: 1.6, len: 30, step: 0, hit: true });
       }
     } else if (a.code === 'thrust') {   // 칼을 뒤로 당겼다(0.75 s) → 일직선 돌진(1.0 s) → 칼끝 멈춤 · 회수
@@ -305,14 +307,16 @@ export function createCommanderBoss(ctx) {
         if (standOk(nx, nz)) { B.x = nx; B.z = nz; }
         if (once(a, 'go', t0)) { ctx.shake(0.5, 0.4); snd('step', B.x, B.z); }
         if (Math.random() < dt * 14) ctx.fx.poof(px + (Math.random() - 0.5) * 4, g(px, pz) + 0.1, pz + (Math.random() - 0.5) * 4, 3);
+        { const [qx, qz] = fwd(B.ry); VX.burst('spark', B.x + qx * 10, g(B.x, B.z) + 2.2, B.z + qz * 10, { n: 2, color: '#ffd070', dir: [-qx, 0.1, -qz] }); VX.burst('dust', px, g(px, pz), pz, { n: 1, up: 0.5 }); }   // 돌진: 칼끝 불티 잔상 + 발밑 먼지
         const [fx, fz] = fwd(B.ry);
         if (!a.ev.has('hit') && (hitCircle(B.x + fx * 10, B.z + fz * 10, 3.6, 'thrust', 0) || hitCircle(B.x + fx * 4, B.z + fz * 4, 4.2, 'thrust', 0))) a.ev.add('hit');
-      } else if (once(a, 'stop', t1)) { const [fx, fz] = fwd(B.ry); snd('clang', B.x + fx * 10, B.z + fz * 10); ctx.shake(0.6, 0.5); addFx({ type: 'ring', x: B.x + fx * 10, z: B.z + fz * 10, r0: 1, r1: 8, t: 0, life: 0.6, hit: false, color: '#fff0c0' }); }
+      } else if (once(a, 'stop', t1)) { const [fx, fz] = fwd(B.ry); snd('clang', B.x + fx * 10, B.z + fz * 10); ctx.shake(0.6, 0.5); addFx({ type: 'ring', x: B.x + fx * 10, z: B.z + fz * 10, r0: 1, r1: 8, t: 0, life: 0.6, hit: false, color: '#fff0c0' }); VX.impact(B.x + fx * 10, g(B.x + fx * 10, B.z + fz * 10) + 2, B.z + fz * 10, { color: '#ffe0a0', hot: '#ffffff', sparks: 30, smoke: false }); }
     }
     if (a.t >= a.dur) { act.cur = null; if (B.owner) { O.gap = B.rage ? 0.5 : 0.9; B.a = 'idle'; B.y = baseY(B.x, B.z); } }
   }
 
   // ---------- 효과 ----------
+  const VX = bossVfx(THREE, scene);   // 셰이더 재질 + 풀링 파티클(공용)
   let fxRes = null;
   function res() {
     if (fxRes) return fxRes;
@@ -329,8 +333,10 @@ export function createCommanderBoss(ctx) {
   function addFx(f) { fxl.push(f); return f; }
   function killFx(f) { if (f.g) { scene.remove(f.g); f.g.traverse((o) => { if (o.material && o.material.userData.own) o.material.dispose(); }); } }
   const ownMat = (c, o = 1) => { const m = new THREE.MeshBasicMaterial({ color: c, ...res().add, opacity: o }); m.userData.own = true; return m; };
+  const vMat = (mode, c, o = 1, opt) => (VX.ok && VX.mat(mode, c, o, opt)) || ownMat(c, o);
   function tickFx(dt) {
     const m = ctx.me();
+    VX.tick(dt);
     for (let i = fxl.length - 1; i >= 0; i--) {
       const f = fxl[i]; f.t += dt;
       if (f.t < 0) continue;
@@ -338,8 +344,10 @@ export function createCommanderBoss(ctx) {
       if (f.type === 'ring') {   // 땅을 따라 퍼지는 충격파: 띠가 지나갈 때 땅에 있으면 맞는다(점프로 넘김)
         const r = f.r0 + (f.r1 - f.r0) * Math.min(1, u);
         if (THREE.Mesh) {
-          if (!f.g) { f.g = new THREE.Mesh(res().ring, ownMat(f.color || '#ffffff', 0.9)); f.g.renderOrder = 3; scene.add(f.g); }
-          f.g.position.set(f.x, ctx.heightAt(f.x, f.z) + 0.25, f.z); f.g.scale.set(r, 1, r); f.g.material.opacity = 0.85 * (1 - u);
+          const y = ctx.heightAt(f.x, f.z) + 0.25;
+          if (!f.g) { f.g = new THREE.Mesh(res().ring, vMat('shock', f.color || '#ffffff', 0.9, { hot: '#ffffff', inner: 0.86 })); f.g.renderOrder = 3; scene.add(f.g); VX.ring('dust', f.x, y, f.z, f.r0, { n: 16 }); VX.burst('flash', f.x, y + 0.6, f.z, { color: f.color, size: 0.5 + f.r1 / 30 }); }
+          f.g.position.set(f.x, y, f.z); f.g.scale.set(r, 1, r); f.g.material.opacity = 1.1 * (1 - u); f.g.material.uT = u * 0.9;
+          if (Math.random() < 0.5) { const an = Math.random() * Math.PI * 2; VX.burst('dust', f.x + Math.cos(an) * r, y, f.z + Math.sin(an) * r, { n: 1, speed: 0.4 }); }
         }
         if (f.hit && m.ok && !f.done) {
           const d = Math.hypot(m.x - f.x, m.z - f.z);
@@ -354,7 +362,8 @@ export function createCommanderBoss(ctx) {
           if (f.step % 3 === 0) { ctx.fx.poof(x, y + 0.2, z, 3); if (f.step % 6 === 0) snd('crack', x, z); }
           if (THREE.Mesh) {
             if (!f.g) { f.g = new THREE.Group(); scene.add(f.g); }
-            const c = new THREE.Mesh(res().crack, ownMat(f.step % 2 ? '#ff7a20' : '#ffc24a', 0.9)); c.position.set(x, y + 0.12, z); c.rotation.y = f.dir + (Math.random() - 0.5) * 0.6; c.scale.set(0.5 + Math.random() * 0.5, 1, 1.9); f.g.add(c);
+            VX.burst('fire', x, y, z, { n: 3, color: '#ff8a20', size: 0.8 }); VX.burst('spark', x, y, z, { n: 4, color: '#ffc24a' }); if (f.step % 2) VX.burst('debris', x, y, z, { n: 3 });
+            const c = new THREE.Mesh(res().crack, vMat('pool', f.step % 2 ? '#ff7a20' : '#ffc24a', 0.9, { hot: '#fff0c0' })); c.position.set(x, y + 0.12, z); c.rotation.y = f.dir + (Math.random() - 0.5) * 0.6; c.scale.set(0.5 + Math.random() * 0.5, 1, 1.9); f.g.add(c);
           }
           if (f.hit && m.ok && !f.done && Math.hypot(m.x - x, m.z - z) < 2.3 && m.y - floorAt(m.x, m.z) < 1.1) { f.done = true; hitMe('quake', -fz * 0.3 + fx, fx * 0.3 + fz); }
         }
@@ -362,13 +371,17 @@ export function createCommanderBoss(ctx) {
         if (u >= 1) { killFx(f); fxl.splice(i, 1); }
       } else if (f.type === 'slash') {   // 수평 베기의 금빛 궤적(초승달)
         if (THREE.Mesh) {
-          if (!f.g) { f.g = new THREE.Mesh(res().slash, ownMat('#ffe2a0', 0.85)); f.g.renderOrder = 4; scene.add(f.g); }
-          f.g.position.set(f.x, f.y, f.z); f.g.rotation.y = f.ry; f.g.material.opacity = 0.85 * (1 - u) * (1 - u); f.g.scale.setScalar(0.9 + 0.15 * u);
+          if (!f.g) {   // 금빛 검기: 하얀 날 + 노이즈로 흩어지는 꼬리, 칼끝 궤도를 따라 불티
+            f.g = new THREE.Group(); const a = new THREE.Mesh(res().slash, vMat('slash', '#ffb040', 1.1, { hot: '#ffffff', inner: 6 / 16.5 })), b = new THREE.Mesh(res().slash, vMat('slash', '#ff7a10', 0.5, { hot: '#ffd080', inner: 6 / 16.5 }));
+            b.scale.setScalar(1.06); b.position.y = -0.3; f.g.add(a, b); f.g.renderOrder = 4; scene.add(f.g);
+            for (let k = 0; k < 14; k++) { const an = f.ry - 1.4 + k * 0.2; VX.burst('spark', f.x - Math.sin(an) * 14, f.y, f.z - Math.cos(an) * 14, { n: 2, color: '#ffc050', dir: [-Math.cos(an), 0, Math.sin(an)] }); }
+          }
+          f.g.position.set(f.x, f.y, f.z); f.g.rotation.y = f.ry; for (const c of f.g.children) { c.material.opacity = 1.1 * (1 - u) * (1 - u); c.material.uT = u; } f.g.scale.setScalar(0.9 + 0.15 * u);
         }
         if (u >= 1) { killFx(f); fxl.splice(i, 1); }
       } else if (f.type === 'sigil') {   // 등장 문장: 금빛 육각 고리 셋이 돌며 밝아졌다 사라진다
         if (THREE.Mesh) {
-          if (!f.g) { f.g = new THREE.Group(); for (let k = 0; k < 3; k++) { const s = new THREE.Mesh(res().sigil, ownMat(k === 1 ? '#ff9a30' : '#ffd070', 0.8)); s.scale.setScalar(5 + k * 3.5); f.g.add(s); } scene.add(f.g); }
+          if (!f.g) { f.g = new THREE.Group(); for (let k = 0; k < 3; k++) { const s = new THREE.Mesh(res().ring, vMat('sigil', k === 1 ? '#ff9a30' : '#ffd070', 0.8, { hot: '#ffffff', inner: 0.86 })); s.scale.setScalar(5 + k * 3.5); f.g.add(s); } scene.add(f.g); }
           f.g.position.set(f.x, ctx.heightAt(f.x, f.z) + 0.15, f.z);
           f.g.children.forEach((s, k) => { s.rotation.y = f.t * (k % 2 ? -0.6 : 0.8); s.material.opacity = 0.85 * Math.min(1, f.t / 0.6) * clamp((f.life - f.t) / 0.9, 0, 1); });
         }

@@ -12,7 +12,8 @@
 // (다리 사이·배 밑 땅에 떨어진 수류탄·검기도 맞는다).
 
 import { raySphere, rayCapsule } from './weapons-core.js';
-import { DEMON } from './demon.js';   // 대악마: 정의 + 확장(ext) 은 bf/demon.js
+import { DEMON } from './demon.js';
+import { bossVfx } from './bossfx.js';   // 셰이더 재질 + 풀링 파티클(공용)   // 대악마: 정의 + 확장(ext) 은 bf/demon.js
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -106,6 +107,7 @@ export function createGiantBoss(ctx, kind) {
   let assets = null, loading = null, loadFailed = false, rig = null;
   const fxl = [];                   // 진행 중인 효과(충격파·바위·빛 기둥·불덩이) — 모두 같은 시간표로 시뮬레이트
   const hazVis = new Map();
+  const VX = bossVfx(THREE, scene);  // 공용 이펙트 엔진(node 테스트에선 아무것도 안 함)
   const capsW = [];                 // 매 프레임 갱신되는 세계 좌표 캡슐 [{ax,ay,az,bx,by,bz,r,col}]
 
   // ---------- 에셋 ----------
@@ -198,11 +200,11 @@ export function createGiantBoss(ctx, kind) {
     return ctx.heightAt(x, z);
   }
   function standOk(x, z) { return D.water ? ctx.canSwim(x, z) : D.fly ? ctx.canFly(x, z) : ctx.canStand(x, z); }
-  function spawn(x, z, ry) {
+  function spawn(x, z, ry, born) {
     if (B.active) return false;
     const n = Math.max(1, ctx.players().length);
     resetState();
-    B.active = true; B.owner = true; B.ownerId = ctx.myId; B.ep = 0; B.born = Date.now(); B.seq = 0;
+    B.active = true; B.owner = true; B.ownerId = ctx.myId; B.ep = 0; B.born = born > 0 ? born : Date.now(); B.seq = 0;
     B.x = x; B.z = z; B.ry = ry; B.y = baseY(x, z); B.maxHp = B.hp = D.hp + D.hpPerExtra * (n - 1);
     B.a = 'spawn'; B.spawnT = D.spawnT; B.ac++;
     R.tx = x; R.tz = z; R.ty = B.y; R.try_ = ry; R.lastSnap = performance.now();
@@ -337,7 +339,7 @@ export function createGiantBoss(ctx, kind) {
       if (a.code === 'bite') {   // 짧게 앞으로 튀며 물기
         turnTo(tgA, 2.2);
         if (a.t > 0.35 && a.t < 0.75) { const m0 = mouth(); if (Math.hypot(T.x - m0.x, T.z - m0.z) > 3) moveBy(7.5 * dt / 0.4); }
-        if (once(a, 'snap', 0.7)) { const m = mouth(); hitCone(m.x, m.z, B.ry, 7.5, 0.9, 'bite', 3.5); ctx.sfx(kind, 'snap', m.x, m.z); ctx.fx.crown(m.x, ctx.waterLevel(), m.z, 18); }
+        if (once(a, 'snap', 0.7)) { const m = mouth(); hitCone(m.x, m.z, B.ry, 7.5, 0.9, 'bite', 3.5); ctx.sfx(kind, 'snap', m.x, m.z); ctx.fx.crown(m.x, ctx.waterLevel(), m.z, 18); VX.burst('splash', m.x, ctx.waterLevel(), m.z, { n: 30, dir: [-Math.sin(B.ry) * 0.4, 0.8, -Math.cos(B.ry) * 0.4] }); VX.burst('mist', m.x, ctx.waterLevel(), m.z, { n: 6 }); }
       } else if (a.code === 'lunge') {   // 물 밖 돌진: 뛰어올라(1.2 s) 덮치고, 모래 위에서 몸부림친 뒤(1.4 s) 물로 미끄러져 돌아간다
         const up = 0.55, fl = 1.25, back = 2.6;
         if (a.t < up) { turnTo(tgA, 3); B.y = F.y - 0.6 * ease(a.t / up); }
@@ -345,10 +347,10 @@ export function createGiantBoss(ctx, kind) {
           const s = ease((a.t - up) / fl); B.x = F.x + (T.x - F.x) * s; B.z = F.z + (T.z - F.z) * s;
           const ground = Math.max(ctx.waterLevel(), g(B.x, B.z) + 2.2);
           B.y = lerp(F.y, ground, s) + Math.sin(s * Math.PI) * 7.5; B.pitch = (0.5 - s) * 1.1;
-          if (once(a, 'jump', up)) { ctx.fx.crown(F.x, ctx.waterLevel(), F.z, 30); ctx.sfx(kind, 'splash', F.x, F.z); ctx.shake(0.4, 0.6); }
+          if (once(a, 'jump', up)) { ctx.fx.crown(F.x, ctx.waterLevel(), F.z, 30); VX.burst('splash', F.x, ctx.waterLevel(), F.z, { n: 60, speed: 1.3, up: 1.4 }); VX.ring('mist', F.x, ctx.waterLevel(), F.z, 3, { n: 16 }); ctx.sfx(kind, 'splash', F.x, F.z); ctx.shake(0.4, 0.6); }
         } else if (a.t < up + fl + back) {
           const s = (a.t - up - fl) / back;
-          if (once(a, 'land', up + fl)) { hitCircle(T.x, T.z, 7.5, 'lunge', 3); ctx.sfx(kind, 'snap', T.x, T.z); ctx.shake(0.8, 0.8); for (let i = 0; i < 5; i++) ctx.fx.poof(T.x + (Math.random() - 0.5) * 8, g(T.x, T.z) + 0.2, T.z + (Math.random() - 0.5) * 8, 5); addFx({ type: 'ring', x: T.x, z: T.z, r0: 3, r1: 14, t: 0, life: 0.8, hit: true, dmg: 'ring', color: '#e8e2d0' }); }
+          if (once(a, 'land', up + fl)) { hitCircle(T.x, T.z, 7.5, 'lunge', 3); ctx.sfx(kind, 'snap', T.x, T.z); ctx.shake(0.8, 0.8); VX.impact(T.x, g(T.x, T.z), T.z, { color: '#e8e2d0', smokeKind: 'dust', smokeN: 14, sparks: 10 }); VX.burst('debris', T.x, g(T.x, T.z), T.z, { n: 18 }); for (let i = 0; i < 5; i++) ctx.fx.poof(T.x + (Math.random() - 0.5) * 8, g(T.x, T.z) + 0.2, T.z + (Math.random() - 0.5) * 8, 5); addFx({ type: 'ring', x: T.x, z: T.z, r0: 3, r1: 14, t: 0, life: 0.8, hit: true, dmg: 'ring', color: '#e8e2d0' }); }
           const ss = ease(clamp((s - 0.35) / 0.65, 0, 1));
           B.x = T.x + (F.x - T.x) * ss; B.z = T.z + (F.z - T.z) * ss;
           B.y = lerp(Math.max(ctx.waterLevel(), g(T.x, T.z) + 2.2), F.y, ss); B.pitch = 0; B.roll = Math.sin(a.t * 9) * 0.25 * (1 - ss);
@@ -358,12 +360,13 @@ export function createGiantBoss(ctx, kind) {
           const [fx, fz] = fwd(B.ry), tx = B.x - fx * 11, tz = B.z - fz * 11;
           hitCone(B.x, B.z, B.ry + Math.PI, 17, 1.25, 'tail', 4);
           addFx({ type: 'ring', x: tx, z: tz, r0: 2, r1: 20, t: 0, life: 1.2, hit: true, dmg: 'ring', color: '#d8f4ff', water: true });
-          ctx.fx.crown(tx, ctx.waterLevel(), tz, 30); ctx.sfx(kind, 'splash', tx, tz); ctx.shake(0.5, 0.6);
+          ctx.fx.crown(tx, ctx.waterLevel(), tz, 30); VX.burst('splash', tx, ctx.waterLevel(), tz, { n: 50, speed: 1.2 }); VX.burst('mist', tx, ctx.waterLevel(), tz, { n: 10 }); ctx.sfx(kind, 'splash', tx, tz); ctx.shake(0.5, 0.6);
         }
       } else if (a.code === 'rush') {   // 수면 돌진: 입을 벌리고 일직선
         if (a.t < 0.6) turnTo(tgA, 2.4);
         else if (a.t < 2.1) {
           const moved = moveBy(24 * dt); if (Math.random() < dt * 20) { const m = mouth(); ctx.fx.crown(m.x, ctx.waterLevel(), m.z, 6); }
+          { const m = mouth(), [fx, fz] = fwd(B.ry), wl = ctx.waterLevel(); VX.burst('splash', m.x, wl, m.z, { n: 3, dir: [-fz * (Math.random() < 0.5 ? 1 : -1) * 0.5, 0.7, fx * 0.5], speed: 1.2 }); if (Math.random() < 0.3) VX.burst('mist', m.x - fx * 4, wl, m.z - fz * 4, { n: 1 }); }   // 돌진 물보라 갈래
           const m = mouth(); if (!a.ev.has('hit') && hitCircle(m.x, m.z, 5, 'rush', 0)) a.ev.add('hit');
           if (!moved) a.t = Math.max(a.t, 2.1);
         }
@@ -376,10 +379,11 @@ export function createGiantBoss(ctx, kind) {
           hitCircle(cx, cz, 7, 'slam', 0); ctx.shake(1.2, 1.0); ctx.sfx(kind, 'slam', cx, cz);
           for (let i = 0; i < 3; i++) addFx({ type: 'ring', x: cx, z: cz, r0: 3, r1: 26, t: -i * 0.28, life: 1.5, hit: true, dmg: 'wave', color: '#d9b080' });
           for (let i = 0; i < 8; i++) ctx.fx.poof(cx + (Math.random() - 0.5) * 9, g(cx, cz) + 0.2, cz + (Math.random() - 0.5) * 9, 6);
+          VX.impact(cx, g(cx, cz), cz, { color: '#ffc890', sparks: 24, smokeKind: 'dust', smokeN: 22, size: 1.6 }); VX.burst('debris', cx, g(cx, cz), cz, { n: 40, speed: 1.2 });
         }
       } else if (a.code === 'hurl') {   // 바위를 뜯어 던진다
         turnTo(tgA, 1.2);
-        if (once(a, 'grab', 0.5)) { const [fx, fz] = fwd(B.ry), x = B.x + fx * 4 + Math.cos(B.ry) * 6, z = B.z + fz * 4 - Math.sin(B.ry) * 6; ctx.fx.poof(x, g(x, z), z, 8); ctx.sfx(kind, 'grab', x, z); }
+        if (once(a, 'grab', 0.5)) { const [fx, fz] = fwd(B.ry), x = B.x + fx * 4 + Math.cos(B.ry) * 6, z = B.z + fz * 4 - Math.sin(B.ry) * 6; ctx.fx.poof(x, g(x, z), z, 8); VX.burst('debris', x, g(x, z), z, { n: 20 }); VX.burst('dust', x, g(x, z), z, { n: 10 }); ctx.sfx(kind, 'grab', x, z); }
         if (once(a, 'throw', 1.35)) {
           const s = handPos('fistR'), d = Math.hypot(T.x - s.x, T.z - s.z), fl = clamp(d / 26, 0.6, 2.2);
           addFx({ type: 'rock', sx: s.x, sy: s.y, sz: s.z, x: T.x, z: T.z, t: 0, life: fl, hit: true });
@@ -390,6 +394,7 @@ export function createGiantBoss(ctx, kind) {
         else if (a.t < 2.9) {
           const moved = moveBy(16 * (B.rage ? 1.2 : 1) * dt);
           if (Math.random() < dt * 10) ctx.fx.poof(B.x + (Math.random() - 0.5) * 6, g(B.x, B.z) + 0.1, B.z + (Math.random() - 0.5) * 6, 4);
+          if (Math.random() < dt * 30) { VX.burst('dust', B.x + (Math.random() - 0.5) * 7, g(B.x, B.z), B.z + (Math.random() - 0.5) * 7, { n: 1, up: 0.6 }); VX.burst('debris', B.x, g(B.x, B.z), B.z, { n: 1, spread: 4 }); }
           const [fx, fz] = fwd(B.ry); if (!a.ev.has('hit') && hitCircle(B.x + fx * 3, B.z + fz * 3, 6, 'charge', 0)) a.ev.add('hit');
           if (Math.floor(a.t * 3.2) !== Math.floor((a.t - dt) * 3.2)) { ctx.shake(0.35, 0.3); ctx.sfx(kind, 'step', B.x, B.z); }
           if (!moved) { a.t = Math.max(a.t, 2.9); ctx.shake(0.8, 0.6); }
@@ -414,7 +419,7 @@ export function createGiantBoss(ctx, kind) {
           const s = (a.t - up) / dn, e = s * s; B.x = F.x + (T.x - F.x) * e; B.z = F.z + (T.z - F.z) * e;
           B.y = lerp(F.y + 16, g(B.x, B.z) + 1.0, e); B.pitch = 0.9 * Math.sin(s * Math.PI * 0.5);
         } else {
-          if (once(a, 'impact', up + dn)) { hitCircle(T.x, T.z, 9, 'dive', 0); ctx.shake(1.3, 1.0); ctx.sfx(kind, 'impact', T.x, T.z); addFx({ type: 'ring', x: T.x, z: T.z, r0: 3, r1: 24, t: 0, life: 1.2, hit: true, dmg: 'ring', color: '#ffd9a0' }); for (let i = 0; i < 8; i++) ctx.fx.poof(T.x + (Math.random() - 0.5) * 10, g(T.x, T.z) + 0.2, T.z + (Math.random() - 0.5) * 10, 6); }
+          if (once(a, 'impact', up + dn)) { hitCircle(T.x, T.z, 9, 'dive', 0); ctx.shake(1.3, 1.0); ctx.sfx(kind, 'impact', T.x, T.z); addFx({ type: 'ring', x: T.x, z: T.z, r0: 3, r1: 24, t: 0, life: 1.2, hit: true, dmg: 'ring', color: '#ffd9a0' }); VX.impact(T.x, g(T.x, T.z), T.z, { color: '#ffd9a0', hot: '#ffffff', sparks: 40, smokeKind: 'dust', smokeN: 16, size: 1.8 }); VX.burst('light', T.x, g(T.x, T.z), T.z, { n: 30, speed: 3 }); VX.burst('fire', T.x, g(T.x, T.z), T.z, { n: 14, color: '#c02010', speed: 2 }); for (let i = 0; i < 8; i++) ctx.fx.poof(T.x + (Math.random() - 0.5) * 10, g(T.x, T.z) + 0.2, T.z + (Math.random() - 0.5) * 10, 6); }
           const s = clamp((a.t - up - dn - 0.3) / 1.5, 0, 1); B.y = lerp(g(B.x, B.z) + 1.0, baseY(B.x, B.z), ease(s)); B.pitch = 0.9 * (1 - s);
         }
       }
@@ -450,17 +455,26 @@ export function createGiantBoss(ctx, kind) {
   function addFx(f) { fxl.push(f); return f; }
   function killFx(f) { if (f.g) { scene.remove(f.g); f.g.traverse((o) => { if (o.material && o.material.userData.own) o.material.dispose(); }); } }
   const ownMat = (c, o = 1) => { const m = new THREE.MeshBasicMaterial({ color: c, ...res().add, opacity: o }); m.userData.own = true; return m; };
+  const vMat = (mode, c, o = 1, opt) => (VX.ok && VX.mat(mode, c, o, opt)) || ownMat(c, o);   // 셰이더 재질(없으면 단색)
   function tickFx(dt) {
     const m = ctx.me();
+    VX.tick(dt);
     for (let i = fxl.length - 1; i >= 0; i--) {
       const f = fxl[i]; f.t += dt;
       if (f.t < 0) continue;
       const u = f.t / f.life;
       if (f.type === 'ring') {   // 땅(물)을 따라 퍼지는 충격파: 띠가 지나갈 때 땅에 있으면 맞는다(점프로 넘김)
         const r = f.r0 + (f.r1 - f.r0) * Math.min(1, u);
-        if (!f.g) { f.g = new THREE.Mesh(res().ring, ownMat(f.color || '#ffffff', 0.9)); f.g.renderOrder = 3; scene.add(f.g); }
         const y = f.water ? ctx.waterLevel() + 0.15 : ctx.heightAt(f.x, f.z) + 0.25;
-        f.g.position.set(f.x, y, f.z); f.g.scale.set(r, 1, r); f.g.material.opacity = 0.85 * (1 - u);
+        if (!f.g) {   // 셰이더 충격파 고리 + 안쪽 열기 장판, 출발할 때 먼지(물보라) 고리와 섬광
+          f.g = new THREE.Group(); const rg = new THREE.Mesh(res().disc, vMat('shock', f.color || '#ffffff', 0.9, { hot: '#ffffff', inner: 0.55 })), fl = new THREE.Mesh(res().disc, vMat('pool', f.color || '#ffffff', 0.25, { hot: '#fff6e0' }));
+          f.g.add(rg, fl); f.parts = { rg, fl }; f.g.renderOrder = 3; scene.add(f.g);
+          if (f.water) { VX.ring('splash', f.x, y, f.z, f.r0, { n: 30 }); VX.ring('mist', f.x, y, f.z, f.r0, { n: 12 }); }
+          else { VX.ring('dust', f.x, y, f.z, f.r0, { n: 18, color: f.color }); VX.ring('debris', f.x, y, f.z, f.r0, { n: 10 }); }
+          VX.burst('flash', f.x, y + 0.5, f.z, { color: f.color, size: 0.6 + f.r1 / 30 });
+        }
+        f.g.position.set(f.x, y, f.z); f.g.scale.set(r, 1, r); f.parts.rg.material.opacity = 1.1 * (1 - u); f.parts.rg.material.uT = u * 0.9; f.parts.fl.material.opacity = 0.35 * (1 - u) * (1 - u);
+        if (Math.random() < 0.5) { const an = Math.random() * Math.PI * 2; VX.burst(f.water ? 'splash' : 'dust', f.x + Math.cos(an) * r, y, f.z + Math.sin(an) * r, { n: 1, speed: 0.4, color: f.water ? undefined : f.color }); }
         if (f.hit && m.ok && !f.done) {
           const d = Math.hypot(m.x - f.x, m.z - f.z), onG = m.y - (f.water ? Math.max(ctx.heightAt(m.x, m.z), ctx.waterLevel() - 1) : ctx.heightAt(m.x, m.z)) < 1.1;
           if (Math.abs(d - r) < 1.4 && onG) { f.done = true; hitMe(f.dmg || 'wave', (m.x - f.x) / (d || 1), (m.z - f.z) / (d || 1)); }
@@ -470,23 +484,27 @@ export function createGiantBoss(ctx, kind) {
         const s = Math.min(1, u), ty = ctx.heightAt(f.x, f.z) + 0.5;
         if (!f.g) {
           if (f.type === 'rock') { f.g = new THREE.Mesh(res().rock, res().rockMat); }
-          else { f.g = new THREE.Group(); const c = new THREE.Mesh(res().ball, res().coreMat), o = new THREE.Mesh(res().ball, res().fireMat); o.scale.setScalar(1.8); c.scale.setScalar(0.9); f.g.add(o, c); }
+          else { f.g = new THREE.Group(); const c = new THREE.Mesh(res().ball, res().coreMat), o = new THREE.Mesh(res().ball, vMat('orb', '#ff3a08', 1, { hot: '#ffe8a0' })), h = new THREE.Mesh(res().ball, vMat('orb', '#ff2200', 0.45, { hot: '#ff9a30' })); o.scale.setScalar(1.8); c.scale.setScalar(0.9); h.scale.setScalar(3.0); f.g.add(h, o, c); }
           scene.add(f.g);
         }
         const px = f.sx + (f.x - f.sx) * s, pz = f.sz + (f.z - f.sz) * s, py = f.sy + (ty - f.sy) * s + Math.sin(s * Math.PI) * (f.type === 'rock' ? 9 : 6);
         f.g.position.set(px, py, pz); f.g.rotation.x += dt * 4; f.g.rotation.z += dt * 3;
-        if (f.type === 'fireball' && Math.random() < dt * 30) ctx.fx.spark(px, py, pz);
+        if (f.type === 'fireball') { if (Math.random() < dt * 30) ctx.fx.spark(px, py, pz); VX.burst('fire', px, py, pz, { n: 2, size: 0.9, up: 0.2 }); VX.burst('ember', px, py, pz, { n: 1 }); if (Math.random() < dt * 14) VX.burst('smoke', px, py, pz, { n: 1, size: 0.7 }); }
+        else if (Math.random() < dt * 18) VX.burst('dust', px, py, pz, { n: 1, speed: 0.2, size: 0.6 });   // 날아가는 바위 흙먼지 꼬리
         if (s >= 1) {
           killFx(f); fxl.splice(i, 1);
           ctx.shake(f.type === 'rock' ? 0.7 : 0.35, 0.5);
           if (f.type === 'rock') {
             ctx.sfx(kind, 'impact', f.x, f.z);
             for (let k = 0; k < 6; k++) ctx.fx.poof(f.x + (Math.random() - 0.5) * 6, ty, f.z + (Math.random() - 0.5) * 6, 6);
+            VX.impact(f.x, ty, f.z, { color: '#ffcf90', sparks: 18, smokeKind: 'dust', smokeN: 14, size: 1.2 }); VX.burst('debris', f.x, ty, f.z, { n: 22 });
             if (f.hit) hitCircle(f.x, f.z, 5.5, 'hurl', 0);
             addFx({ type: 'ring', x: f.x, z: f.z, r0: 1, r1: 10, t: 0, life: 0.7, hit: false, color: '#c9a77c' });
           } else {
             ctx.sfx(kind, 'burst', f.x, f.z);
             for (let k = 0; k < 6; k++) ctx.fx.spark(f.x + (Math.random() - 0.5) * 4, ty + Math.random() * 2, f.z + (Math.random() - 0.5) * 4);
+            VX.impact(f.x, ty, f.z, { color: '#ff6a1a', hot: '#fff0b0', sparks: 30, smokeN: 10, size: 1.3 }); VX.burst('fire', f.x, ty, f.z, { n: 26, speed: 2.2, size: 1.3 }); VX.burst('ember', f.x, ty, f.z, { n: 20, speed: 2 });
+            addFx({ type: 'ring', x: f.x, z: f.z, r0: 1, r1: 7, t: 0, life: 0.5, hit: false, color: '#ff6a1a' });
             if (f.hit) hitCircle(f.x, f.z, 4.8, 'hellfire', 0);
             if (B.owner && B.active && B.haz.length < 8) B.haz.push({ id: ++O.hazId, x: r2(f.x), z: r2(f.z), age: 0 });
           }
@@ -494,7 +512,7 @@ export function createGiantBoss(ctx, kind) {
       } else if (f.type === 'beam') {   // 빛 기둥: 바닥 표식(warn) → 기둥(내리꽂힐 때 원 안이면 맞음)
         if (!f.g) {
           f.g = new THREE.Group();
-          const mark = new THREE.Mesh(res().ring, ownMat('#ffd27a', 0.9)), fill = new THREE.Mesh(res().disc, ownMat('#ffcc66', 0.2)), col = new THREE.Mesh(res().cyl, ownMat('#fff1c4', 0)), core = new THREE.Mesh(res().cyl, ownMat('#ffffff', 0));
+          const mark = new THREE.Mesh(res().disc, vMat('sigil', '#ffd27a', 0.9, { hot: '#ffffff', inner: 0.2 })), fill = new THREE.Mesh(res().disc, vMat('pool', '#ffcc66', 0.2, { hot: '#fff6d0' })), col = new THREE.Mesh(res().cyl, vMat('beam', '#ffc860', 0, { hot: '#fffaf0' })), core = new THREE.Mesh(res().cyl, vMat('beam', '#fff4d0', 0, { hot: '#ffffff' }));
           f.g.add(mark, fill, col, core); f.parts = { mark, fill, col, core }; scene.add(f.g);
         }
         const gy = ctx.heightAt(f.x, f.z) + 0.2, P = f.parts;
@@ -503,11 +521,15 @@ export function createGiantBoss(ctx, kind) {
         const on = f.t >= f.warn, k = on ? clamp(1 - (f.t - f.warn) / (f.life - f.warn), 0, 1) : 0;
         P.col.scale.set(f.r * (0.6 + 0.4 * k), 60, f.r * (0.6 + 0.4 * k)); P.col.material.opacity = on ? 0.55 * k : 0;
         P.core.scale.set(f.r * 0.35, 60, f.r * 0.35); P.core.material.opacity = on ? 0.9 * k : 0;
-        P.mark.material.opacity = on ? 0.3 * k : 0.6 + 0.4 * Math.sin(f.t * 20); P.fill.material.opacity = on ? 0 : 0.25;
+        P.mark.material.opacity = on ? 0.3 * k : 0.6 + 0.4 * Math.sin(f.t * 20); P.fill.material.opacity = on ? 0.6 * k : 0.25 + 0.3 * (f.t / f.warn); P.col.material.opacity *= 1.5; P.col.material.uT = on ? 1 - k : 0;
+        if (!on && Math.random() < 0.4) VX.burst('light', f.x + (Math.random() - 0.5) * f.r * 1.6, gy + 0.2, f.z + (Math.random() - 0.5) * f.r * 1.6, { n: 1 });   // 표식 위로 빛 티끌이 떠오른다
+        if (on && k > 0.2) VX.burst('light', f.x, gy + Math.random() * 14, f.z, { n: 2, spread: f.r * 0.6, speed: 1.5 });
         if (on && !f.fired) {
           f.fired = true; ctx.shake(0.35, 0.4);
           if (!f.intro) ctx.sfx(kind, 'beam', f.x, f.z);
           for (let k2 = 0; k2 < 5; k2++) ctx.fx.spark(f.x + (Math.random() - 0.5) * f.r, gy + Math.random() * 3, f.z + (Math.random() - 0.5) * f.r);
+          VX.impact(f.x, gy, f.z, { color: '#ffd27a', hot: '#ffffff', sparks: 36, smokeKind: 'dust', smokeN: 8, size: 1.4 });
+          addFx({ type: 'ring', x: f.x, z: f.z, r0: f.r * 0.6, r1: f.r * 2.4, t: 0, life: 0.55, hit: false, color: '#ffe0a0' });
           if (f.hit) hitCircle(f.x, f.z, f.r, 'pillar', 0);
         }
         if (f.t >= f.life) { killFx(f); fxl.splice(i, 1); }
@@ -517,9 +539,9 @@ export function createGiantBoss(ctx, kind) {
   function hazVisual(h) {
     let v = hazVis.get(h.id);
     if (!v) {
-      const g = new THREE.Group(), disc = new THREE.Mesh(res().disc, ownMat('#ff4a10', 0.55)), ring = new THREE.Mesh(res().ring, ownMat('#ffb040', 0.8));
+      const g = new THREE.Group(), disc = new THREE.Mesh(res().disc, vMat('pool', '#ff3a08', 0.55, { hot: '#ffd070' })), ring = new THREE.Mesh(res().disc, vMat('shock', '#ff7a20', 0.8, { hot: '#ffe0a0', inner: 0.8 }));
       const flames = [];
-      for (let k = 0; k < 7; k++) { const f = new THREE.Mesh(res().ball, ownMat(k % 2 ? '#ff6a1a' : '#ffb24a', 0.7)); f.userData.ph = Math.random() * TAU; f.userData.r = Math.random() * 3.4; f.userData.a = Math.random() * TAU; g.add(f); flames.push(f); }
+      for (let k = 0; k < 7; k++) { const f = new THREE.Mesh(res().ball, vMat('orb', k % 2 ? '#ff4a10' : '#ff8a2a', 0.7, { hot: '#ffe8a0' })); f.userData.ph = Math.random() * TAU; f.userData.r = Math.random() * 3.4; f.userData.a = Math.random() * TAU; g.add(f); flames.push(f); }
       g.add(disc, ring); scene.add(g); v = { g, disc, ring, flames }; hazVis.set(h.id, v);
     }
     return v;
@@ -669,6 +691,7 @@ export function createGiantBoss(ctx, kind) {
         seen.add(h.id); const v = hazVisual(h), k = clamp(h.age / 0.3, 0, 1) * clamp((7.5 - h.age) / 1.2, 0, 1), gy = ctx.heightAt(h.x, h.z) + 0.12;
         v.g.position.set(h.x, gy, h.z); v.disc.scale.set(4.5 * k, 1, 4.5 * k); v.ring.scale.set(4.6, 1, 4.6); v.disc.material.opacity = 0.45 * k; v.ring.material.opacity = 0.7 * k;
         for (const f of v.flames) { const q = f.userData, fl = 0.6 + 0.4 * Math.sin(t * 9 + q.ph); f.position.set(Math.cos(q.a) * q.r, 0.6 + fl * 1.2, Math.sin(q.a) * q.r); f.scale.set(0.55 * k, (1.4 + fl) * k, 0.55 * k); }
+        if (k > 0.1 && Math.random() < 0.7) { const an = Math.random() * TAU, rr = Math.sqrt(Math.random()) * 4.2; VX.burst('fire', h.x + Math.cos(an) * rr, gy, h.z + Math.sin(an) * rr, { n: 1, size: 0.9 * k }); if (Math.random() < 0.3) VX.burst('ember', h.x + Math.cos(an) * rr, gy, h.z + Math.sin(an) * rr, { n: 1 }); if (Math.random() < 0.08) VX.burst('smoke', h.x, gy + 2, h.z, { n: 1, spread: 2 }); }
       }
       for (const [id, v] of hazVis) if (!seen.has(id)) { scene.remove(v.g); hazVis.delete(id); }
     }
@@ -836,4 +859,90 @@ export function createBossHub(map) {
     on(k, f) { (listeners[k] = listeners[k] || []).push(f); },
   };
   return hub;
+}
+
+// ---------- 여러 마리 동시 소환: 보스 명부(roster) ----------
+// const R = createBossRoster({ spider: () => createSpiderBoss(ctx), golem: () => createGiantBoss(gctx, 'golem'), … }, { cap: 8, me: () => ({ x, z }) })
+// 보스마다 따로 만든 인스턴스를 born(태어난 시각 ms, 접속자 모두에게 같은 값)으로 구분한다. 같은 종류도 여러 마리.
+// 허브와 같은 이름(active · owner · view · BOSS · hitTest · hitRay · damage · slowAt · update · on)을 그대로 내므로 무기 코드는 그대로 쓴다.
+// 맞은 곳 id 는 「보스 꼬리표 × HID + 안쪽 id」로 묶어 보낸다(꼬리표 = born % 90000 + 1, 무기 메시지 id 상한 1e9 안).
+export const ROSTER_CAP = 8;
+export const HID = 10000;
+export const tagOf = (born) => (Math.floor(born) % 90000) + 1;
+export function createBossRoster(factories, opt = {}) {
+  const cap = opt.cap || ROSTER_CAP;
+  const meFn = opt.me || (() => ({ x: 0, z: 0 }));
+  const KL = [...KIND_LIST, ...Object.keys(factories).filter((k) => !KIND_LIST.includes(k))];
+  const list = [];                    // [{ kind, b, born, tag }]
+  const listeners = {};
+  const EVS = ['spawn', 'despawn', 'gone', 'die', 'rage', 'takeover', 'request-despawn', 'hp', 'headbreak'];
+  let lastBorn = 0;
+  const emit = (ev, v) => { for (const f of listeners[ev] || []) { try { f(v); } catch (e) { /* listener */ } } };
+  function make(kind) {
+    const f = factories[kind]; if (!f) return null;
+    const b = f(); if (!b) return null;
+    const e = { kind, b, born: 0, tag: 0 };
+    for (const ev of EVS) b.on(ev, (v) => emit(ev, { ...(v || {}), kind, born: e.born || b.view.born }));
+    return e;
+  }
+  const setBorn = (e, born) => { e.born = born; e.tag = tagOf(born); };
+  const live = () => list.filter((e) => e.b.active);
+  const byTag = (tag) => list.find((e) => e.tag === tag && e.b.active) || null;
+  const viewOf = (e) => { const v = e.b.view; return e.kind === 'spider' ? { camR: 1, camLift: 1, act: '', ...v, kind: 'spider', name: '인면 거미', title: '인면 거미 · 직녀', born: e.born } : { ...v, born: e.born }; };
+  function nearest() {
+    const m = meFn(); let best = null, bd = 1e18;
+    for (const e of live()) { const v = e.b.view; if (v.dying && best) continue; const d = (v.x - m.x) ** 2 + (v.z - m.z) ** 2 + (v.dying ? 1e12 : 0); if (d < bd) { bd = d; best = e; } }
+    return best;
+  }
+  const enc = (e, id) => e.tag * HID + (Math.round(id) % HID);
+  function prune() { for (let i = list.length - 1; i >= 0; i--) if (!list[i].b.active) list.splice(i, 1); }
+  const R = {
+    cap, kinds: KL.filter((k) => factories[k]),
+    get count() { return live().length; },
+    get full() { return live().length >= cap; },
+    get active() { return live().length > 0; },
+    get owner() { return live().some((e) => e.b.owner); },
+    get ownerId() { const e = nearest(); return e ? e.b.ownerId : ''; },
+    get kind() { const e = nearest(); return e ? e.kind : ''; },
+    get view() { const e = nearest(); return e ? viewOf(e) : { active: false, kind: '', born: 0, hp: 0, maxHp: 0, minions: 0, spawnT: 0, dying: false, rage: false, x: 0, z: 0, ry: 0, camR: 1, camLift: 1 }; },
+    views() { return live().map(viewOf); },
+    get BOSS() { const e = nearest(); return e ? e.b.BOSS : { hitReach: 34 }; },
+    get MINI() { const e = list.find((q) => q.kind === 'spider'); return e ? e.b.MINI : null; },
+    get debug() { const e = nearest(); return e ? e.b.debug : null; },
+    get(born) { const e = list.find((q) => q.born === born && q.b.active); return e ? e.b : null; },
+    of(id) { const e = byTag(Math.floor(id / HID)); return e ? e.b : null; },
+    spawn(x, z, ry, kind = 'spider') {
+      prune();
+      if (live().length >= cap) return false;
+      const e = make(kind); if (!e) return false;
+      const born = Math.max(Date.now(), lastBorn + 1);
+      if (!e.b.spawn(x, z, ry, born)) return false;
+      lastBorn = born; setBorn(e, e.b.view.born || born); list.push(e);
+      return e.born;
+    },
+    despawn(born) { for (const e of list.slice()) if (born === undefined || e.born === born) { if (e.b.active) e.b.despawn(); } prune(); },
+    update(dt, t) { for (const e of list.slice()) e.b.update(dt, t); prune(); },
+    snapshots() { const out = []; for (const e of live()) if (e.b.owner) { const s = e.b.snapshot(); if (s) out.push(s); } return out; },
+    snapshot() { return R.snapshots()[0] || null; },
+    applySnapshot(d, senderId) {
+      if (!d || typeof d !== 'object' || typeof d.b !== 'number' || !Number.isFinite(d.b) || d.b <= 0) return false;
+      const kind = typeof d.kd === 'string' ? d.kd : 'spider';
+      if (!factories[kind]) return false;
+      const ex = list.find((q) => q.born === d.b);
+      if (ex) return ex.kind === kind ? ex.b.applySnapshot(d, senderId) : false;
+      prune();
+      if (live().length >= cap) return false;
+      const e = make(kind); if (!e) return false;
+      if (!e.b.applySnapshot(d, senderId)) { if (e.b.active) e.b.despawn(); return false; }
+      setBorn(e, d.b); list.push(e);
+      return true;
+    },
+    hitTest(cx, cz, r, y) { const out = []; for (const e of live()) for (const h of e.b.hitTest(cx, cz, r, y)) out.push({ ...h, id: enc(e, h.id), born: e.born }); return out; },
+    hitRay(...a) { let best = null; for (const e of live()) { const h = e.b.hitRay(...a); if (h && (!best || h.d < best.d)) best = { ...h, id: enc(e, h.id), born: e.born }; } return best; },
+    damage(kind, id, ...rest) { const e = byTag(Math.floor(id / HID)); return e ? e.b.damage(kind, id % HID, ...rest) : false; },
+    slowAt(x, z) { let s = 1; for (const e of live()) s = Math.min(s, e.b.slowAt(x, z)); return s; },
+    act(code, born) { const e = born ? list.find((q) => q.born === born && q.b.active) : nearest(); return e && e.b.act ? e.b.act(code) : false; },
+    on(k, f) { (listeners[k] = listeners[k] || []).push(f); },
+  };
+  return R;
 }

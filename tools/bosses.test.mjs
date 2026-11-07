@@ -1,6 +1,6 @@
 // node tools/bosses.test.mjs — bf/bosses.js 의 보스 3종·허브 로직(스냅샷 검증, 옛 클라이언트 호환, 허브 라우팅, 빈틈 없는 몸 판정, 패턴 피해, 처치)을 THREE 없이 확인한다.
 // 모델 로딩은 node 에서 실패하므로(동적 import) 모든 검사는 동기 구간에서 한다.
-import { createGiantBoss, createBossHub, KINDS, ACTS, HITS } from '../bf/bosses.js';
+import { createGiantBoss, createBossHub, createBossRoster, ROSTER_CAP, HID, tagOf, KINDS, ACTS, HITS } from '../bf/bosses.js';
 import { createSpiderBoss } from '../bf/spider.js';
 
 let fails = 0, n = 0;
@@ -135,6 +135,49 @@ for (const k of ['shark', 'golem', 'seraph']) {
   ok(hub.applySnapshot(snap('shark', { b: 2000 }), 'ddd') === false && hub.kind === 'spider', 'hub: a later-born other boss does not replace the live one');
   ok(hub.applySnapshot(snap('shark', { b: 500 }), 'ddd') && hub.kind === 'shark', 'hub: an earlier-born boss wins');
   ok(hub.applySnapshot(snap('dragon'), 'aaa') === false, 'hub: unknown kind refused');
+}
+
+// 7) 여러 마리 동시 소환(명부): 같은 종류 중복 · 개별/전체 삭제 · 상한 · born 별 스냅샷 라우팅 · 맞은 보스로 피해
+{
+  const spCtx = { THREE, scene: { add() {}, remove() {} }, baseUrl: 'file:///x/', myId: 'bbb', heightAt: () => 0, canStand: () => true, players: () => [{ id: 'bbb', x: 0, z: 0, y: 0 }], me: () => ME, pushMe() {}, onHitMe() {}, fx: { poof() {}, spark() {}, thump() {} } };
+  const F = { spider: () => createSpiderBoss(spCtx) };
+  for (const k of ['shark', 'golem', 'seraph']) F[k] = () => createGiantBoss(ctxFor('bbb'), k);
+  const R = createBossRoster(F, { me: () => ({ x: 0, z: 0 }) });
+  const evs = []; R.on('spawn', (e) => evs.push(e));
+  const b1 = R.spawn(0, 20, 0, 'golem'), b2 = R.spawn(40, 20, 0, 'golem'), b3 = R.spawn(-40, 20, 0, 'seraph'), b4 = R.spawn(0, -40, 0, 'shark');
+  ok(b1 && b2 && b3 && b4 && new Set([b1, b2, b3, b4]).size === 4, 'roster: four bosses, two of the same kind, distinct ids');
+  ok(R.count === 4 && R.views().filter((v) => v.kind === 'golem').length === 2, 'roster: same kind twice');
+  ok(evs.length === 4 && evs.every((e) => e.born > 0), 'roster: spawn events carry the boss id');
+  ok(R.snapshots().length === 4 && new Set(R.snapshots().map((q) => q.b)).size === 4, 'roster: one snapshot per boss, each with its own id');
+  for (const v of R.views()) R.get(v.born).debug.B.spawnT = 0;
+  // 피해는 맞은 보스에만
+  const id2 = tagOf(b2) * HID;
+  ok(R.of(id2) === R.get(b2) && R.damage('boss', id2, 50, 'p') === true, 'roster: a hit id routes to its boss');
+  ok(R.get(b2).view.hp === R.get(b2).view.maxHp - 50 && R.get(b1).view.hp === R.get(b1).view.maxHp, 'roster: other boss untouched');
+  // 처치: 체력 0 → 쓰러짐
+  for (let i = 0; i < 40 && R.get(b3).view.hp > 0; i++) R.damage('boss', tagOf(b3) * HID, 300, 'k' + i);
+  ok(R.get(b3).view.hp <= 0 && R.get(b3).view.dying, 'roster: one boss can be killed on its own');
+  ok(R.count === 4, 'roster: a dying boss stays until its fall ends');
+  // 개별 삭제
+  R.despawn(b1);
+  ok(R.count === 3 && !R.get(b1) && R.get(b2), 'roster: delete one');
+  // 상한
+  const more = []; for (let i = 0; i < 10; i++) more.push(R.spawn(i * 5, 30, 0, 'golem'));
+  ok(R.count === ROSTER_CAP && R.full && more.filter(Boolean).length === ROSTER_CAP - 3, `roster: capped at ${ROSTER_CAP}`);
+  ok(R.spawn(0, 0, 0, 'golem') === false, 'roster: spawn refused when full');
+  // 전체 삭제
+  R.despawn();
+  ok(R.count === 0 && !R.active && R.snapshots().length === 0, 'roster: delete all');
+  // 복제본: 다른 접속자의 보스 여러 마리를 born 으로 구분
+  const Q = createBossRoster(F, { me: () => ({ x: 0, z: 0 }) });
+  ok(Q.applySnapshot(snap('golem', { b: 111 }), 'aaa') && Q.applySnapshot(snap('golem', { b: 222, x: 30 }), 'aaa') && Q.applySnapshot(snap('shark', { b: 333 }), 'aaa'), 'replica roster: three bosses from one peer');
+  ok(Q.count === 3 && !Q.owner && Q.snapshots().length === 0, 'replica roster: three replicas, none owned');
+  ok(Q.applySnapshot(snap('golem', { b: 222, n: 2, hp: 100, x: 31 }), 'aaa') && Q.get(222).view.hp === 100 && Q.get(111).view.hp === 400, 'replica roster: an update reaches only its boss');
+  ok(Q.applySnapshot(snap('shark', { b: 222, n: 3 }), 'aaa') === false, 'replica roster: a kind clash on one id is refused');
+  ok(Q.applySnapshot({ kd: 'golem', hp: 1 }, 'aaa') === false, 'replica roster: a snapshot without an id is refused');
+  ok(Q.damage('boss', tagOf(111) * HID, 10, 'p') === false, 'replica roster: replicas do not book damage');
+  Q.despawn(111); ok(Q.count === 2 && !Q.get(111), 'replica roster: delete by id');
+  const hits = Q.hitTest(30, 6, 1, 1); ok(hits.every((h) => Q.of(h.id) && Math.floor(h.id / HID) === tagOf(h.born)), 'replica roster: hits carry the boss tag');
 }
 
 console.log(`${n - fails}/${n} boss checks passed`);

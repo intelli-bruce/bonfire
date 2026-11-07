@@ -7,6 +7,8 @@ import { applyLook, spring, breath } from './bosslook.js';
 //   quake — 지면 균열 폭발: 두 주먹으로 땅을 내리치면 갈라진 금이 세 줄(분노 다섯 줄)로 뻗어 나가며 차례로 불기둥이 솟는다.
 // 등장: 땅이 붉게 갈라지고 불기둥 고리 속에서 솟아오른다. 처치: 무릎 꿇고 앞으로 쓰러지며 가슴 불이 꺼진다.
 
+import { bossVfx } from './bossfx.js';   // 셰이더 재질 + 풀링 파티클(공용)
+
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const ease = (t) => t * t * (3 - 2 * t);
@@ -74,6 +76,8 @@ function res(X) {
   return X.S.res;
 }
 function own(X, c, o) { const mm = res(X).m(c, o); mm.userData.own = true; return mm; }
+const VX = (X) => X.S.vx || (X.S.vx = bossVfx(X.THREE, X.scene));
+function vm(X, mode, c, o, opt) { const v = VX(X); return (v.ok && v.mat(mode, c, o, opt)) || own(X, c, o); }
 function drop(X, f) { if (f.g) { X.scene.remove(f.g); f.g.traverse((o) => { if (o.material && o.material.userData.own) o.material.dispose(); }); f.g = null; } }
 function fxAdd(X, f) { (X.S.fx || (X.S.fx = [])).push(f); return f; }
 function chestPos(X) {   // 가슴 균열(앞면) 세계 좌표 — 뼈가 있으면 등뼈 기울기를 따른다
@@ -141,12 +145,14 @@ const ext = {
       h.turnTo(h.tgA, a.t < ch ? 1.2 : 0.15);
       X.S.charge = win(a.t, 0, ch);
       if (a.t < ch && Math.random() < dt * 24) { const c = chestPos(X); ctx.fx.spark(c.x + (Math.random() - 0.5) * 3, c.y + (Math.random() - 0.5) * 3, c.z + (Math.random() - 0.5) * 3); }
+      if (a.t < ch) { const c = chestPos(X), v = VX(X), k = a.t / ch; for (let i = 0; i < 2; i++) { const an = Math.random() * TAU, rr = 6 - 5 * k; v.burst('ember', c.x + Math.cos(an) * rr, c.y + (Math.random() - 0.5) * 4, c.z + Math.sin(an) * rr, { n: 1, dir: [-Math.cos(an) * 0.5, 0, -Math.sin(an) * 0.5], speed: 2.5 * (1 + k) }); } }   // 충전: 붉은 잔불이 가슴으로 빨려 든다
       if (X.once(a, 'fire', ch)) { ctx.sfx(kind, 'rift', B.x, B.z); ctx.shake(0.6, on); }
       if (a.t >= ch && a.t < ch + on) {
         const u = (a.t - ch) / on, c = chestPos(X), e = riftEnd(h.F.x, h.F.z, B.sa, T.x, T.z, u, B.rage), ey = g(e.x, e.z) + 0.3;
         a.beam = { ax: c.x, ay: c.y, az: c.z, bx: e.x, by: ey, bz: e.z };
         if (Math.random() < dt * 30) ctx.fx.spark(e.x + (Math.random() - 0.5) * 2, ey + Math.random(), e.z + (Math.random() - 0.5) * 2);
         if (Math.random() < dt * 8) ctx.fx.poof(e.x, ey, e.z, 3);
+        { const v = VX(X); v.burst('spark', e.x, ey, e.z, { n: 3, color: '#ff4a20', hot: '#ffe0b0' }); v.burst('fire', e.x, ey, e.z, { n: 2, size: 1.2 }); if (Math.random() < 0.25) v.burst('smoke', e.x, ey + 1, e.z, { n: 1 }); if (Math.random() < 0.3) v.burst('flash', c.x, c.y, c.z, { n: 1, color: '#ff4020', size: 0.7 }); }
         const m = ctx.me();
         if (m.ok && segDist3(m.x, m.y + 0.9, m.z, c.x, c.y, c.z, e.x, ey, e.z) < 2.2) X.hitMe('rift', e.x - c.x, e.z - c.z);
         if (Math.floor(u * 6) !== Math.floor((u - dt / on) * 6)) fxAdd(X, { type: 'scorch', x: e.x, z: e.z, t: 0, life: 2.4 });
@@ -158,6 +164,7 @@ const ext = {
         X.hitCircle(cx, cz, 6.5, 'quake', 0); ctx.shake(1.3, 1.1); ctx.sfx(kind, 'quake', cx, cz);
         X.addFx({ type: 'ring', x: cx, z: cz, r0: 2, r1: 16, t: 0, life: 0.9, hit: false, color: '#ff4a20' });
         for (let i = 0; i < 8; i++) ctx.fx.poof(cx + (Math.random() - 0.5) * 8, g(cx, cz) + 0.2, cz + (Math.random() - 0.5) * 8, 6);
+        VX(X).impact(cx, g(cx, cz), cz, { color: '#ff4a20', hot: '#ffd0a0', sparks: 34, smokeN: 14, size: 1.6 }); VX(X).burst('debris', cx, g(cx, cz), cz, { n: 34 }); VX(X).burst('ember', cx, g(cx, cz), cz, { n: 24, speed: 3 });
         for (const p of quakePoints(h.F.x, h.F.z, B.sa, B.rage)) fxAdd(X, { type: 'erupt', x: p.x, z: p.z, t: -p.delay, warn: 0.55, life: 1.5, hit: true });
       }
     }
@@ -172,14 +179,14 @@ const ext = {
     const bm = X.S.beam && X.B.active && X.B.a === 'rift' ? X.S.beam : null;
     if (bm) {
       if (!X.S.beamG) {
-        const g = new THREE.Group(), o = new THREE.Mesh(R.cyl, own(X, '#ff2a10', 0.55)), c = new THREE.Mesh(R.cyl, own(X, '#ffd0a0', 0.95)), s = new THREE.Mesh(R.disc, own(X, '#ff5020', 0.8));
-        g.add(o, c); scene.add(g); scene.add(s); X.S.beamG = { g, o, c, s, q: new THREE.Quaternion(), up: new THREE.Vector3(0, 1, 0), d: new THREE.Vector3() };
+        const g = new THREE.Group(), o = new THREE.Mesh(R.cyl, vm(X, 'beam', '#ff1a08', 0.8, { hot: '#ff8a40' })), c = new THREE.Mesh(R.cyl, vm(X, 'beam', '#ffb080', 1, { hot: '#ffffff' })), hz = new THREE.Mesh(R.cyl, vm(X, 'beam', '#ff0a00', 0.35, { hot: '#ff4020' })), s = new THREE.Mesh(R.disc, vm(X, 'pool', '#ff2a08', 0.9, { hot: '#ffe0a0' }));
+        hz.userData.halo = true; g.add(hz, o, c); scene.add(g); scene.add(s); X.S.beamG = { g, o, c, s, q: new THREE.Quaternion(), up: new THREE.Vector3(0, 1, 0), d: new THREE.Vector3() };
       }
       const G = X.S.beamG, dx = bm.bx - bm.ax, dy = bm.by - bm.ay, dz = bm.bz - bm.az, L = Math.hypot(dx, dy, dz) || 1;
       G.g.visible = G.s.visible = true;
       G.g.position.set(bm.ax, bm.ay, bm.az); G.d.set(dx / L, dy / L, dz / L); G.q.setFromUnitVectors(G.up, G.d); G.g.quaternion.copy(G.q);
       const fl = 1 + 0.15 * Math.sin(t * 40);
-      G.o.scale.set(1.5 * fl, L, 1.5 * fl); G.c.scale.set(0.55 * fl, L, 0.55 * fl);
+      G.o.scale.set(1.5 * fl, L, 1.5 * fl); G.c.scale.set(0.55 * fl, L, 0.55 * fl); G.g.children[0].scale.set(3.2 * fl, L, 3.2 * fl);
       G.s.position.set(bm.bx, bm.by, bm.bz); G.s.scale.setScalar(3.2 * fl);
     } else if (X.S.beamG) { X.S.beamG.g.visible = X.S.beamG.s.visible = false; }
     const fx = X.S.fx || [];
@@ -190,17 +197,18 @@ const ext = {
       if (f.type === 'slash') {   // 손톱 궤적: 앞쪽 허공에 붉은 호 세 줄
         if (!f.g) {
           f.g = new THREE.Group();
-          for (let k = 0; k < 3; k++) { const s = new THREE.Mesh(R.arc, own(X, k === 1 ? '#ffd0b0' : '#ff2a18', 0.9)); s.position.y = (k - 1) * 0.9; s.scale.setScalar(9 + k * 0.7); f.g.add(s); }
+          for (let k = 0; k < 3; k++) { const s = new THREE.Mesh(R.arc, vm(X, 'slash', k === 1 ? '#ff6a40' : '#ff1a10', 1.0, { hot: k === 1 ? '#ffffff' : '#ffb080', inner: 0.82 })); s.position.y = (k - 1) * 0.9; s.scale.setScalar(9 + k * 0.7); f.g.add(s); }
           f.g.position.set(f.x, f.y, f.z); f.g.rotation.set(f.side * 0.35, f.ry + (f.side < 0 ? 0.2 : Math.PI - 0.2), 0); scene.add(f.g);
         }
         const u = f.t / f.life;
-        f.g.children.forEach((c, k) => { c.material.opacity = 0.9 * (1 - u); c.rotation.y = -f.side * u * 0.6; });
+        f.g.children.forEach((c, k) => { c.material.opacity = 1.2 * (1 - u); c.material.uT = u; c.rotation.y = -f.side * u * 0.6; });
+        if (!f.sp) { f.sp = true; const v = VX(X); v.burst('spark', f.x, f.y, f.z, { n: 30, color: '#ff3018', hot: '#ffe0d0', spread: 6, dir: [Math.cos(f.ry) * f.side, -0.1, -Math.sin(f.ry) * f.side] }); v.burst('ember', f.x, f.y, f.z, { n: 12, spread: 5 }); }
         if (u >= 1) { drop(X, f); fx.splice(i, 1); }
       } else if (f.type === 'erupt') {   // 바닥 균열 표식(warn) → 불기둥(원 안이면 맞음)
         const gy = ctx.heightAt(f.x, f.z) + 0.15;
         if (!f.g) {
           f.g = new THREE.Group();
-          const crack = new THREE.Mesh(R.disc, own(X, '#ff2a10', 0.7)), col = new THREE.Mesh(R.cone, own(X, '#ff5a1a', 0)), core = new THREE.Mesh(R.cone, own(X, '#ffe0a0', 0));
+          const crack = new THREE.Mesh(R.disc, vm(X, 'pool', '#ff2a10', 0.7, { hot: '#ffd070' })), col = new THREE.Mesh(R.cone, vm(X, 'beam', '#ff3a10', 0, { hot: '#ffb050' })), core = new THREE.Mesh(R.cone, vm(X, 'beam', '#ffc080', 0, { hot: '#ffffff' }));
           f.g.add(crack, col, core); f.p = { crack, col, core }; f.g.position.set(f.x, gy, f.z); scene.add(f.g);
         }
         const P = f.p, w = Math.min(1, f.t / f.warn), on = f.t >= f.warn, k = on ? clamp(1 - (f.t - f.warn) / (f.life - f.warn), 0, 1) : 0;
@@ -211,13 +219,17 @@ const ext = {
         if (on && !f.fired) {
           f.fired = true;
           if (f.hit) { ctx.sfx(X.kind, 'erupt', f.x, f.z); ctx.shake(0.25, 0.25); }
+          { const v = VX(X); v.impact(f.x, gy, f.z, { color: '#ff4a10', hot: '#fff0b0', sparks: 20, smokeN: 5, size: 1.1 }); v.burst('fire', f.x, gy, f.z, { n: 22, up: 1.8, size: 1.3 }); v.burst('debris', f.x, gy, f.z, { n: 10 }); }
           ctx.fx.poof(f.x, gy, f.z, 4); for (let s = 0; s < 3; s++) ctx.fx.spark(f.x + (Math.random() - 0.5) * 2, gy + Math.random() * 4, f.z + (Math.random() - 0.5) * 2);
           if (f.hit && m.ok) { const d = Math.hypot(m.x - f.x, m.z - f.z); if (d < 3.2 && m.y - ctx.heightAt(m.x, m.z) < 4) X.hitMe('quake', (m.x - f.x) / (d || 1), (m.z - f.z) / (d || 1)); }
         }
+        if (on && k > 0.15) VX(X).burst('fire', f.x, gy + 1, f.z, { n: 2, up: 1.4, size: 1.1 * k });
+        else if (!on && Math.random() < 0.5) VX(X).burst('ember', f.x + (Math.random() - 0.5) * 3, gy, f.z + (Math.random() - 0.5) * 3, { n: 1 });
         if (f.t >= f.life) { drop(X, f); fx.splice(i, 1); }
       } else if (f.type === 'scorch') {   // 광선이 지나간 그을린 자국
-        if (!f.g) { f.g = new THREE.Mesh(R.disc, own(X, '#ff3a10', 0.5)); f.g.position.set(f.x, ctx.heightAt(f.x, f.z) + 0.1, f.z); f.g.scale.setScalar(2.2); scene.add(f.g); }
-        f.g.material.opacity = 0.5 * (1 - f.t / f.life);
+        if (!f.g) { f.g = new THREE.Mesh(R.disc, vm(X, 'pool', '#ff2a08', 0.5, { hot: '#ffb040' })); f.g.position.set(f.x, ctx.heightAt(f.x, f.z) + 0.1, f.z); f.g.scale.setScalar(2.2); scene.add(f.g); }
+        f.g.material.opacity = 0.7 * (1 - f.t / f.life); f.g.material.uT = f.t / f.life * 0.8;
+        if (Math.random() < 0.06) VX(X).burst('smoke', f.x, ctx.heightAt(f.x, f.z) + 0.5, f.z, { n: 1, size: 0.6 });
         if (f.t >= f.life) { drop(X, f); fx.splice(i, 1); }
       }
     }
