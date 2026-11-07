@@ -303,6 +303,7 @@ body.coarse #ammo b { font-size: 32px; }
   <button class="btn" type="button" data-kind="shark"><b>메갈로돈</b><small>바다에서 덮침 · 물기 · 꼬리치기 · 수면 돌진</small></button>
   <button class="btn" type="button" data-kind="golem"><b>초거대 바위 골렘</b><small>내려찍기 충격파 · 바위 던지기 · 돌진</small></button>
   <button class="btn" type="button" data-kind="seraph"><b>반천사·반악마</b><small>빛 기둥 · 지옥불 · 비행 강하</small></button>
+  <button class="btn" type="button" data-kind="commander"><b>대검 지휘관</b><small>대검 수평 베기 · 내려찍기 충격파 · 돌진 찌르기</small></button>
 </div>
 <div id="bossIntro" class="hud" aria-live="polite"><b id="bossIntroName"></b><small id="bossIntroSub"></small></div>
 <div id="myHp" class="hud" hidden><div class="track"><i id="myHpFill"></i></div><span id="myHpTxt">1000</span></div>
@@ -2515,7 +2516,7 @@ const BOSS_HIT_MSG = {
   slam: '골렘의 주먹에 내리찍혔습니다!', wave: '충격파에 넘어졌습니다. (점프로 넘을 수 있습니다)', hurl: '날아온 바위에 맞았습니다!', charge: '돌진하는 골렘에 치였습니다!',
   pillar: '빛 기둥에 맞았습니다!', hellfire: '지옥불에 휩싸였습니다!', burn: '불 장판 위에서 타고 있습니다.', dive: '내리꽂힌 날개에 휩쓸렸습니다!',
 };
-function initBosses(spMod, gMod) {
+function initBosses(spMod, gMod, cMod) {
   const meFn = () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2 && !MYHP.dead, x: me.x, y: me.y, z: me.z });
   const BOSS_DMG_K = 7.5;
   const onHitMe = (h) => {
@@ -2536,6 +2537,7 @@ function initBosses(spMod, gMod) {
   const gctx = { ...base, canSwim: bossSwimOk, canFly: bossFlyOk, waterLevel: () => WATER.level, camPos: () => camera.position, shake: (a, d) => camShake(a, d), sfx: (k, n, x, z) => bossSound(k, n, x, z) };
   const map = { spider };
   for (const k of ['shark', 'golem', 'seraph']) map[k] = gMod.createGiantBoss(gctx, k);
+  if (cMod) { map.commander = cMod.createCommanderBoss({ ...gctx, audio: () => (actx && actx.state === 'running' ? { actx, out: sfx, buf: whiteBuffer() } : null) }); BOSS_LOG.commander = cMod.LOG; BOSS_HURT_NAME.commander = cMod.HURT_NAME; Object.assign(BOSS_HIT_MSG, cMod.HIT_MSG); }   // 대검 지휘관(bf/commander.js)
   SPIDER = gMod.createBossHub(map);
   SPIDER.on('spawn', (e) => { refreshBossUi(true); logLine(null, (BOSS_LOG[e.kind] || BOSS_LOG.spider).spawn, true); bossIntro(e.kind); });
   SPIDER.on('despawn', () => refreshBossUi(true));
@@ -2683,7 +2685,7 @@ function bossFrame(dt, t, now) {
   if (now < SLOW.until) f = Math.min(f, 1 - SLOW.poison); else SLOW.poison = 0;
   if (Math.abs(f - SLOW.cur) > 0.01) { SLOW.cur = f; for (const k in SLOW.base) KIT_TUNING[k] = SLOW.base[k] * f; }
 }
-Promise.all([import('./bf/spider.js'), import('./bf/bosses.js')]).then(([a, b]) => initBosses(a, b)).catch((e) => { console.warn('[bonfire] could not load the bosses', e && e.message); if (LOCAL) window.__bossLoadErr = String((e && e.stack) || e); });
+Promise.all([import('./bf/spider.js'), import('./bf/bosses.js'), import('./bf/commander.js').catch(() => null)]).then(([a, b, c]) => initBosses(a, b, c)).catch((e) => { console.warn('[bonfire] could not load the bosses', e && e.message); if (LOCAL) window.__bossLoadErr = String((e && e.stack) || e); });
 
 // ---------- weapons (bf/weapons.js; models bf/sword.glb · m4a1.glb · shotgun.glb from tools/weapons/build_weapons.py) ----------
 // 1 bare hands (the kit's chop) · 2 sword (3-hit combo + a flying crescent) · 3 M4A1 (30 rounds, auto) · 4 pump shotgun. Damage lands on the boss and its minions

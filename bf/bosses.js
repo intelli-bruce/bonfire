@@ -78,7 +78,7 @@ export const KINDS = {
     ],
   },
 };
-export const KIND_LIST = ['spider', 'shark', 'golem', 'seraph'];
+export const KIND_LIST = ['spider', 'shark', 'golem', 'seraph', 'commander'];
 // 패턴 피해(내 HP 100 기준) · 넉백 세기
 export const HITS = {
   bite: [32, 2.4], lunge: [34, 2.8], tail: [22, 2.6], rush: [26, 2.2],
