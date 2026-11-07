@@ -1,7 +1,8 @@
 // bf/weapons.js — 무기 슬롯(1 맨손 · 2 검 · 3 M4A1 · 4 산탄총 · 5 권총 · 6 선물상자 수류탄 · 7 저격총 · 8 RPG): 모델 장착, 자세·휘두르기·장전 애니메이션, 총구 섬광·탄 궤적·탄피·검기, 내 전투 로직과 네트워크 반영.
 // 로직(탄약·콤보·피해 표·광선 수학·메시지 검증)은 bf/weapons-core.js 에 있다(node 테스트). 모델은 tools/weapons/build_weapons.py (Blender) 로 만든다.
 //
-//   const W = createWeapons({ THREE, scene, camera, baseUrl, myId, addFill, fx, groundY, heightAt, blocked, waterY, me, camState, others, spider, net, log, audio, canUse, standUp, hud })
+//   const W = createWeapons({ THREE, scene, camera, baseUrl, myId, addFill, fx, groundY, heightAt, blocked, waterY, me, camState, others, spider, net, log, audio, canUse, standUp, hud,
+//                             players, hurtPlayer, pvpFeedback })   // players() = 맞힐 수 있는 다른 접속자 [{ id, x, y, z }](발 위치) · hurtPlayer(amount, info) = 내가 맞았을 때 · pvpFeedback(id) = 내가 접속자를 맞혔을 때
 //   W.load() · W.equip(slot) · W.cycle(dir) · W.trigger(down) · W.alt(down)(우클릭: 총 조준 · 검 궁극기) · W.reload() · W.frame(dt, now) · W.afterUpdate(rec, dt, now) · W.onNet(rec, senderId, msg)
 //   W.setRemoteSlot(rec, slot) · W.view  (HUD 값) · W.dispose()
 
@@ -237,6 +238,28 @@ export function createWeapons(ctx) {
     else if (kind === 'hurt') { tone(240, 120, 0.16, 0.45, 'square'); burst(0.12, 1400, 500, 1.2, 0.4); }
     else if (kind === 'down') { tone(330, 70, 0.7, 0.5, 'sawtooth'); burst(0.4, 800, 150, 0.8, 0.4, 'lowpass'); }
     else if (kind === 'respawn') { tone(440, 880, 0.25, 0.25); tone(660, 1320, 0.3, 0.18, 'triangle'); }
+    else if (kind === 'boing') {   // 「띠용」: 스프링처럼 튀어 올랐다 떨리며 내려오는 소리
+      const o = ac.createOscillator(), g = ac.createGain(), l = ac.createOscillator(), lg = ac.createGain();
+      o.type = 'triangle'; o.frequency.setValueAtTime(170, t); o.frequency.exponentialRampToValueAtTime(820, t + 0.1); o.frequency.exponentialRampToValueAtTime(240, t + 0.55);
+      l.frequency.value = 26; lg.gain.setValueAtTime(70, t + 0.05); lg.gain.exponentialRampToValueAtTime(4, t + 0.6); l.connect(lg); lg.connect(o.frequency);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.55 * level, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.62);
+      o.connect(g); g.connect(a.dest); o.start(t); l.start(t); o.stop(t + 0.66); l.stop(t + 0.66);
+    }
+    else if (kind === 'ghost') {   // 유령이 떠오르는 「우우우~」: 두 소리가 살짝 어긋난 채 미끄러지며 떨림(트레몰로), 숨소리가 섞임
+      const t0 = t + 0.2, dur = 1.5;
+      for (const [k, gn] of [[1, 0.26], [1.504, 0.16]]) {
+        const o = ac.createOscillator(), g = ac.createGain(), l = ac.createOscillator(), lg = ac.createGain();
+        o.type = 'sine'; o.frequency.setValueAtTime(300 * k, t0); o.frequency.exponentialRampToValueAtTime(520 * k, t0 + 0.5); o.frequency.exponentialRampToValueAtTime(260 * k, t0 + dur);
+        l.frequency.value = 6.5; lg.gain.value = gn * 0.45 * level; l.connect(lg); lg.connect(g.gain);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gn * level, t0 + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.connect(g); g.connect(a.dest); o.start(t0); l.start(t0); o.stop(t0 + dur + 0.05); l.stop(t0 + dur + 0.05);
+      }
+      const src = ac.createBufferSource(), flt = ac.createBiquadFilter(), g2 = ac.createGain();
+      src.buffer = noise; src.loop = true; flt.type = 'bandpass'; flt.Q.value = 1.2; flt.frequency.setValueAtTime(900, t0); flt.frequency.exponentialRampToValueAtTime(2200, t0 + dur);
+      g2.gain.setValueAtTime(0.0001, t0); g2.gain.exponentialRampToValueAtTime(0.07 * level, t0 + 0.4); g2.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(flt); flt.connect(g2); g2.connect(a.dest); src.start(t0); src.stop(t0 + dur + 0.05);
+    }
+    else if (kind === 'hitmark') { tone(1700, 1250, 0.05, 0.26, 'triangle'); tone(880, 700, 0.07, 0.12, 'sine'); }
     else if (kind === 'ui') { tone(1200, 900, 0.04, 0.12, 'triangle'); }
     else if (kind === 'death') { burst(0.9, 300, 3200, 0.6, 0.6); tone(110, 55, 0.9, 0.7, 'sawtooth'); tone(880, 220, 0.6, 0.2); }
   }
@@ -411,6 +434,43 @@ export function createWeapons(ctx) {
     return { x: p0.x + camDir.x * T0, y: p0.y + camDir.y * T0, z: p0.z + camDir.z * T0, kind, part, dir: camDir.clone() };
   }
 
+  // ===================================================================== 접속자 맞히기(공격자 판정)
+  // 내 화면에 보이는 다른 접속자의 몸(발 위치 → 세운 캡슐)에 닿았는가를 내가 정하고, 맞은 사람에게 알린다(맞은 사람 화면이 피해 표로 HP 를 깎는다).
+  const pvpList = () => (ctx.players ? ctx.players() : []);
+  function playerRay(o, d, maxD, skip) {   // 가장 가까운 접속자 몸에 닿는 거리 { id, d } | null (skip: 이 id 는 건너뜀)
+    if (!(maxD > 0)) return null;
+    let best = null;
+    for (const p of pvpList()) {
+      if (skip && p.id === skip) continue;
+      const t = C.rayBody(o.x, o.y, o.z, d[0], d[1], d[2], p.x, p.y, p.z, maxD, 0.05);
+      if (t >= 0 && (!best || t < best.d)) best = { id: p.id, d: t };
+    }
+    return best;
+  }
+  function playersNear(cx, cy, cz, r) {   // 한 점에서 몸 표면까지 r 안에 있는 접속자 [{ id, d }]
+    const out = [];
+    for (const p of pvpList()) { const d = C.distToBody(cx, cy, cz, p.x, p.y, p.z); if (d <= r) out.push({ id: p.id, d }); }
+    return out;
+  }
+  function reportPlayer(id, w, c, sl, n, x) {   // 접속자를 맞혔다: 그 사람에게 피해 보고(값은 맞은 쪽 표가 정한다)
+    ctx.net.send(C.wpnMsg.pvp(id, w, c, sl, n, x));
+    my.stat.pvp = (my.stat.pvp || 0) + 1;
+    sfx('hitmark', 0.8); if (ctx.pvpFeedback) ctx.pvpFeedback(id);
+  }
+  // 내가 맞았다: 보낸 사람 화면이 판정한 보고를 받아 내 화면이 피해를 정한다(보낸 값은 믿지 않고 표·거리·간격을 확인)
+  const pvpSeen = new Map();   // 공격자|무기 → 마지막으로 받은 때(ms)
+  function pvpHurt(rec, senderId, s, w, c, sl, n, x) {
+    if (!ctx.hurtPlayer || !ctx.canBeHit || !ctx.canBeHit()) return;
+    if (rec && rec.hpNet && rec.hpNet.dead) return;   // 쓰러진 사람의 공격은 받지 않는다
+    const how = x || (sl ? 'sl' : 'm'), d = C.pvpDmgFor(w, how, c, n, x); if (!d) return;
+    const me = ctx.me(); if (!C.pvpReachOk(w, how, Math.hypot(s.x - me.x, s.z - me.z))) return;
+    const key = senderId + '|' + d.key, t = performance.now();
+    if (t - (pvpSeen.get(key) || 0) < d.cd * 0.6) return;   // 같은 사람이 같은 무기로 너무 빨리 보내면 버린다(지연으로 몰려 온 것 감안)
+    if (pvpSeen.size > 400) pvpSeen.clear();
+    pvpSeen.set(key, t);
+    ctx.hurtPlayer(d.amount, { id: senderId, rec, w, key: d.key, knock: C.PVP_KNOCK[d.key] || 0, from: [s.x, s.z] });
+  }
+
   // ===================================================================== 내 공격
   function canAct() { return ctx.canUse(); }
   function attackPress() {   // 슬롯에 맞는 한 번의 공격(검 휘두르기 · 한 발 사격 · 수류탄 던지기). 맨손은 페이지가 punch 로 처리
@@ -480,6 +540,10 @@ export function createWeapons(ctx) {
       const rr = P.reach * 0.55, cx = m.x + dx * rr * ce, cz = m.z + dz * rr * ce, cy = m.y + Math.sin(elev) * rr;
       for (const h of sp.hitTest(cx, cz, 1.3 * P.reach / 2.6 + 0.6, cy)) { reportHit(2, c, false, h.kind, h.id, 1); ctx.fx.spark(cx, cy + 1.2, cz); sfx('slashHit', 0.8); }
     }
+    {   // 접속자: 눈앞 베기 구역(칼날 중심 ~ 몸 표면)
+      const rr = P.reach * 0.55, px = m.x + dx * rr * ce, py = m.y + 1.0 + Math.sin(elev) * rr, pz = m.z + dz * rr * ce;
+      for (const q of playersNear(px, py, pz, P.reach / 2.6 + 0.55)) { reportPlayer(q.id, 2, c, false, 1); ctx.fx.spark(px, py, pz); sfx('slashHit', 0.8); }
+    }
     spawnSlash(origin, yaw, c, true, m.rec, false, elev);
   }
   // ---- 검 궁극기: 아주 빠른 난무(주변 연속 타격) → 「死」 거대 검기
@@ -493,6 +557,7 @@ export function createWeapons(ctx) {
       const mm = ctx.me(); if (!mm.rec) return;
       const dx = -Math.sin(yaw), dz = -Math.cos(yaw), cx = mm.x + dx * 1.6, cz = mm.z + dz * 1.6;
       if (sp && sp.active) for (const h of sp.hitTest(cx, cz, C.ULT.rushReach, mm.y)) { reportHit(2, 0, false, h.kind, h.id, 1, 'r'); ctx.fx.spark(cx + (rnd() - 0.5) * 2, mm.y + 0.8 + rnd() * 1.4, cz + (rnd() - 0.5) * 2); }
+      for (const q of playersNear(cx, mm.y + 1.0, cz, C.ULT.rushReach * 0.7)) { reportPlayer(q.id, 2, 0, false, 1, 'r'); ctx.fx.spark(cx + (rnd() - 0.5) * 2, mm.y + 0.8 + rnd() * 1.4, cz + (rnd() - 0.5) * 2); }
     } });
     my.timeline.push({ at: now + C.ULT.rushT, fn: () => { const mm = ctx.me(); if (mm.rec) spawnDeath(new T.Vector3(mm.x - Math.sin(yaw) * 1.2, mm.y + 1.6, mm.z - Math.cos(yaw) * 1.2), yaw, true, elev); } });
     return true;
@@ -528,6 +593,7 @@ export function createWeapons(ctx) {
     dir = dist < 2.5 ? aim.dir.clone() : dir.clone().normalize();
     const seed = (rnd() * 4294967295) >>> 0, rr = rngSeed(seed), sp = ctx.spider();
     let firstDir = null, firstHit = null, hitN = 0, firstLen = W_.range;
+    const pv = new Map();   // 이번 발사가 맞힌 접속자 id → 맞은 알갱이 수
     const moving = ctx.me().speed > 0.5, ends = [];
     recoilShot(slot, now);
     if (W_.rocket) {   // RPG: 눈에 보이는 로켓이 날아가 닿는 곳에서 폭발(피해는 폭발이 계산)
@@ -543,11 +609,14 @@ export function createWeapons(ctx) {
     for (let p = 0; p < W_.pellets; p++) {
       const sd = pd ? pd[p] : C.spreadDir(dir.x, dir.y, dir.z, C.spreadFor(slot, view.ads, moving) * (p === 0 && slot === 3 ? 0.4 : 1), rr(), rr());
       const tW = worldRay(o.x, o.y, o.z, sd[0], sd[1], sd[2], W_.range);
-      let hit = null;
+      let hit = null, ph = null;
       if (sp && sp.active) hit = sp.hitRay(o.x, o.y, o.z, sd[0], sd[1], sd[2], Math.min(W_.range, tW), 0.05);
-      const L = hit ? hit.d : Math.min(tW, W_.range);
+      ph = playerRay(o, sd, Math.min(W_.range, tW, hit ? hit.d : 1e9));   // 거미보다 가까운 접속자가 있으면 그 사람이 맞는다
+      if (ph) hit = null;
+      const L = ph ? ph.d : hit ? hit.d : Math.min(tW, W_.range);
       const e = new T.Vector3(o.x + sd[0] * L, o.y + sd[1] * L, o.z + sd[2] * L);
-      ends.push({ e, hit, ground: tW <= W_.range && !hit });
+      ends.push({ e, hit: hit || (ph ? { kind: 'player' } : null), ground: tW <= W_.range && !hit && !ph });
+      if (ph) pv.set(ph.id, (pv.get(ph.id) || 0) + 1);
       if (p === 0) { firstDir = sd; firstLen = L; }
       if (hit) { if (!firstHit) { firstHit = hit; hitN = 1; } else if (hit.kind === firstHit.kind && hit.id === firstHit.id) hitN++; }
     }
@@ -559,8 +628,10 @@ export function createWeapons(ctx) {
     kickAdd(KICK[slot][1] * (1 - 0.5 * view.ads));
     ctx.me().ctrl.setAim(ctx.camState().yaw); my.aimUntil = now + 2.2;
     const h = firstHit ? [firstHit.kind === 'boss' ? 'b' : 'm', firstHit.id] : null;
-    ctx.net.send(C.wpnMsg.fire(slot, [o.x, o.y, o.z], firstDir, firstLen, hitN, seed, h, view.ads));
+    const pvl = [...pv].slice(0, 3);
+    ctx.net.send(C.wpnMsg.fire(slot, [o.x, o.y, o.z], firstDir, firstLen, hitN, seed, h, view.ads, pvl));
     my.stat.fired++; if (firstHit) { my.stat.hit++; reportHit(slot, 0, false, firstHit.kind, firstHit.id, hitN); }
+    if (pvl.length) { my.stat.pvp = (my.stat.pvp || 0) + pvl.length; sfx('hitmark', 0.8); if (ctx.pvpFeedback) for (const [id] of pvl) ctx.pvpFeedback(id); }
     refreshHud();
     return true;
   }
@@ -621,7 +692,7 @@ export function createWeapons(ctx) {
     const wh = tpl[8].getObjectByName('warhead').clone(true), g = new T.Group(); wh.position.z += 0.62; g.add(wh);
     const fl = new T.Mesh(fxs.glowGeo, fxs.glowMat); fl.position.z = 0.25; fl.scale.set(0.9, 0.9, 2.4); g.add(fl);
     g.position.fromArray(o); g.quaternion.setFromUnitVectors(v2.set(0, 0, -1), v1.fromArray(d)); scene.add(g);
-    rockets.push({ g, p: o.slice(), v: d.map((q) => q * C.ROCKET.speed), t: 0, mine, smoke: 0 });
+    rockets.push({ g, p: o.slice(), v: d.map((q) => q * C.ROCKET.speed), t: 0, mine, smoke: 0, owner: rec && rec.rid });
     if (rec && rec.wp) { const inst = rec.wp.inst[8]; if (inst && inst.warhead) inst.warhead.visible = false; }
     sfx('rocket', mine ? 0.8 : lvlAt(o[0], o[1], o[2], 50));
   }
@@ -635,6 +706,10 @@ export function createWeapons(ctx) {
         C.rocketStep(r.p, r.v, h);
         const sl = Math.hypot(r.p[0] - px, r.p[1] - py, r.p[2] - pz) || 1e-6;
         if (sp && sp.active && r.t > 0.03) { const hh = sp.hitRay(px, py, pz, (r.p[0] - px) / sl, (r.p[1] - py) / sl, (r.p[2] - pz) / sl, sl, 0.15); if (hh) { at = [px + (r.p[0] - px) / sl * hh.d, py + (r.p[1] - py) / sl * hh.d, pz + (r.p[2] - pz) / sl * hh.d]; break; } }
+        if (r.t > 0.03) {   // 접속자 몸에 닿아도 터진다(쏜 사람 자신은 처음 0.3 s 건너뜀: 총구가 몸 안쪽에서 시작)
+          const pr = playerRay({ x: px, y: py, z: pz }, [(r.p[0] - px) / sl, (r.p[1] - py) / sl, (r.p[2] - pz) / sl], sl, r.t < 0.3 ? r.owner : null);
+          if (pr) { at = [px + (r.p[0] - px) / sl * pr.d, py + (r.p[1] - py) / sl * pr.d, pz + (r.p[2] - pz) / sl * pr.d]; break; }
+        }
         if (r.p[1] < ctx.groundY(r.p[0], r.p[2], r.p[1] + 0.3) || (r.t > 0.08 && r.p[1] - ctx.heightAt(r.p[0], r.p[2]) < 2 && ctx.blocked(r.p[0], r.p[2], r.p[1] - 0.2))) at = r.p.slice();
       }
       if (!at && r.t > C.ROCKET.life) at = r.p.slice();
@@ -686,6 +761,7 @@ export function createWeapons(ctx) {
     kickAdd(0.5 * lvlAt(x, y, z, 22));
     my.stat.booms = (my.stat.booms || 0) + 1;
     if (!mine) return;
+    for (const q of playersNear(x, y + 0.3, z, RAD)) reportPlayer(q.id, w, 0, false, Math.min(q.d, RAD));   // 폭발 중심에서 몸까지의 거리가 피해를 정한다
     const sp = ctx.spider(); if (!sp || !sp.active) return;
     const seen = new Set();
     for (const r of [0.8, 1.8, 3, 4.4, 5.5, RAD].filter((q, i, a) => q <= RAD && a.indexOf(q) === i)) for (const h of sp.hitTest(x, z, r, y - 0.4)) {   // 가까운 반지름부터: 처음 걸린 반지름 ≈ 거리
@@ -958,6 +1034,11 @@ export function createWeapons(ctx) {
           for (let q = 0; q < 4; q++) ctx.fx.spark(d.x + (rnd() - 0.5) * 3, d.y - 1 + rnd() * 3, d.z + (rnd() - 0.5) * 3);
           if (d.mine) reportHit(2, 0, false, h.kind, h.id, 1, 'u');
         }
+        if (d.mine) for (const q of playersNear(d.x, d.y, d.z, C.ULT.r)) {
+          const key = 'p' + q.id; if (d.hit.has(key)) continue; d.hit.add(key);
+          for (let k2 = 0; k2 < 4; k2++) ctx.fx.spark(d.x + (rnd() - 0.5) * 3, d.y - 1 + rnd() * 3, d.z + (rnd() - 0.5) * 3);
+          reportPlayer(q.id, 2, 0, false, 1, 'u');
+        }
       }
       d.g.position.set(d.x, d.y, d.z);
       const grow = 1 + d.t * 0.5, fade = clamp((C.ULT.life - d.t) / 0.35, 0, 1);
@@ -982,6 +1063,11 @@ export function createWeapons(ctx) {
           ctx.fx.spark(s.x, s.y, s.z); sfx('slashHit', s.mine ? 0.9 : lvlAt(s.x, s.y, s.z));
           if (s.mine) reportHit(2, s.c, true, h.kind, h.id, 1);
           if (h.kind === 'boss') stop = true;
+        }
+        if (s.mine) for (const q of playersNear(s.x, s.y, s.z, SLASH.r * s.sc * 0.75)) {   // 검기는 사람을 뚫고 지나간다(한 사람에게 한 번)
+          const key = 'p' + q.id; if (s.hit.has(key)) continue; s.hit.add(key);
+          ctx.fx.spark(s.x, s.y, s.z); sfx('slashHit', 0.9);
+          reportPlayer(q.id, 2, s.c, true, 1);
         }
         if (s.t > SLASH.life || Math.hypot(s.x - s.o.x, s.y - s.o.y, s.z - s.o.z) > SLASH.range) stop = true;   // an energy crescent passes through props
       }
@@ -1021,6 +1107,9 @@ export function createWeapons(ctx) {
       shotFx(rec, m.w, false); wp.kick = Math.min(1.6, wp.kick + KICK[m.w][0]); wp.bolt = 1; wp.elevT = Math.asin(clamp(m.d[1], -0.9, 0.9)); wp.elev = wp.elevT; wp.ads = m.z || 0; wp.adsAt = now0();
       if (m.w === 7) wp.boltCyc = 0;
       if (m.h) bookRemoteHit(senderId, s, m.w, 0, false, m.h, m.n || 1);
+      if (m.v) for (const [id, n] of m.v) if (id === ctx.myId) pvpHurt(rec, senderId, s, m.w, 0, false, n);   // 이 발사가 나를 맞혔다고 한다
+    } else if (m.k === 'p') {
+      if (m.t === ctx.myId) pvpHurt(rec, senderId, s, m.w, m.c, !!m.sl, m.n, m.x);
     } else if (m.k === 's') {
       const wp = wpOf(rec); if (wp.slot !== 2) setRemoteSlot(rec, 2);
       const yaw = m.a;
@@ -1076,6 +1165,6 @@ export function createWeapons(ctx) {
     get ads() { return view.ads; }, get scope() { return view.scope; }, fov: (base) => C.adsFov(base, my.slot, view.ads), setRemoteAds: (rec, a) => { const wp = wpOf(rec); wp.ads = a; },
     get slot() { return my.slot; }, get shoulder() { return view.shoulder; }, get view() { return view; }, get ready() { return ready; }, get kick() { return kickCam; }, get guns() { return my.guns; },
     get sword() { return my.sword; }, kickAdd, attachRec: (rec) => wpOf(rec), instOf, sfx,
-    debug: { my, trs, cas, slashes, nades, booms, deaths, rockets, spawnRocket, aimElev, shotLog, handCache, POSE, KF, computeAim, worldRay, spawnSlash, flashAt, tracer, muzzleWorld, explode, get fxs() { return fxs; } },
+    debug: { pvpHurt, playerRay, playersNear, my, trs, cas, slashes, nades, booms, deaths, rockets, spawnRocket, aimElev, shotLog, handCache, POSE, KF, computeAim, worldRay, spawnSlash, flashAt, tracer, muzzleWorld, explode, get fxs() { return fxs; } },
   };
 }
