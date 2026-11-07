@@ -36,7 +36,7 @@ export function spreadFor(slot, a, moving) {
   return w.spread * k * (moving ? lerp(1.5, 1.15, clamp(a, 0, 1)) : 1);
 }
 // 기본 시야 base(도)에서 조준 a 만큼 확대한 시야(도)
-export const adsFov = (base, slot, a) => { const z = ADS[slot]; if (!z) return base; const k = lerp(1, z.zoom, clamp(a, 0, 1)); return 2 * Math.atan(Math.tan(base * Math.PI / 360) / k) * 180 / Math.PI; };
+export const adsFov = (base, slot, a) => { const z = ADS[slot]; if (!z || !(a > 0)) return base; const k = lerp(1, z.zoom, clamp(a, 0, 1)); return 2 * Math.atan(Math.tan(base * Math.PI / 360) / k) * 180 / Math.PI; };
 function lerp(a, b, t) { return a + (b - a) * t; }
 export const SWITCH_T = 0.15;   // 무기를 바꿀 때 팔이 올라오는 시간(s). 바꾸자마자 쏠 수 있다(애니메이션을 기다리지 않는다)
 export const wrapSlot = (s, dir) => ((s - 1 + (dir > 0 ? 1 : -1) + SLOT_COUNT) % SLOT_COUNT) + 1;
