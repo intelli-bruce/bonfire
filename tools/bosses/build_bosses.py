@@ -107,6 +107,25 @@ def cone(bm, base, tip, r, sides=6, flat=1.0, bend=V((0, 0, 0)), rings=4):
     last = ringsv[-1]
     for i in range(sides): bm.faces.new((last[i], last[(i + 1) % sides], tipv))
 
+def serr_tooth(bm, base, tip, side, inward, w, th, n=7, serr=0.06, curve=0.0):
+    """톱니 이빨: 밑변 폭 w · 두께 th 인 납작한 삼각 날, 양 날에 n 개 톱니(serr: 톱니 깊이 비율). side: 폭 방향, inward: 두께 방향(입 안쪽)."""
+    base, tip, side, inward = V(base), V(tip), V(side).normalized(), V(inward).normalized()
+    L, R, F, Bk = [], [], [], []
+    m = n * 2
+    for k in range(m + 1):
+        t = k / m
+        c = base.lerp(tip, t) + inward * (curve * t * t)
+        half = w * 0.5 * (1 - t) ** 0.92
+        z = serr * w * (1 - t) * (1.0 if k % 2 else 0.0)     # 톱니: 홀수 칸만 바깥으로
+        L.append(bm.verts.new(c - side * (half + z)))
+        R.append(bm.verts.new(c + side * (half + z)))
+        tt = th * (1 - t) ** 0.85
+        F.append(bm.verts.new(c - inward * tt * 0.5)); Bk.append(bm.verts.new(c + inward * tt * 0.5))
+    for k in range(m):
+        bm.faces.new((L[k], L[k + 1], F[k + 1], F[k])); bm.faces.new((F[k], F[k + 1], R[k + 1], R[k]))
+        bm.faces.new((R[k], R[k + 1], Bk[k + 1], Bk[k])); bm.faces.new((Bk[k], Bk[k + 1], L[k + 1], L[k]))
+    bm.faces.new((L[0], F[0], R[0], Bk[0]))
+
 # ----------------------------------------------------------------------------------------------------------------------
 # 메시 처리
 # ----------------------------------------------------------------------------------------------------------------------
@@ -342,7 +361,7 @@ def tri_count(o):
 # ----------------------------------------------------------------------------------------------------------------------
 # 공통: 몸(덩어리) → LOD 두 개
 # ----------------------------------------------------------------------------------------------------------------------
-def finish_lods(name, body_hi, extras_by_lod, arm, bones, targets, uv_scale, color_fn, body_mat, post_lod=None):
+def finish_lods(name, body_hi, extras_by_lod, arm, bones, targets, uv_scale, color_fn, body_mat, post_lod=None, body_only=None):
     """body_hi: 깎기까지 끝난 고해상 몸. extras_by_lod[i]: [(obj, fixedBone or None)] (재질은 이미 붙어 있음)."""
     outs = []
     for li, tgt in enumerate(targets):
@@ -361,7 +380,7 @@ def finish_lods(name, body_hi, extras_by_lod, arm, bones, targets, uv_scale, col
     final = []
     for li, (parts, extras) in enumerate(outs):
         for p in parts:
-            fb = None
+            fb = body_only if p is parts[0] else None
             for (e, f) in extras:
                 if e is p: fb = f
             if isinstance(fb, tuple): skin(p, arm, bones, only=fb)
@@ -409,18 +428,39 @@ def seg_d(p, a, b):
 def build_shark(out, prev):
     reset_scene()
     # 텍스처: 비늘(피치) — 아주 잘게 겹친 세포 + 저주파 주름
-    n = 1024
-    F1, F2 = tex_cells(n, 1600, 7)
-    den = np.clip(1 - F1 * 60, 0, 1) ** 1.5
-    wr = tex_fbm(n, 1.6, 3, lo=2, hi=60)
-    h = den * 0.55 + wr * 0.45
-    alb = (0.82 + 0.18 * tex_fbm(n, 1.1, 11))[..., None] * np.array([1, 1, 1]) * (0.92 + 0.08 * den[..., None])
-    A = make_image('shark_albedo', alb); N = make_image('shark_normal', height_to_normal(h, 6.0), True)
-    m_skin = material('shark_skin', rough=0.42, albedo=A, normal=N, nstrength=1.0)
-    m_mouth = material('shark_mouth', base=(0.25, 0.03, 0.04), rough=0.35)
-    m_gum = material('shark_gum', base=(0.55, 0.16, 0.17), rough=0.4)
-    m_teeth = material('shark_teeth', base=(0.92, 0.88, 0.76), rough=0.25)
-    m_eye = material('shark_eye', base=(0.005, 0.005, 0.006), rough=0.04)
+    # 2048: 비늘(피부 이빨 · 1024 세포를 2×2 로 이어 붙여 이음매 없음) + 잔주름 + 땀구멍 같은 점 + 긁힌 선
+    n = 2048
+    F1, F2 = tex_cells(1024, 1600, 7)
+    den = np.tile(np.clip(1 - F1 * 60, 0, 1) ** 1.5, (2, 2))
+    ridge = np.tile(np.clip(1 - (F2 - F1) * 140, 0, 1), (2, 2))          # 비늘 사이 홈
+    wr = tex_fbm(n, 1.6, 3, lo=2, hi=90)
+    fine = tex_fbm(n, 0.6, 4, lo=200)                                   # 잔결
+    pores = (tex_fbm(n, 0.1, 5) > 0.86).astype(float)
+    scr = np.zeros((n, n)); rng = np.random.default_rng(8)
+    for _ in range(500):
+        x0, y0 = rng.integers(0, n, 2); ang = rng.normal(0.0, 0.35); L = rng.integers(30, 220)
+        for t in range(L): scr[int(y0 + math.sin(ang) * t) % n, int(x0 + math.cos(ang) * t) % n] = 1
+    h = den * 0.45 + wr * 0.4 + fine * 0.12 - ridge * 0.18 - pores * 0.25 - scr * 0.3
+    alb = (0.8 + 0.18 * tex_fbm(n, 1.1, 11) - 0.08 * ridge + 0.1 * scr - 0.12 * pores)[..., None] * np.array([1, 1, 1]) * (0.92 + 0.08 * den[..., None])
+    A = make_image('shark_albedo', alb); N = make_image('shark_normal', height_to_normal(h, 7.0), True)
+    m_skin = material('shark_skin', rough=0.4, albedo=A, normal=N, nstrength=1.1)
+    # 입 속: 젖은 살(주름 · 점막 혈관) 1024
+    k = 1024; fm = tex_fbm(k, 1.3, 41); Fv1, Fv2 = tex_cells(k, 140, 42)
+    vein = np.clip(1 - (Fv2 - Fv1) * 55, 0, 1) ** 2
+    rug = 0.5 + 0.5 * np.sin(np.mgrid[0:k, 0:k][0] / k * math.pi * 2 * 22 + fm * 6)  # 입천장 가로 주름(rugae)
+    falb = np.stack([0.62 + 0.25 * fm - 0.25 * vein, 0.12 + 0.08 * fm - 0.08 * vein, 0.13 + 0.06 * fm - 0.06 * vein], -1)
+    FA = make_image('shark_flesh_albedo', falb); FN = make_image('shark_flesh_normal', height_to_normal(fm * 0.6 + rug * 0.35 - vein * 0.3, 6.0), True)
+    m_mouth = material('shark_mouth', base=(0.55, 0.12, 0.13), rough=0.28, albedo=FA, normal=FN, nstrength=1.2)
+    m_gum = material('shark_gum', base=(0.95, 0.42, 0.44), rough=0.22, albedo=FA, normal=FN, nstrength=1.4)
+    m_tongue = material('shark_tongue', base=(1.0, 0.3, 0.3), rough=0.3, albedo=FA, normal=FN, nstrength=1.6)
+    m_throat = material('shark_throat', base=(0.035, 0.004, 0.006), rough=0.5)
+    # 이빨: 뿌리 쪽 누렇고 끝은 반투명한 흰색, 세로 결
+    tk = 512; ty = np.mgrid[0:tk, 0:tk][0] / tk
+    talb = np.stack([0.95 - 0.12 * ty, 0.92 - 0.2 * ty, 0.84 - 0.32 * ty], -1) * (0.93 + 0.07 * tex_fbm(tk, 0.8, 43))[..., None]
+    TA = make_image('shark_tooth_albedo', talb); TN = make_image('shark_tooth_normal', height_to_normal(tex_fbm(tk, 1.0, 44) * 0.5 + 0.5 * np.sin(np.mgrid[0:tk, 0:tk][1] / tk * math.pi * 40) * 0.1, 3.0), True)
+    m_teeth = material('shark_teeth', base=(1, 1, 1), rough=0.18, albedo=TA, normal=TN, nstrength=0.8)
+    m_eye = material('shark_eye', base=(0.004, 0.004, 0.005), rough=0.02)
+    m_iris = material('shark_iris', base=(0.12, 0.16, 0.18), rough=0.1, emit=(0.05, 0.08, 0.09), emit_k=0.6)
     arm = make_armature('Shark', SHARK_BONES)
 
     # 몸통: 단면 타원 + 지느러미
@@ -444,6 +484,11 @@ def build_shark(out, prev):
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.002)
     body = obj_from_bm('shark_body', bm)
     remesh(body, 0.085, 0.6, 10)
+    # 입 속 굴: 위턱 잇몸 안쪽을 파낸다(턱을 벌리면 입천장 · 목구멍이 보이게)
+    bm = bmesh.new(); ell(bm, (0, 5.5, -1.75), (1.72, 2.95, 1.15), seg=(40, 24)); ell(bm, (0, 3.6, -1.6), (1.4, 1.6, 0.9), seg=(32, 18))
+    cav = obj_from_bm('shark_cavity', bm); remesh(cav, 0.06, 0.3, 2)
+    bo = body.modifiers.new('cav', 'BOOLEAN'); bo.operation = 'DIFFERENCE'; bo.object = cav; bo.solver = 'EXACT'
+    apply_mods(body); bpy.data.objects.remove(cav, do_unlink=True)
 
     eyes = [V((-1.42, 7.25, 0.62)), V((1.42, 7.25, 0.62))]
     gills = [3.9 - 0.42 * i for i in range(5)]
@@ -463,6 +508,15 @@ def build_shark(out, prev):
             if de < 0.5: d -= 0.14 * (1 - de / 0.5) ** 2
         # 주름: 콧등 · 턱 아래
         d += 0.025 * noise.noise(c * 1.7) + 0.012 * noise.noise(c * 5.3)
+        # 입꼬리 주름: 입 끝(뺨)에서 뒤로 뻗는 깊은 접힘 세 줄
+        if 3.4 < c.y < 5.6 and abs(c.x) > 1.4 and -1.9 < c.z < -0.2:
+            for kf in range(3):
+                zz = -1.25 + 0.28 * kf + 0.18 * (c.y - 4.6)
+                d -= 0.05 * max(0, 1 - abs(c.z - zz) / 0.06)
+        # 주둥이 아래 감각 구멍(로렌치니 기관): 잔 점
+        if c.y > 7.2 and c.z < 0.4:
+            q = noise.noise(c * 9.0)
+            if q > 0.55: d -= 0.03 * (q - 0.55) / 0.45
         # 입 선: 위턱 잇몸을 따라 안쪽으로 패인 선 (입이 닫혀 있을 때 경계)
         if c.y > 4.5 and c.z < 0.2:
             u = max(-1, min(1, math.asin(max(-1, min(1, c.x / 1.95))) * 2 / math.pi))
@@ -483,45 +537,82 @@ def build_shark(out, prev):
     remesh(jaw, 0.07, 0.5, 4)
     displace(jaw, lambda c, nr: 0.018 * noise.noise(c * 3.0))
 
-    def teeth_parts(rows):
+    def gum_tan(fn, u):
+        a, b = fn(max(-1, u - 0.02)), fn(min(1, u + 0.02)); return (b - a).normalized()
+    def teeth_parts(rows, ns=7):
+        """여러 줄 톱니 이빨: 앞줄은 곧게 서고, 뒷줄일수록 작고 입 안쪽으로 눕는다(교체용 이빨 줄)."""
         bm = bmesh.new(); bl = bmesh.new()
         rnd = random.Random(5)
         for row in range(rows):
-            sc = [1.0, 0.72, 0.52][row]; inset = [1.0, 0.9, 0.82][row]
-            cnt = [26, 24, 22][row]
+            sc = [1.0, 0.8, 0.64, 0.5, 0.4][row]; inset = [1.0, 0.92, 0.85, 0.78, 0.72][row]; lay = [0.0, 0.35, 0.7, 1.0, 1.25][row]
+            cnt = [26, 26, 24, 22, 20][row]
             for i in range(cnt):
-                u = -0.96 + 1.92 * i / (cnt - 1)
-                g = UPPER_GUM(u); g = V((g.x * inset, g.y - 0.32 * row, g.z + 0.05 * row))
-                L = (0.95 - 0.35 * abs(u)) * sc * (0.85 + 0.3 * rnd.random())
-                inward = V((-g.x * 0.08, -0.12, 0))
-                cone(bm, g, g + V((0, 0, -L)) + inward, 0.24 * sc, sides=6, flat=0.32, bend=V((0, -0.06, 0)), rings=3)
-                g2 = LOWER_GUM(u); g2 = V((g2.x * inset * 0.95, g2.y - 0.3 * row, g2.z - 0.05 * row))
-                L2 = (0.8 - 0.3 * abs(u)) * sc * (0.85 + 0.3 * rnd.random())
-                cone(bl, g2, g2 + V((0, 0.05, L2)) + V((-g2.x * 0.07, -0.08, 0)), 0.21 * sc, sides=6, flat=0.32, bend=V((0, -0.05, 0)), rings=3)
+                u = -0.96 + 1.92 * (i + 0.5 * (row % 2)) / cnt
+                g = UPPER_GUM(u); g = V((g.x * inset, g.y - 0.3 * row, g.z + 0.06 * row))
+                L = (1.05 - 0.4 * abs(u)) * sc * (0.85 + 0.3 * rnd.random())
+                inward = V((-g.x, -1.2, 0)).normalized()
+                tip = g + V((0, 0, -L)) * math.cos(lay * 0.9) + inward * L * math.sin(lay * 0.9) + V((-g.x * 0.04, 0, 0))
+                serr_tooth(bm, g, tip, gum_tan(UPPER_GUM, u), inward, 0.5 * sc, 0.16 * sc, n=ns, serr=0.07, curve=0.08 * sc)
+                if row < rows - 1:
+                    g2 = LOWER_GUM(u); g2 = V((g2.x * inset * 0.95, g2.y - 0.28 * row, g2.z - 0.05 * row))
+                    L2 = (0.9 - 0.32 * abs(u)) * sc * (0.85 + 0.3 * rnd.random())
+                    inw2 = V((-g2.x, -1.2, 0)).normalized()
+                    tip2 = g2 + V((0, 0.04, L2)) * math.cos(lay * 0.9) + inw2 * L2 * math.sin(lay * 0.9)
+                    serr_tooth(bl, g2, tip2, gum_tan(LOWER_GUM, u), inw2, 0.42 * sc, 0.14 * sc, n=max(2, ns - 1), serr=0.07, curve=0.06 * sc)
         up = obj_from_bm('shark_teeth_up', bm); lo = obj_from_bm('shark_teeth_lo', bl)
-        set_material(up, m_teeth); set_material(lo, m_teeth)
+        for o in (up, lo):
+            set_material(o, m_teeth); me = o.data; uvl = me.uv_layers.new(name='UVMap')
+            # 이빨 UV: 높이(z) → v 로, 뿌리 누런 색 · 끝 흰색
+            for lp in me.loops:
+                c = me.vertices[lp.vertex_index].co; uvl.data[lp.index].uv = (c.x * 0.6 + c.y * 0.6, 0.5 + 0.5 * math.sin(c.z * 1.2))
         return up, lo
 
     def gum_parts(gt):
-        bm = bmesh.new(); us = np.linspace(-1, 1, 25)
-        tube(bm, [V((UPPER_GUM(u).x * 0.97, UPPER_GUM(u).y - 0.18, UPPER_GUM(u).z + 0.1)) for u in us], [0.26] * len(us), flat=0.7, seg=(10, 8))
-        up = obj_from_bm('shark_gum_up', bm); set_material(up, m_gum); solid(up, 0.06, gt)
+        """두툼한 잇몸(이빨마다 부풀고) · 주름진 입천장 · 혀 · 어두운 목구멍 · 입 바닥."""
+        us = np.linspace(-1, 1, 33)
         bm = bmesh.new()
-        tube(bm, [V((LOWER_GUM(u).x * 0.93, LOWER_GUM(u).y - 0.18, LOWER_GUM(u).z - 0.08)) for u in us], [0.24] * len(us), flat=0.7, seg=(10, 8))
-        lo = obj_from_bm('shark_gum_lo', bm); set_material(lo, m_gum); solid(lo, 0.06, gt)
-        bm = bmesh.new(); ell(bm, (0, 6.0, -1.15), (1.65, 2.6, 0.55), seg=(16, 10))
-        mo = obj_from_bm('shark_mouth', bm); set_material(mo, m_mouth)
-        bm = bmesh.new(); ell(bm, (0, 5.9, -1.55), (1.5, 2.3, 0.35), seg=(16, 8))
+        tube(bm, [V((UPPER_GUM(u).x * 0.95, UPPER_GUM(u).y - 0.5, UPPER_GUM(u).z + 0.12)) for u in us], [0.42] * len(us), flat=0.75, seg=(12, 8))
+        for u in np.linspace(-0.96, 0.96, 26): g = UPPER_GUM(u); ell(bm, (g.x * 0.98, g.y - 0.05, g.z + 0.02), (0.3, 0.26, 0.2), seg=(10, 6))
+        up = obj_from_bm('shark_gum_up', bm); set_material(up, m_gum); solid(up, 0.05, gt)
+        bm = bmesh.new()
+        tube(bm, [V((LOWER_GUM(u).x * 0.92, LOWER_GUM(u).y - 0.45, LOWER_GUM(u).z - 0.1)) for u in us], [0.38] * len(us), flat=0.75, seg=(12, 8))
+        for u in np.linspace(-0.96, 0.96, 24): g = LOWER_GUM(u); ell(bm, (g.x * 0.94, g.y - 0.05, g.z - 0.02), (0.27, 0.24, 0.18), seg=(10, 6))
+        lo = obj_from_bm('shark_gum_lo', bm); set_material(lo, m_gum); solid(lo, 0.05, gt)
+        # 입천장: 위턱 안쪽 둥근 천장 + 가로 주름 띠
+        bm = bmesh.new(); ell(bm, (0, 5.6, -0.5), (1.45, 2.4, 0.42), seg=(24, 14))
+        for k in range(8): yk = 7.4 - k * 0.38; ell(bm, (0, yk, -0.86 + 0.02 * k), (1.15 - 0.06 * abs(k - 4), 0.09, 0.07), seg=(16, 6))
+        mo = obj_from_bm('shark_mouth', bm); set_material(mo, m_mouth); solid(mo, 0.05, gt)
+        # 입 바닥 + 혀(굵게 부푼 붉은 혀, 가운데 홈)
+        bm = bmesh.new(); ell(bm, (0, 5.9, -1.6), (1.6, 2.5, 0.32), seg=(18, 8))
         mi = obj_from_bm('shark_mouth_lo', bm); set_material(mi, m_mouth)
-        return up, lo, mo, mi
+        bm = bmesh.new()
+        for sgn in (-1, 1): tube(bm, [V((sgn * 0.32, 4.6, -1.42)), V((sgn * 0.42, 6.0, -1.36)), V((sgn * 0.28, 7.2, -1.42))], [0.55, 0.6, 0.38], flat=0.5, seg=(14, 8))
+        tg = obj_from_bm('shark_tongue', bm); set_material(tg, m_tongue); solid(tg, 0.04, gt)
+        # 목구멍: 안쪽으로 좁아지는 어두운 굴(입을 벌리면 끝이 안 보이는 검붉은 어둠)
+        bm = bmesh.new()
+        for k in range(7): yk = 4.7 - k * 0.45; r = 1.5 - k * 0.14; ell(bm, (0, yk, -1.15 + k * 0.05), (r, 0.5, r * 0.62), seg=(16, 8))
+        th = obj_from_bm('shark_throat', bm); set_material(th, m_throat)
+        return up, lo, mo, mi, tg, th
 
     def eye_parts():
+        """눈: 젖은 검은 안구 + 청회색 홍채 고리 + 눈꺼풀 테(살갗 주름)."""
+        bm = bmesh.new(); bi = bmesh.new()
+        for e in eyes:
+            ell(bm, e, (0.26, 0.26, 0.26), seg=(18, 12))
+            sg = 1 if e.x > 0 else -1; nrm = V((sg, 0.25, 0.1)).normalized()
+            ell(bi, e + nrm * 0.21, (0.17, 0.17, 0.035), basis_from(nrm, up=V((0, 1, 0))), seg=(18, 6))
+        o = obj_from_bm('shark_eyes', bm); set_material(o, m_eye)
+        ir = obj_from_bm('shark_iris', bi); set_material(ir, m_iris)
         bm = bmesh.new()
-        for e in eyes: ell(bm, e, (0.24, 0.24, 0.24), seg=(14, 10))
-        o = obj_from_bm('shark_eyes', bm); set_material(o, m_eye); return o
+        for e in eyes:
+            sg = 1 if e.x > 0 else -1
+            ring = [e + V((sg * 0.12, 0.3 * math.cos(a), 0.3 * math.sin(a) * 0.85)) for a in np.linspace(0, 2 * math.pi, 17)]
+            tube(bm, ring, [0.07] * len(ring), seg=(8, 6))
+        lid = obj_from_bm('shark_lids', bm); set_material(lid, m_skin)
+        return o, ir, lid
 
     def jaw_lod(li):
-        j = copy_obj(jaw, f'shark_jaw{li}'); decimate(j, [6000, 1400][li]); shade_smooth(j.data); box_uv(j.data, 0.45)
+        j = copy_obj(jaw, f'shark_jaw{li}'); decimate(j, [9000, 1400][li]); shade_smooth(j.data); box_uv(j.data, 0.45)
         set_colors(j.data, lambda c, nr: shark_color(c, nr)); set_material(j, m_skin); return j
 
     def shark_color(c, nr):
@@ -542,6 +633,14 @@ def build_shark(out, prev):
             for gy in gills:
                 if abs(c.y - (gy - 0.12 * c.z)) < 0.05: col = col * 0.45
         if c.y > 4.6 and c.z < -0.5 and abs(c.x) < 1.9: col = col.lerp(V((0.7, 0.62, 0.6)), 0.25)
+        # 입 속(파낸 굴의 벽 · 아래턱 안쪽): 젖은 붉은 살 → 목구멍 쪽으로 검붉게
+        q1 = ((c.x / 1.86) ** 2 + ((c.y - 5.5) / 3.15) ** 2 + ((c.z + 1.75) / 1.25) ** 2)
+        q2 = ((c.x / 1.52) ** 2 + ((c.y - 3.6) / 1.75) ** 2 + ((c.z + 1.6) / 1.0) ** 2)
+        floor = c.y > 4.4 and c.z > -1.95 and c.z < -1.2 and abs(c.x) < 1.55 and nr.z > 0.3
+        if q1 < 1.0 or q2 < 1.0 or floor:
+            deep = smooth(7.5, 3.0, c.y)
+            flesh = V((0.62, 0.1, 0.11)).lerp(V((0.08, 0.01, 0.015)), deep) * (0.85 + 0.25 * noise.noise(c * 4.0))
+            return (flesh.x, flesh.y, flesh.z)
         # 잔흉터(긁힌 선) 무작위
         s = noise.noise(V((c.x * 0.2, c.y * 4.0, c.z * 0.2)))
         if s > 0.62: col = col.lerp(V((0.7, 0.68, 0.66)), (s - 0.62) * 2.2)
@@ -549,14 +648,17 @@ def build_shark(out, prev):
 
     extras = []
     for li in range(2):
-        tu, tl = teeth_parts(3 if li == 0 else 1)
-        gu, gl, mo, mi = gum_parts([2400, 500][li])
-        ex = [(jaw_lod(li), 'jaw'), (tu, 'head'), (tl, 'jaw'), (gu, 'head'), (gl, 'jaw'), (mo, 'head'), (mi, 'jaw'), (eye_parts(), 'head')]
+        tu, tl = teeth_parts(5 if li == 0 else 2, 7 if li == 0 else 2)
+        gu, gl, mo, mi, tg, th = gum_parts([5000, 900][li])
+        ey, ir, lid = eye_parts()
+        ex = [(jaw_lod(li), 'jaw'), (tu, 'head'), (tl, 'jaw'), (gu, 'head'), (gl, 'jaw'), (mo, 'head'), (mi, 'jaw'), (tg, 'jaw'), (th, 'head'), (ey, 'head'), (ir, 'head'), (lid, 'head')]
         extras.append(ex)
     bpy.data.objects.remove(jaw, do_unlink=True)
 
-    lods = finish_lods('Shark', body, extras, arm, SHARK_BONES, [38000, 7000], 0.45, shark_color, m_skin)
-    finalize(arm, lods, out, 'shark.glb', prev, 'shark', [((15, 22, 6), (0, 3, 0)), ((-20, 8, -2), (0, 4, -0.5)), ((-4.5, 11, -0.6), (-1.0, 6.6, 0.0))])
+    lods = finish_lods('Shark', body, extras, arm, SHARK_BONES, [60000, 9000], 0.45, shark_color, m_skin, body_only=tuple(b[0] for b in SHARK_BONES if b[0] != 'jaw'))
+    # 미리보기: 입을 크게 벌린 자세(게임의 평소 자세와 같게)
+    jb = arm.pose.bones['jaw']; jb.rotation_mode = 'XYZ'; jb.rotation_euler = (math.radians(-32), 0, 0)
+    finalize(arm, lods, out, 'shark.glb', prev, 'shark', [((15, 22, 6), (0, 3, 0)), ((0, 16, -2.2), (0, 4.0, -1.7)), ((-4.5, 11, -0.6), (-1.0, 6.6, 0.0))])
 
 # ======================================================================================================================
 # 2) 초거대 바위 골렘 — 키 약 17 m. 풍화된 돌(리지 노이즈) · 균열(Voronoi 경계) · 이끼(윗면) · 가슴의 빛나는 심장.
@@ -581,7 +683,11 @@ def build_golem(out, prev):
     crack2 = np.clip(1 - (F2b - F1b) * 90, 0, 1) ** 2 * 0.5
     grain = tex_fbm(n, 0.9, 23); lump = tex_fbm(n, 1.8, 24)
     h = lump * 0.6 + grain * 0.25 - crack * 0.7 - crack2 * 0.4
-    alb = (0.78 + 0.22 * grain - 0.45 * crack - 0.2 * crack2)[..., None] * np.array([1, 1, 1])
+    # 2048 로: 1024 를 2×2 로 잇고 잔 결 · 구멍(기공) 을 더한다
+    t2 = lambda a: np.tile(a, (2, 2)); n = 2048
+    pit = (tex_fbm(n, 0.15, 26) > 0.84).astype(float); fine = tex_fbm(n, 0.5, 27, lo=180)
+    h = t2(h) + fine * 0.18 - pit * 0.3
+    alb = t2(0.78 + 0.22 * grain - 0.45 * crack - 0.2 * crack2)[..., None] * np.array([1, 1, 1]) * (0.92 + 0.12 * fine - 0.2 * pit)[..., None]
     speck = (tex_fbm(n, 0.2, 25) > 0.82)[..., None] * 0.12
     A = make_image('golem_albedo', alb + speck); N = make_image('golem_normal', height_to_normal(h, 9.0), True)
     m_rock = material('golem_rock', rough=0.92, albedo=A, normal=N, nstrength=1.2)
@@ -610,7 +716,7 @@ def build_golem(out, prev):
         rr = rnd.uniform(0.6, 1.3) * (1.6 if bn[0] in ('spine', 'hips') else 1.0)
         ell(bm, p + d * (1.3 if bn[0] not in ('spine',) else 2.6), (rr, rr * rnd.uniform(0.7, 1.2), rr * rnd.uniform(0.6, 1.0)), basis_from(d))
     body = obj_from_bm('golem_body', bm)
-    remesh(body, 0.12, 0.45, 3)
+    remesh(body, 0.085, 0.45, 3)
 
     def carve(c, nr):
         d = 0.45 * (noise.ridged_multi_fractal(c * 0.22, 0.9, 2.1, 4, 1.0, 2.0) - 1.0) * 0.5
@@ -619,6 +725,17 @@ def build_golem(out, prev):
         e = dist[1] - dist[0]
         if e < 0.12: d -= 0.32 * (1 - e / 0.12) ** 1.5
         # 심장 자리: 가슴 앞을 사발 모양으로 판다
+        # 얼굴: 무거운 눈썹 뼈 · 깊은 눈구멍 · 부서진 콧등 · 쩍 갈라진 입 · 뺨의 깊은 주름
+        f = c - V((0, 2.6, 12.25))
+        if f.y > 0.4 and f.length < 2.3:
+            fr = smooth(0.4, 1.2, f.y)
+            d += 0.32 * fr * math.exp(-((f.z - 0.42) / 0.16) ** 2) * smooth(1.4, 0.6, abs(f.x))                         # 눈썹 뼈
+            for sg in (-1, 1): d -= 0.38 * fr * math.exp(-(((f.x - sg * 0.55) / 0.3) ** 2 + ((f.z - 0.2) / 0.2) ** 2))     # 눈구멍
+            d += 0.42 * fr * math.exp(-((f.x / 0.2) ** 2)) * smooth(0.4, 0.05, f.z) * smooth(-0.3, -0.05, f.z)              # 콧등
+            d -= 0.4 * fr * math.exp(-((f.z + 0.36 + 0.08 * math.cos(f.x * 3)) / 0.09) ** 2) * smooth(1.0, 0.5, abs(f.x))  # 입(갈라진 틈)
+            for sg in (-1, 1):
+                for kf in range(3): d -= 0.08 * fr * math.exp(-((f.x - sg * (0.75 + 0.12 * kf) - 0.25 * sg * f.z) / 0.05) ** 2) * smooth(0.3, -0.2, f.z)   # 뺨 주름
+            d += 0.05 * noise.noise(c * 6.0) * fr
         q = c - HEART; rxz = math.hypot(q.x, q.z)
         if rxz < 2.0 and q.y > -1.6: d -= max(0.0, (c.y - (HEART.y - 0.9 + 0.55 * (rxz / 2.0) ** 2)) * 0.9) * (1 - rxz / 2.0) ** 0.5
         return d
@@ -646,7 +763,7 @@ def build_golem(out, prev):
         for p in me.polygons:
             c = p.center; hd = (c - HEART).length
             dist, pts = noise.voronoi(c * 0.28, distance_metric='DISTANCE'); e = dist[1] - dist[0]
-            if (hd < 5.5 and e < 0.022 * (1.6 - hd / 5.5)) or (hd < 1.7 and c.y < HEART.y + 0.1): p.material_index = 1
+            if c.z < 11.2 and ((hd < 5.5 and e < 0.022 * (1.6 - hd / 5.5)) or (hd < 1.7 and c.y < HEART.y + 0.1)): p.material_index = 1
         me.update()
 
     def extras_for(li):
@@ -654,8 +771,17 @@ def build_golem(out, prev):
         for v in bm.verts: v.co = HEART + (v.co - HEART) * (0.85 + 0.3 * random.random())   # 깎인 수정 같은 각
         core = obj_from_bm(f'golem_core{li}', bm); set_material(core, m_core)
         bm = bmesh.new()
-        for sg in (-1, 1): ell(bm, (sg * 0.55, 3.9, 12.45), (0.32, 0.12, 0.13), seg=(10, 6))
+        for sg in (-1, 1):
+            ell(bm, (sg * 0.55, 3.82, 12.45), (0.2, 0.1, 0.13), seg=(12, 8))          # 눈구멍 깊숙이 이글거리는 눈
+        # 입 틈 속 불빛 + 부서진 돌 이빨
+        tube(bm, [V((-0.7, 3.78, 11.9)), V((0, 3.92, 11.88)), V((0.7, 3.78, 11.9))], [0.035, 0.045, 0.035], seg=(8, 6))
         eye = obj_from_bm(f'golem_eye{li}', bm); set_material(eye, m_eye)
+        bm = bmesh.new(); r3 = random.Random(17)
+        for k in range(11 if li == 0 else 5):
+            x = -0.8 + 1.6 * k / (10 if li == 0 else 4); up = k % 2 == 0
+            b0 = V((x, 3.98 - 0.15 * abs(x), 11.98 if up else 11.8))
+            cone(bm, b0, b0 + V((r3.uniform(-0.04, 0.04), 0.05, -0.2 if up else 0.2)) * r3.uniform(0.9, 1.5), r3.uniform(0.07, 0.11), sides=4, rings=1)
+        tth = obj_from_bm(f'golem_teeth{li}', bm); set_material(tth, m_rock)
         # 등·어깨에 튀어나온 바위 결정
         bm = bmesh.new(); r2 = random.Random(9)
         for k in range(18 if li == 0 else 8):
@@ -663,10 +789,10 @@ def build_golem(out, prev):
             tip = base + V((sg * r2.uniform(0.2, 1.4), r2.uniform(-1.8, -0.4), r2.uniform(1.2, 2.8)))
             cone(bm, base, tip, r2.uniform(0.35, 0.7), sides=5, rings=2)
         sh = obj_from_bm(f'golem_shards{li}', bm); set_material(sh, m_rock)
-        return [(core, 'spine'), (eye, 'head'), (sh, 'spine')]
+        return [(core, 'spine'), (eye, 'head'), (sh, 'spine'), (tth, 'head')]
 
-    lods = finish_lods('Golem', body, [extras_for(0), extras_for(1)], arm, GOLEM_BONES, [46000, 9000], 0.3, golem_color, m_rock, post_lod=lava_faces)
-    finalize(arm, lods, out, 'golem.glb', prev, 'golem', [((14, 26, 11), (0, 0, 8)), ((-6, 9, 11), (0, 3, 10.5))])
+    lods = finish_lods('Golem', body, [extras_for(0), extras_for(1)], arm, GOLEM_BONES, [70000, 10000], 0.3, golem_color, m_rock, post_lod=lava_faces)
+    finalize(arm, lods, out, 'golem.glb', prev, 'golem', [((14, 26, 11), (0, 0, 8)), ((-6, 9, 11), (0, 3, 10.5)), ((0.8, 7.2, 13.0), (0, 3.0, 12.1))])
 
 # ======================================================================================================================
 # 3) 초거대 반천사·반악마 — 키 약 15 m, 날개폭 약 34 m. 왼쪽 깃털 날개 · 오른쪽 박쥐 날개, 후광(오른쪽은 깨짐) · 뿔, 갑옷(왼 금빛 · 오른 검은 쇠).
@@ -701,15 +827,36 @@ def build_seraph(out, prev):
     alb = (0.85 + 0.15 * g - 0.12 * scr - 0.18 * vein)[..., None] * np.array([1, 1, 1])
     A = make_image('seraph_albedo', alb); N = make_image('seraph_normal', height_to_normal(h, 5.0), True)
     # 깃털 텍스처(가운데 깃대 + 비스듬한 깃가지)
-    yy, xx = np.mgrid[0:512, 0:512] / 512.0
-    barb = 0.5 + 0.5 * np.sin((yy * 90 + np.abs(xx - 0.5) * 60) * math.pi * 2)
-    rach = np.exp(-((xx - 0.5) / 0.012) ** 2)
-    fh = barb * 0.4 + rach * 0.8
-    falb = np.clip(0.88 + 0.12 * barb - 0.25 * (np.abs(xx - 0.5) > 0.47), 0, 1)[..., None] * np.array([1, 1, 1])
-    FA = make_image('feather_albedo', falb); FN = make_image('feather_normal', height_to_normal(fh, 4.0), True)
+    # 깃털 1024: 깃대 + 촘촘한 깃가지(비스듬) + 깃가지 사이 갈라짐 + 끝 쪽 솜털, 가장자리 투명감(어둡게)
+    fk = 1024; yy, xx = np.mgrid[0:fk, 0:fk] / fk
+    ax = np.abs(xx - 0.5)
+    split = tex_fbm(fk, 1.4, 35, lo=3, hi=30)
+    barb = 0.5 + 0.5 * np.sin((yy * 240 + ax * 150 + split * 9) * math.pi * 2)
+    gap = (np.sin((yy * 9 + ax * 6 + split * 3) * math.pi * 2) > 0.93).astype(float)
+    rach = np.exp(-((xx - 0.5) / 0.008) ** 2)
+    down = smooth_np = np.clip((0.12 - yy) / 0.12, 0, 1)
+    fh = barb * 0.35 + rach * 0.9 - gap * 0.5 + down * tex_fbm(fk, 0.4, 36) * 0.4
+    falb = np.clip(0.9 + 0.08 * barb - 0.3 * gap - 0.3 * (ax > 0.46) - 0.12 * ax + 0.05 * rach, 0, 1)[..., None] * np.array([1, 0.985, 0.95])
+    FA = make_image('feather_albedo', falb); FN = make_image('feather_normal', height_to_normal(fh, 5.0), True)
+    # 갑옷 문양 1024: 덩굴 소용돌이(아라베스크) 음각 + 테두리 띠 + 긁힘
+    ak = 1024; ay, axx = np.mgrid[0:ak, 0:ak] / ak * math.pi * 2
+    swirl = np.sin(axx * 6 + 2.2 * np.sin(ay * 6)) * np.sin(ay * 6 + 2.2 * np.sin(axx * 6))
+    eng = np.exp(-(swirl / 0.09) ** 2) + np.exp(-((np.sin(ay * 3) - 0.97) / 0.02) ** 2) * 0.8
+    scr2 = scr[:ak, :ak] if scr.shape[0] >= ak else np.tile(scr, (2, 2))[:ak, :ak]
+    ah = lump[:ak, :ak] * 0.3 - eng * 0.6 - scr2 * 0.2
+    aalb = (0.92 + 0.08 * g[:ak, :ak] - 0.45 * eng - 0.1 * scr2)[..., None] * np.array([1, 1, 1])
+    AA = make_image('armor_albedo', aalb); AN = make_image('armor_normal', height_to_normal(ah, 7.0), True)
+    # 악마 비늘 1024: 겹친 비늘(Voronoi) — 가운데 볼록 · 테두리 홈 · 끝이 밝은 각질
+    S1, S2 = tex_cells(1024, 900, 37)
+    sc_h = np.clip(1 - S1 * 38, 0, 1) ** 0.7 - np.clip(1 - (S2 - S1) * 160, 0, 1) * 0.6
+    sc_alb = np.stack([0.32 + 0.25 * sc_h, 0.07 + 0.05 * sc_h, 0.06 + 0.04 * sc_h], -1) * (0.85 + 0.2 * tex_fbm(1024, 1.0, 38))[..., None]
+    SA = make_image('scale_albedo', sc_alb); SN = make_image('scale_normal', height_to_normal(sc_h, 9.0), True)
     m_skin = material('seraph_skin', rough=0.55, albedo=A, normal=N, nstrength=0.8)
-    m_gold = material('armor_gold', base=(0.95, 0.78, 0.42), rough=0.32, metal=0.85, albedo=A, normal=N, nstrength=1.3)
-    m_iron = material('armor_iron', base=(0.16, 0.15, 0.16), rough=0.45, metal=0.8, albedo=A, normal=N, nstrength=1.3)
+    m_gold = material('armor_gold', base=(0.95, 0.78, 0.42), rough=0.3, metal=0.85, albedo=AA, normal=AN, nstrength=1.5)
+    m_iron = material('armor_iron', base=(0.16, 0.15, 0.16), rough=0.42, metal=0.8, albedo=AA, normal=AN, nstrength=1.5)
+    m_scale = material('demon_scale', base=(1, 1, 1), rough=0.38, albedo=SA, normal=SN, nstrength=1.6)
+    m_tooth = material('seraph_teeth', base=(0.9, 0.86, 0.74), rough=0.25)
+    m_sclera = material('seraph_sclera', base=(0.85, 0.8, 0.74), rough=0.15)
     m_feather = material('feather', base=(1, 1, 1), rough=0.7, albedo=FA, normal=FN, nstrength=0.8, double=True)
     m_mem = material('membrane', base=(0.3, 0.06, 0.06), rough=0.6, albedo=A, normal=N, nstrength=1.0, emit=(0.35, 0.03, 0.0), emit_k=0.25, double=True)
     m_bone = material('horn', base=(0.08, 0.06, 0.06), rough=0.35, albedo=A, normal=N, nstrength=1.2)
@@ -736,7 +883,7 @@ def build_seraph(out, prev):
     tube(bm, [WRIST_R + V((-3.5, 0.6, -0.9)), WRIST_R], [0.38, 0.3])
     for f in FINGERS: tube(bm, [WRIST_R, f], [0.24, 0.07], step=0.6, seg=(10, 8))
     body = obj_from_bm('seraph_body', bm)
-    remesh(body, 0.06, 0.5, 4)
+    remesh(body, 0.045, 0.5, 4)
     def carve(c, nr):
         d = 0.02 * noise.noise(c * 2.2)
         if c.x > 0.15:   # 악마 쪽: 갈라진 피부 · 힘줄
@@ -745,6 +892,20 @@ def build_seraph(out, prev):
             d += 0.04 * noise.ridged_multi_fractal(c * 0.7, 0.9, 2.0, 3, 1.0, 2.0) * 0.3
         # 복근 · 가슴 근육 굴곡
         if 8.0 < c.z < 11.8 and c.y > 0.6: d += 0.06 * math.cos(c.x * 2.6) * math.cos((c.z - 8) * 2.4) * smooth(0.6, 1.2, c.y)
+        # 얼굴: 눈썹 뼈 · 깊은 눈두덩 · 콧날 · 광대 · 입술 · 이마 주름(악마 쪽은 찡그린 주름이 깊다)
+        f = c - V((0, 0.35, 13.45))
+        if f.y > 0.35 and f.length < 1.5:
+            fr = smooth(0.35, 0.85, f.y); dem = 1.0 + 0.8 * smooth(-0.05, 0.1, f.x)
+            d += 0.09 * fr * math.exp(-((f.z - 0.32) / 0.07) ** 2) * smooth(0.65, 0.2, abs(f.x)) * dem          # 눈썹 뼈
+            for sg in (-1, 1): d -= 0.08 * fr * math.exp(-(((f.x - sg * 0.33) / 0.15) ** 2 + ((f.z - 0.15) / 0.1) ** 2))   # 눈두덩
+            d += 0.11 * fr * math.exp(-((f.x / 0.07) ** 2)) * smooth(0.25, 0.05, f.z) * smooth(-0.22, -0.05, f.z)          # 콧날
+            d += 0.06 * fr * math.exp(-((f.x / 0.12) ** 2 + ((f.z + 0.2) / 0.06) ** 2))                                  # 콧망울
+            for sg in (-1, 1): d += 0.06 * fr * math.exp(-(((f.x - sg * 0.48) / 0.14) ** 2 + ((f.z + 0.05) / 0.12) ** 2))   # 광대
+            d += 0.04 * fr * math.exp(-((f.z + 0.36) / 0.035) ** 2) * smooth(0.25, 0.1, abs(f.x))                         # 윗입술
+            d -= 0.05 * fr * math.exp(-((f.z + 0.42) / 0.018) ** 2) * smooth(0.24, 0.12, abs(f.x))                        # 입술 사이 선
+            d += 0.035 * fr * math.exp(-((f.z + 0.48) / 0.035) ** 2) * smooth(0.22, 0.08, abs(f.x))                       # 아랫입술
+            for kf in range(3): d -= 0.018 * fr * dem * math.exp(-((f.z - 0.48 - 0.07 * kf - 0.03 * math.cos(f.x * 5)) / 0.012) ** 2) * smooth(0.5, 0.2, abs(f.x))   # 이마 주름
+            for sg in (-1, 1): d -= 0.02 * fr * dem * math.exp(-((f.x - sg * (0.17 + 0.25 * (-0.15 - f.z))) / 0.015) ** 2) * smooth(0.0, -0.1, f.z) * smooth(-0.45, -0.3, f.z)   # 팔자 주름
         return d
     displace(body, carve)
     def skin_col(c, nr):
@@ -807,14 +968,26 @@ def build_seraph(out, prev):
         # 악마 손톱
         for f in range(4): cone(bm, V((4.25 + 0.12 * (f - 1.5), 2.15, 5.7)), V((4.3 + 0.15 * (f - 1.5), 2.6, 5.0)), 0.07, sides=4, rings=2, bend=V((0, 0.2, 0)))
         o = obj_from_bm(f'horn{li}', bm); set_material(o, m_bone); solid(o, 0.03, [3500, 800][li], 2); parts.append((o, ('head', 'foreR')))
-        bm = bmesh.new(); ell(bm, (-0.33, 1.2, 13.6), (0.14, 0.06, 0.09), seg=(8, 6)); oL = obj_from_bm(f'eyeL{li}', bm); set_material(oL, m_eyeL); parts.append((oL, 'head'))
-        bm = bmesh.new(); ell(bm, (0.33, 1.2, 13.6), (0.14, 0.06, 0.08), seg=(8, 6)); oR = obj_from_bm(f'eyeR{li}', bm); set_material(oR, m_eyeR); parts.append((oR, 'head'))
+        sq = (16, 10) if li == 0 else (8, 6)
+        bm = bmesh.new()
+        for sg in (-1, 1): ell(bm, (sg * 0.33, 1.13, 13.6), (0.13, 0.07, 0.085), seg=sq)    # 흰자(눈두덩 안에 박힘)
+        osc = obj_from_bm(f'sclera{li}', bm); set_material(osc, m_sclera); parts.append((osc, 'head'))
+        bm = bmesh.new(); ell(bm, (-0.33, 1.2, 13.6), (0.065, 0.02, 0.065), seg=sq); oL = obj_from_bm(f'eyeL{li}', bm); set_material(oL, m_eyeL); parts.append((oL, 'head'))   # 빛나는 금빛 홍채
+        bm = bmesh.new(); ell(bm, (0.33, 1.2, 13.6), (0.07, 0.02, 0.07), seg=sq)
+        oR = obj_from_bm(f'eyeR{li}', bm); set_material(oR, m_eyeR); parts.append((oR, 'head'))
+        bm = bmesh.new(); ell(bm, (0.33, 1.222, 13.6), (0.013, 0.01, 0.055), seg=(8, 6)); ell(bm, (-0.33, 1.222, 13.6), (0.025, 0.01, 0.025), seg=(8, 6))
+        op = obj_from_bm(f'pupil{li}', bm); set_material(op, m_bone); parts.append((op, 'head'))   # 오른눈 세로 동공(악마) · 왼눈 둥근 동공
+        # 악마 쪽 입가: 드러난 송곳니 두 개 + 작은 이 줄
+        bm = bmesh.new()
+        for (x, L) in ((0.1, 0.16), (0.2, 0.13)): cone(bm, V((x, 1.3, 13.02)), V((x + 0.01, 1.33, 12.86 - L * 0.3)), 0.035, sides=6, rings=3)
+        for k in range(6): x = -0.15 + 0.05 * k; ell(bm, (x, 1.31, 13.03), (0.022, 0.012, 0.03), seg=(6, 4))
+        ot = obj_from_bm(f'fang{li}', bm); set_material(ot, m_tooth); parts.append((ot, 'head'))
         return parts
 
     def feather_wing(li):
         bm = bmesh.new(); uvs = []
         sh, el, tip = V((-1.2, -1.1, 11.4)), V((-7.0, -2.0, 14.5)), V((-15.5, -2.8, 12.6))
-        rows = [(14, 6.4, 4.0, 1.0, 0.0), (16, 4.2, 3.0, 0.55, 0.12), (20, 2.4, 1.6, 0.25, 0.24), (24, 1.3, 1.0, 0.0, 0.34)] if li == 0 else [(9, 6.4, 4.0, 1.0, 0.0), (10, 3.6, 2.5, 0.4, 0.15), (12, 1.8, 1.2, 0.0, 0.3)]
+        rows = [(16, 6.4, 4.0, 1.0, 0.0), (18, 5.0, 3.4, 0.75, 0.08), (20, 3.6, 2.4, 0.5, 0.16), (24, 2.4, 1.6, 0.25, 0.24), (28, 1.4, 1.0, 0.1, 0.32), (32, 0.8, 0.6, 0.0, 0.4)] if li == 0 else [(9, 6.4, 4.0, 1.0, 0.0), (10, 3.6, 2.5, 0.4, 0.15), (12, 1.8, 1.2, 0.0, 0.3)]
         def wing_pt(t):   # 어깨(0) → 팔꿈치(0.45) → 끝(1)
             return sh.lerp(el, t / 0.45) if t < 0.45 else el.lerp(tip, (t - 0.45) / 0.55)
         fid = 0
@@ -884,8 +1057,15 @@ def build_seraph(out, prev):
     extras = []
     for li in range(2):
         extras.append(armor(li) + head_bits(li) + [feather_wing(li), bat_membrane(li)])
-    lods = finish_lods('Seraph', body, extras, arm, SERAPH_BONES, [30000, 6500], 0.5, skin_col, m_skin)
-    finalize(arm, lods, out, 'seraph.glb', prev, 'seraph', [((6, 34, 10), (0, 0, 9.5)), ((-14, 22, 13), (-4, 0, 11)), ((3.5, 8, 13.6), (0, 0.5, 13.4))])
+    def scale_faces(o, li):   # 악마 쪽(오른쪽) 피부 · 날개 팔은 비늘 재질
+        me = o.data
+        if len(me.materials) < 2: me.materials.append(m_scale)
+        for p in me.polygons:
+            c = p.center
+            if c.x + 0.25 * noise.noise(V((c.y * 0.6, c.z * 0.6, 0.0))) > 0.2 and not (c.z > 12.6 and c.y > 0.6 and c.x < 0.75): p.material_index = 1
+        me.update()
+    lods = finish_lods('Seraph', body, extras, arm, SERAPH_BONES, [56000, 8000], 0.5, skin_col, m_skin, post_lod=scale_faces)
+    finalize(arm, lods, out, 'seraph.glb', prev, 'seraph', [((6, 34, 10), (0, 0, 9.5)), ((-14, 22, 13), (-4, 0, 11)), ((0.6, 5.2, 13.55), (0, 0.6, 13.45))])
 
 # ----------------------------------------------------------------------------------------------------------------------
 def finalize(arm, lods, out, fname, prev, tag, shots):
@@ -923,7 +1103,9 @@ def render(prev, tag, shots, show, hide):
     light('SUN', 1.4, (1.0, 0.6, 0.35), rot=(math.radians(70), 0, math.radians(150)))
     for o in hide: o.hide_render = True
     cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); scene.collection.objects.link(cam); scene.camera = cam; tmp.append(cam)
+    fl = bpy.data.objects.new('flash', bpy.data.lights.new('flash', 'POINT')); fl.data.energy = 0; scene.collection.objects.link(fl); tmp.append(fl)
     for i, (cp, tp) in enumerate(shots):
+        d0 = (V(tp) - V(cp)).length; fl.location = V(cp); fl.data.energy = 40 * d0 * d0; fl.data.shadow_soft_size = 1.0   # 카메라 쪽 보조광(입 속 · 얼굴 근접)
         cam.location = V(cp); d = V(tp) - cam.location; cam.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler(); cam.data.lens = 35
         scene.render.filepath = os.path.join(prev, f'blender_{tag}_{i}.jpg')
         bpy.ops.render.render(write_still=True)

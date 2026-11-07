@@ -73,8 +73,10 @@ for (const k of ['shark', 'golem', 'seraph']) {
   const r = g.hitRay(0, 10, 30, 0, 0, -1, 80, 0.1); ok(r && r.kind === 'boss' && r.d > 20 && r.d < 30, 'golem: a bullet from the front hits the chest');
   ok(g.hitRay(0, 30, 30, 0, 0, -1, 80, 0.1) === null, 'golem: a bullet over the head misses');
   const s = make('shark'); s.spawn(0, -40, 0); s.debug.B.spawnT = 0; s.debug.B.y = -1.5;
-  ok(s.hitRay(30, -1, -40, -1, 0, 0, 80, 0.1) !== null, 'shark: a bullet at the flank hits');
-  ok(s.hitTest(0, -40 + 9, 1, -1.5).length === 1, 'shark: a sword at the snout hits');
+  ok(s.hitRay(60, -1, -40, -1, 0, 0, 120, 0.1) !== null, 'shark: a bullet at the flank hits');
+  ok(s.hitTest(0, -40 - 46, 1, -1.5).length === 1, 'shark: a sword at the snout (5x: ~46 m ahead) hits');
+  ok(s.hitTest(0, -40 - 70, 1, -1.5).length === 0, 'shark: open water ahead of the snout misses');
+  ok(KINDS.shark.sc === 5, 'shark: five times the old 20 m length');
   const a = make('seraph'); a.spawn(0, 0, 0); a.debug.B.spawnT = 0; a.debug.B.y = 4.2;
   ok(a.hitRay(-10, 4.2 + 12, 30, 0, 0, -1, 80, 0.1) !== null, 'seraph: the feathered wing is part of the body');
   ok(a.hitRay(10, 4.2 + 12, 30, 0, 0, -1, 80, 0.1) !== null, 'seraph: the bat wing is part of the body');
@@ -90,11 +92,20 @@ for (const k of ['shark', 'golem', 'seraph']) {
   for (let i = 0; i < 40; i++) g.update(0.05, i * 0.05);
   ok(hits.some((h) => h.src === 'slam' && h.dmg >= 30 && h.boss === 'golem'), 'golem: slam lands on me in front');
   const hits2 = [];
-  const s = make('shark', 'bbb', [{ id: 'bbb', x: 0, z: -49, y: 0 }], hits2); ME.x = 0; ME.z = -49; ME.y = 0;
+  const s = make('shark', 'bbb', [{ id: 'bbb', x: 0, z: -83, y: 0 }], hits2); ME.x = 0; ME.z = -83; ME.y = 0;
   s.spawn(0, -40, 0); s.debug.B.spawnT = 0;
   ok(s.act('bite'), 'shark: bite starts');
   for (let i = 0; i < 30; i++) s.update(0.05, i * 0.05);
   ok(hits2.some((h) => h.src === 'bite'), 'shark: bite lands at the mouth');
+  // 삼키기: 입 앞 플레이어를 빨아들여(pullMe) 덥석 삼킨다
+  const hits4 = [], pulls = [];
+  const c4 = ctxFor('bbb', [{ id: 'bbb', x: 0, z: -95, y: 0 }], hits4); c4.pullMe = (x, z, R, k) => pulls.push([x, z, R, k]);
+  const w = createGiantBoss(c4, 'shark'); ME.x = 0; ME.z = -95; ME.y = 0;
+  w.spawn(0, -40, 0); w.debug.B.spawnT = 0;
+  ok(ACTS.shark.has('swallow') && w.act('swallow'), 'shark: swallow starts');
+  for (let i = 0; i < 90; i++) w.update(0.05, i * 0.05);
+  ok(pulls.length > 10 && pulls.every((p) => Number.isFinite(p[0]) && p[2] > 30), 'shark: swallow pulls me toward the mouth');
+  ok(hits4.some((h) => h.src === 'swallow' && h.dmg >= 50), 'shark: swallow gulps me');
   const hits3 = [];
   const t = make('golem', 'bbb', [{ id: 'bbb', x: 0, z: -8, y: 0 }], hits3); ME.y = 6;   // jumping high: the slam misses
   t.spawn(0, 0, 0); t.debug.B.spawnT = 0; t.act('slam');
