@@ -12,6 +12,7 @@
 //   sp.damage(kind, id, amount, fromId, cdMs) · sp.slowAt(x, z) · sp.view
 
 import { raySphere, rayCapsule, rayCylY } from './weapons-core.js';
+import { bossVfx } from './bossfx.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -39,6 +40,7 @@ const ONE_SHOT = { sw: 'swipe', sp: 'spit', wb: 'spit', sm: 'summon', d: 'die', 
 
 export function createSpiderBoss(ctx) {
   const { THREE, scene } = ctx;
+  let vx = null; const VX = () => vx || (vx = bossVfx(THREE, scene));   // 셰이더 재질 + 풀링 파티클(공용)
   const B = { active: false, owner: false, ownerId: '', ep: 0, born: 0, x: 0, z: 0, ry: 0, hp: 0, maxHp: 0, a: 'i', ac: 0, sa: 0, sd: 40, wt: null, webs: [], minions: [], seq: 0, spawnT: 0, dieT: 0, rage: false };
   const R = { tx: 0, tz: 0, try_: 0, lastAc: 0, lastSnap: 0 };       // replica-side targets
   const O = { act: null, cd: { sw: 0, sp: 2.2, wb: 6, sm: 8 }, gap: 0, webId: 0, minId: 0, hitAt: new Map(), lastBy: '', lastFoot: -1 };   // owner-side AI
@@ -64,7 +66,10 @@ const feet = [];                                   // per leg { k: tibia start, 
     loading = (async () => {
       const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
       const SU = await import('three/addons/utils/SkeletonUtils.js');
+      const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
       const ld = new GLTFLoader();
+      const dr = new DRACOLoader(); dr.setDecoderPath(ctx.dracoPath || 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
+      ld.setDRACOLoader(dr);   // spider.glb · spider_mini.glb 는 Draco 압축(tools/spider/build_spider.py)
       const get = (f) => new Promise((res, rej) => ld.load(new URL(f, ctx.baseUrl).href, res, undefined, rej));
       const [b, m] = await Promise.all([get('spider.glb'), get('spider_mini.glb')]);
       assets = { boss: b, mini: m, SU };
@@ -72,9 +77,10 @@ const feet = [];                                   // per leg { k: tibia start, 
       assets.needleGeo = new THREE.ConeGeometry(0.2, 1.7, 6).rotateX(Math.PI / 2);   // tip along +Z
       assets.needleMat = new THREE.MeshBasicMaterial({ color: '#b6ff4a' });
       assets.glowGeo = new THREE.SphereGeometry(0.5, 10, 8);
-      assets.glowMat = new THREE.MeshBasicMaterial({ color: '#5dff2a', transparent: true, opacity: 0.45, depthWrite: false });
+      assets.glowMat = (VX().ok && VX().mat('orb', '#3dff10', 0.9, { hot: '#eaffb0' })) || new THREE.MeshBasicMaterial({ color: '#5dff2a', transparent: true, opacity: 0.45, depthWrite: false });
       assets.ballGeo = new THREE.SphereGeometry(0.7, 10, 8);
       assets.ballMat = new THREE.MeshBasicMaterial({ color: '#eaf2ff' });
+      assets.ballGlow = VX().ok ? VX().mat('orb', '#a8c8ff', 0.7, { hot: '#ffffff' }) : null;
       assets.webTex = makeWebTexture();
       assets.webGeo = new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2);
       return assets;
@@ -117,12 +123,20 @@ const feet = [];                                   // per leg { k: tibia start, 
     let jaw = null; const byName = {}; root.traverse((o) => { if (o.isBone && o.name === 'jaw') jaw = o; if (o.name) byName[o.name] = o; });
     // per leg: tibia start (knee 2), metatarsus start (ankle), foot tip (`_e` marker bone) — the hit/push read-out below
     const legs = LEGS.map((l) => ({ t: byName[l + '_t'], m: byName[l + '_m'], e: byName[l + '_e'] })).filter((q) => q.t && q.m && q.e);
-    const mats = new Set(); root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) mats.add(m); });
+    const mats = new Set(), lods = []; root.traverse((o) => { if (o.isMesh) { for (const m of [].concat(o.material)) mats.add(m); if (/_LOD\d/.test(o.name) || /_LOD\d/.test(o.parent && o.parent.name || '')) lods.push(o); } });
     // night scene without an environment map: metal would render black, and a little self-light keeps the dark shell readable
-    for (const m of mats) { if (!m.isMeshStandardMaterial) continue; m.metalness = Math.min(m.metalness, 0.05); if (m.emissive.getHex() === 0) m.emissive.copy(m.color).multiplyScalar(/lip/.test(m.name) ? 0.18 : 0.36); }
+    for (const m of mats) { if (!m.isMeshStandardMaterial) continue; m.metalness = Math.min(m.metalness, 0.05); if (m.emissive.getHex() === 0) { m.emissive.copy(m.color).multiplyScalar(/lip/.test(m.name) ? 0.18 : m.map ? 0.22 : 0.36); if (m.map) m.emissiveMap = m.map; } }
     const base = new Map(); for (const m of mats) base.set(m, { e: m.emissive ? m.emissive.clone() : null, i: m.emissiveIntensity });
     scene.add(root);
-    return { root, mixer, clips, cur: null, os: null, jaw, legs, mats, base, flash: 0 };
+    const rig = { root, mixer, clips, cur: null, os: null, jaw, legs, mats, base, flash: 0, lods, lod: -1 };
+    setLod(rig, 0);
+    return rig;
+  }
+  // LOD: 보스만 Spider_LOD0(가까이 · 고디테일) / Spider_LOD1(멀리). 새끼는 한 단이라 lods 가 비어 있다.
+  const LOD_FAR = 70;
+  function setLod(rig, want) {
+    if (!rig.lods.length || want === rig.lod) return;
+    rig.lod = want; for (const o of rig.lods) o.visible = new RegExp('_LOD' + want).test(o.name) || new RegExp('_LOD' + want).test(o.parent && o.parent.name || '');
   }
   function setLoop(rig, name, ts = 1) {
     const a = rig.clips[name]; if (!a) return;
@@ -329,23 +343,26 @@ const feet = [];                                   // per leg { k: tibia start, 
       const a = aim + (i - 1) * BOSS.spit.fan;
       const g = new THREE.Group();
       const needle = new THREE.Mesh(assets.needleGeo, assets.needleMat), glow = new THREE.Mesh(assets.glowGeo, assets.glowMat);
-      glow.scale.set(1, 1, 1.9); needle.position.z = 0; g.add(needle, glow);
+      glow.scale.set(1.3, 1.3, 2.6); needle.position.z = 0; g.add(needle, glow);
       g.position.copy(o); scene.add(g);
       const vx = -Math.sin(a) * BOSS.spit.speed, vz = -Math.cos(a) * BOSS.spit.speed;
       g.rotation.y = Math.atan2(vx, vz);
       proj.push({ g, vx, vz, vy: vy0 + (Math.random() - 0.5) * 0.4, life: BOSS.spit.life });
     }
     ctx.fx.thump(0.5);
+    VX().burst('venom', o.x, o.y, o.z, { n: 18, dir: [-Math.sin(aim) * 0.6, 0.2, -Math.cos(aim) * 0.6] }); VX().burst('flash', o.x, o.y, o.z, { color: '#6dff2a', size: 0.5 });
   }
   function throwWeb(wt) {
     if (!assets || !wt) return;
     const x = finite(wt[0], -90, 90), z = finite(wt[1], -100, 100); if (x === null || z === null) return;
     const o = mouthPos(new THREE.Vector3());
     const m = new THREE.Mesh(assets.ballGeo, assets.ballMat); m.position.copy(o); scene.add(m);
+    if (assets.ballGlow) { const h = new THREE.Mesh(assets.ballGeo, assets.ballGlow); h.scale.setScalar(1.9); m.add(h); }
     arcs.push({ m, sx: o.x, sy: o.y, sz: o.z, tx: x, tz: z, ty: ctx.heightAt(x, z) + 0.1, t: 0, dur: BOSS.web.flight });
   }
   function landWeb(a) {
     ctx.fx.poof(a.tx, a.ty, a.tz, 4);
+    VX().burst('web', a.tx, a.ty + 0.3, a.tz, { n: 30, up: 0.2 }); VX().ring('mist', a.tx, a.ty, a.tz, 1.5, { n: 10, color: '#dfe8ff' });
     if (B.owner && B.active && B.webs.length < BOSS.web.max + 2) B.webs.push({ id: ++O.webId, x: a.tx, z: a.tz, age: 0 });
   }
   function webVisual(w) {
@@ -430,11 +447,14 @@ const feet = [];                                   // per leg { k: tibia start, 
       boss.root.position.set(B.x, gy - (1 - se) * K * 2.4, B.z); boss.root.rotation.order = 'YXZ'; boss.root.rotation.set(boss.tp, B.ry, boss.tr); boss.root.scale.setScalar(0.35 + 0.65 * se);
       if (B.a === 'd') { if (boss.cur !== 'die') { boss.os = null; playOnce(boss, 'die', 1, true); } }
       else if (!boss.os) setLoop(boss, B.a === 'w' ? 'walk' : 'idle', B.a === 'w' ? (BOSS.walk * (B.rage ? 1.25 : 1)) / (3.4 * K) : 1);   // the walk clip covers 3.4 K per cycle
+      const cp = ctx.camPos ? ctx.camPos() : null;
+      setLod(boss, cp && Math.hypot(cp.x - B.x, cp.z - B.z) > LOD_FAR ? 1 : 0);
       tickRig(boss, dt);
       readFeet();
       if (B.spawnT > 0 && Math.random() < dt * 14) ctx.fx.poof(B.x + (Math.random() - 0.5) * K * 2.2, g + 0.05, B.z + (Math.random() - 0.5) * K * 2.2, 2);
     }
     // projectiles (every client simulates them; only my own body is tested)
+    if (vx) vx.tick(dt);
     for (let i = proj.length - 1; i >= 0; i--) {
       const p = proj[i]; p.life -= dt; p.vy -= 3.0 * dt;
       p.g.position.x += p.vx * dt; p.g.position.z += p.vz * dt; p.g.position.y += p.vy * dt;
@@ -445,11 +465,14 @@ const feet = [];                                   // per leg { k: tibia start, 
         const l = Math.hypot(p.vx, p.vz) || 1; myHit.spit = 0.5;
         ctx.onHitMe({ src: 'spit', dx: p.vx / l, dz: p.vz / l, power: 0.7, poison: true }); dead = true;
       }
+      if (!dead && Math.random() < 0.8) VX().burst('venom', p.g.position.x, p.g.position.y, p.g.position.z, { n: 1, speed: 0.15, up: 0.1, size: 0.8 });   // 독침 꼬리
+      if (dead) VX().impact(p.g.position.x, Math.max(gy + 0.2, p.g.position.y), p.g.position.z, { color: '#6dff2a', hot: '#eaffb0', sparks: 12, smokeKind: 'mist', smokeColor: '#7fd040', smokeN: 3, size: 0.6 });
       if (dead) { if (p.life > 0) ctx.fx.spark(p.g.position.x, Math.max(gy + 0.2, p.g.position.y), p.g.position.z); scene.remove(p.g); proj.splice(i, 1); }
     }
     for (let i = arcs.length - 1; i >= 0; i--) {
       const a = arcs[i]; a.t += dt; const u = Math.min(1, a.t / a.dur);
       a.m.position.set(a.sx + (a.tx - a.sx) * u, a.sy + (a.ty - a.sy) * u + Math.sin(u * Math.PI) * 9, a.sz + (a.tz - a.sz) * u);
+      if (Math.random() < 0.6) VX().burst('web', a.m.position.x, a.m.position.y, a.m.position.z, { n: 1, speed: 0.2 });   // 실 가닥 꼬리
       if (u >= 1) { landWeb(a); scene.remove(a.m); arcs.splice(i, 1); }
     }
     // webs: age runs locally on everyone (the owner's stream re-bases it)

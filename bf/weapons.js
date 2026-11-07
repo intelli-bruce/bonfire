@@ -22,7 +22,7 @@ const MODEL_FILE = { 2: 'sword.glb', 3: 'm4a1.glb', 4: 'shotgun.glb', 5: 'pistol
 const MODEL_SLOTS = [2, 3, 4, 5, 6, 7, 8];
 const MAG_DROP = { 3: 0.24, 5: 0.11, 7: 0.12 };            // 장전 때 탄창이 빠지는 거리(모델 m)
 const FLASH = { 3: 0.55, 4: 0.95, 5: 0.42, 7: 1.0, 8: 1.4 };       // 총구 섬광 크기(m)
-const KICK = { 3: [0.55, 0.07], 4: [1.2, 0.22], 5: [0.6, 0.05], 7: [1.5, 0.3], 8: [1.6, 0.4] };   // [팔 반동, 화면 반동]
+const KICK = { 3: [0.55, 0], 4: [1.2, 0], 5: [0.6, 0], 7: [1.5, 0], 8: [1.6, 0] };   // [팔 반동, 화면 반동 — 총은 0: 시점이 흔들리지 않는다]
 const SND = { 3: 'rifle', 4: 'shotgun', 5: 'pistol', 7: 'sniper', 8: 'rpg' };
 const isGun = C.isGun;
 // 자세(오일러 도, XYZ — 팔: X -90 = 앞, Z 90 = 아래로 늘어뜨림 기준, 위 바깥쪽은 Z 작게). controller/avatar 의 규약과 같다.
@@ -715,7 +715,7 @@ export function createWeapons(ctx) {
   function recoilShot(slot, now) {
     my.streak = now - my.lastShotAt < WEAPONS[slot].interval * 1.9 + 0.05 ? my.streak + 1 : 0; my.lastShotAt = now;
     const [up, side] = C.recoilKick(slot, my.streak, view.ads, rnd() * 2 - 1);
-    my.recoil += up; if (ctx.kickView) ctx.kickView(-up, side);
+    my.recoil += up; if ((up || side) && ctx.kickView) ctx.kickView(-up, side);
     view.recoil = my.recoil;
   }
   function recoilFrame(dt, now) {
