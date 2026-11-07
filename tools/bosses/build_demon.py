@@ -15,6 +15,7 @@ import numpy as np
 from mathutils import Vector, Matrix, noise
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from hq import bake_ao, hair_cards
 from build_bosses import (V, lerp, smooth, basis_from, ell, tube, cone, obj_from_bm, remesh, decimate, shade_smooth, box_uv,
                           set_colors, fill_colors, set_material, copy_obj, displace, tex_fbm, tex_cells, height_to_normal,
                           make_image, material, make_armature, skin, finish_lods, finalize, reset_scene, tri_count)
@@ -101,7 +102,7 @@ def build_demon(out, prev):
     m_tooth = material('demon_tooth', base=(0.86, 0.8, 0.66), rough=0.35)
     m_gum = material('demon_gum', base=(0.22, 0.03, 0.03), rough=0.45, emit=(0.5, 0.03, 0.01), emit_k=0.35)
     m_claw = material('demon_claw', base=(0.05, 0.04, 0.04), rough=0.25, metal=0.2)
-    m_mane = material('demon_mane', rough=0.7, albedo=MA, normal=MN, nstrength=1.3)
+    m_mane = material('demon_mane', rough=0.7, albedo=MA, normal=MN, nstrength=1.3, double=True)
     arm = make_armature('Demon', DEMON_BONES)
 
     # ---------- 몸: 골반 · 굽은 등 · 가슴 근육 · 어깨 · 팔 · 다리 ----------
@@ -285,6 +286,19 @@ def build_demon(out, prev):
         """검은 갈기: 뒷머리 · 목 · 어깨 위로 뻗은 굵은 털다발(뒤·아래로 휘어짐)."""
         bm = bmesh.new(); rnd = random.Random(11)
         cnt = 240 if li == 0 else 70
+        if li == 0:   # 가까이: 헤어 카드 — 다발마다 가는 띠 7장(뿌리 굵고 끝 가늘게, 뒤·아래로 휨) + 속을 채우는 작은 원뿔
+            roots = []
+            for _ in range(cnt):
+                u = rnd.random(); s = rnd.choice((-1, 1))
+                base = V((s * rnd.uniform(0, 2.6) * (0.4 + u), lerp(1.6, -1.0, u) + rnd.uniform(-0.3, 0.3), lerp(14.2, 12.0, u) + rnd.uniform(-0.3, 0.3)))
+                L = rnd.uniform(1.2, 2.8) * (1.2 - 0.4 * u)
+                tip = base + V((s * rnd.uniform(0.2, 0.9), -L * 0.8, rnd.uniform(-0.2, 0.7)))
+                roots.append((base, tip, V((0, -0.2, -rnd.uniform(0.4, 1.1))), 0.16))
+                if rnd.random() < 0.4: cone(bm, base, base + (tip - base) * 0.55, rnd.uniform(0.16, 0.28), sides=4, rings=2, bend=V((0, -0.1, -0.3)), flat=0.5)
+            hair_cards(bm, roots, rnd, cards_per_lock=7, segs=5, width=0.09)
+            o = obj_from_bm(f'demon_mane{li}', bm)
+            box_uv(o.data, 0.5); set_colors(o.data, lambda c, n: (0.45 + 0.55 * smooth(11.4, 14.4, c.z),) * 3); set_material(o, m_mane)
+            return o
         for _ in range(cnt):
             u = rnd.random(); s = rnd.choice((-1, 1))
             base = V((s * rnd.uniform(0, 2.6) * (0.4 + u), lerp(1.6, -1.0, u) + rnd.uniform(-0.3, 0.3), lerp(14.2, 12.0, u) + rnd.uniform(-0.3, 0.3)))
@@ -348,6 +362,7 @@ def build_demon(out, prev):
             if fb in ('head', 'jaw') and not o.name.startswith('demon_hand'): grow(o, HEADK)
         extras.append(e)
     lods = finish_lods('Demon', body, extras, arm, DEMON_BONES, [40000, 7000], 0.32, demon_color, m_skin, post_lod=crack_faces)
+    bake_ao(lods, samples=16, dist=1.4)
     finalize(arm, lods, out, 'demon.glb', prev, 'demon', [((0, 30, 9), (0, 0, 9)), ((9, 22, 12), (0, 1, 11)), ((0.8, 10.5, 13.6), (0, 3.4, 13.3)), ((4.0, 9.5, 14.8), (0, 3.0, 13.4))])
 
 if __name__ == '__main__':
