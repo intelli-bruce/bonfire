@@ -189,10 +189,10 @@ const feet = [];                                   // per leg { k: tibia start, 
     boss = makeRig(assets.boss, { cloneMats: true });
     setLoop(boss, 'idle');
   }
-  function spawn(x, z, ry) {
+  function spawn(x, z, ry, born) {
     if (B.active) return false;
     const n = Math.max(1, ctx.players().length);
-    B.active = true; B.owner = true; B.ownerId = ctx.myId; B.ep = 0; B.born = Date.now(); B.seq = 0;
+    B.active = true; B.owner = true; B.ownerId = ctx.myId; B.ep = 0; B.born = born > 0 ? born : Date.now(); B.seq = 0;
     B.x = x; B.z = z; B.ry = ry; B.maxHp = B.hp = BOSS.hp + BOSS.hpPerExtra * (n - 1);
     B.a = 's'; B.spawnT = BOSS.spawnT; B.ac++;
     R.tx = x; R.tz = z; R.try_ = ry; R.lastSnap = performance.now();

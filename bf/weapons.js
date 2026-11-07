@@ -591,7 +591,8 @@ export function createWeapons(ctx) {
   function reportHit(w, c, sl, kind, id, n, x) {   // 내가 맞힌 것: 소유자면 바로, 아니면 소유자에게 알린다
     const sp = ctx.spider(); if (!sp) return;
     const d = x ? C.ultDmg(x) : C.dmgFor(w, sl ? 'sl' : 'm', c, n); if (!d || !(d.amount > 0)) return;
-    if (sp.owner) sp.damage(kind, id, d.amount, ctx.myId + '|' + d.key, d.cd);
+    const tb = sp.of ? sp.of(id) : sp;   // 여러 마리: 맞은 보스의 소유자만 장부에 올린다
+    if (tb && tb.owner) sp.damage(kind, id, d.amount, ctx.myId + '|' + d.key, d.cd);
     else ctx.net.send(C.wpnMsg.hit(w, c, sl, [kind === 'boss' ? 'b' : 'm', id], n, x));
   }
 
@@ -1233,7 +1234,8 @@ export function createWeapons(ctx) {
   }
   function bookRemoteHit(senderId, s, w, c, sl, h, n, x) {   // 보스를 돌리는 쪽(소유자)만 피해를 장부에 올린다. 값은 표에서 정하고, 거리를 확인한다
     const sp = ctx.spider(); if (!sp || !sp.owner || !sp.active) return;
-    const v = sp.view; if (!C.reachOk(w, x || (sl ? 'sl' : 'm'), Math.hypot(s.x - v.x, s.z - v.z), sp.BOSS.hitReach)) return;
+    const tb = sp.of ? sp.of(h.id) : sp; if (!tb || !tb.owner) return;   // 여러 마리: id 에 묶인 보스
+    const v = tb.view; if (!C.reachOk(w, x || (sl ? 'sl' : 'm'), Math.hypot(s.x - v.x, s.z - v.z), tb.BOSS.hitReach)) return;
     const d = x ? C.ultDmg(x) : C.dmgFor(w, sl ? 'sl' : 'm', c, n); if (!d || !(d.amount > 0)) return;
     sp.damage(h.kind, h.id, d.amount, senderId + '|' + d.key, d.cd);
   }
