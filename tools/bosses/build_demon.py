@@ -39,36 +39,69 @@ def skin_textures(n=2048):
     F1, F2 = tex_cells(n, 260, 103)
     wr = np.clip(1 - (F2 - F1) * 60, 0, 1) ** 3            # 잔주름 망(그물)
     vein = 1 - np.abs(tex_fbm(n, 1.6, 104, lo=3) * 2 - 1)  # 핏줄(능선)
-    vein = np.clip((vein - 0.93) / 0.07, 0, 1)
+    vein = np.clip((vein - 0.9) / 0.1, 0, 1)
     lump = tex_fbm(n, 1.9, 105)
-    h = 0.35 * lump + 0.25 * fine - 0.35 * wr - 0.12 * (pores > 0.62) + 0.22 * vein
-    tone = 0.86 + 0.1 * lump - 0.18 * wr - 0.06 * (pores > 0.6)
-    alb = tone[..., None] * np.array([1.0, 0.98, 0.95])
-    alb = alb * (1 - vein[..., None] * np.array([0.25, 0.45, 0.42]))    # 핏줄: 탁한 보라·붉은 기
-    return make_image('demon_skin', alb), make_image('demon_skin_n', height_to_normal(h, 10.0), True)
+    fib = tex_fbm(n, 1.2, 106, lo=6)                       # 근섬유 결(길쭉한 골)
+    yy, xx = np.mgrid[0:n, 0:n] / n
+    fibre = 0.5 + 0.5 * np.sin((xx * 0.35 + yy) * 2 * np.pi * 34 + fib * 9)
+    scar = 1 - np.abs(tex_fbm(n, 1.8, 107, lo=2) * 2 - 1)  # 흉터: 굵고 드문 능선
+    scar = np.clip((scar - 0.965) / 0.035, 0, 1)
+    h = 0.35 * lump + 0.25 * fine - 0.45 * wr - 0.12 * (pores > 0.62) + 0.3 * vein + 0.12 * fibre - 0.35 * scar
+    tone = 0.84 + 0.12 * lump - 0.2 * wr - 0.08 * (pores > 0.6) - 0.08 * (1 - fibre)
+    alb = tone[..., None] * np.array([0.88, 0.84, 0.86])   # 잿빛(살짝 보라)
+    sss = np.clip(wr * 0.8 + (1 - fibre) * 0.15, 0, 1)[..., None]
+    alb = alb * (1 - sss * np.array([0.0, 0.22, 0.2]))                  # 골·주름 속은 붉게(피하 산란 느낌)
+    alb = alb * (1 - vein[..., None] * np.array([0.35, 0.62, 0.5]))      # 핏줄: 검붉은 보라
+    alb = alb * (1 - scar[..., None] * 0.15) + scar[..., None] * np.array([0.12, 0.05, 0.06])   # 흉터: 붉은 기 도는 연한 줄
+    rough = np.clip(0.62 + 0.18 * wr - 0.22 * vein - 0.25 * scar + 0.06 * (pores > 0.6), 0.25, 0.95)
+    return (make_image('demon_skin', alb), make_image('demon_skin_n', height_to_normal(h, 16.0), True),
+            make_image('demon_skin_r', np.stack([rough] * 3, -1), True))
 
 def horn_textures(n=1024):
     yy = np.mgrid[0:n, 0:n][0] / n
-    ring = 0.5 + 0.5 * np.sin(yy * 2 * np.pi * 26 + tex_fbm(n, 1.4, 111) * 6)
     grain = tex_fbm(n, 0.7, 112, lo=10)
-    h = 0.6 * ring + 0.4 * grain
-    alb = (0.55 + 0.3 * ring * grain)[..., None] * np.array([0.42, 0.36, 0.3])
-    return make_image('demon_horn', alb), make_image('demon_horn_n', height_to_normal(h, 7.0), True)
+    flake = tex_fbm(n, 0.35, 113, lo=60)                   # 거친 각질 비늘
+    streak = tex_fbm(n, 1.1, 114, lo=4)
+    h = 0.5 * grain + 0.45 * (flake > 0.55) + 0.3 * streak
+    alb = (0.6 + 0.35 * grain - 0.15 * (flake > 0.58))[..., None] * np.array([0.78, 0.7, 0.6])
+    rough = np.clip(0.72 + 0.2 * (flake > 0.55) - 0.15 * grain, 0.3, 0.98)
+    return (make_image('demon_horn', alb), make_image('demon_horn_n', height_to_normal(h, 12.0), True),
+            make_image('demon_horn_r', np.stack([rough] * 3, -1), True))
+
+def mane_textures(n=1024):
+    """털 다발: 세로로 길게 늘어진 가닥(이방성 노이즈) — 색·노멀."""
+    rng = np.random.default_rng(121)
+    w = rng.standard_normal((n, n // 32))
+    xx = np.linspace(0, n // 32, n, endpoint=False)
+    cols = np.array([np.interp(xx, np.arange(n // 32 + 1), np.append(w[r], w[r][0])) for r in range(n)])   # 가로로만 변하고 세로로 길다
+    strand = (cols - cols.min()) / (np.ptp(cols) + 1e-6)
+    fine = tex_fbm(n, 0.4, 122, lo=40)
+    h = 0.7 * strand + 0.3 * fine
+    alb = (0.08 + 0.22 * strand ** 2 + 0.05 * fine)[..., None] * np.array([1.0, 0.82, 0.78])
+    return make_image('demon_mane', alb), make_image('demon_mane_n', height_to_normal(h, 10.0), True)
+
+def rough_map(m, img):
+    """러프니스 맵(glTF metallicRoughness 의 G 채널로 내보내진다)."""
+    nt = m.node_tree; bs = nt.nodes['Principled BSDF']
+    t = nt.nodes.new('ShaderNodeTexImage'); t.image = img
+    sp = nt.nodes.new('ShaderNodeSeparateColor'); nt.links.new(t.outputs['Color'], sp.inputs['Color']); nt.links.new(sp.outputs['Green'], bs.inputs['Roughness'])
 
 def build_demon(out, prev):
     reset_scene()
-    A, N = skin_textures()
-    HA, HN = horn_textures()
-    m_skin = material('demon_skin', rough=0.62, albedo=A, normal=N, nstrength=1.1)
+    A, N, R = skin_textures()
+    HA, HN, HR = horn_textures()
+    MA, MN = mane_textures()
+    m_skin = material('demon_skin', rough=0.62, albedo=A, normal=N, nstrength=1.6); rough_map(m_skin, R)
     m_crack = material('demon_crack', base=(1.0, 0.12, 0.04), rough=0.5, emit=(1.0, 0.1, 0.02), emit_k=6.0)
     m_core = material('demon_core', base=(1.0, 0.35, 0.18), rough=0.2, emit=(1.0, 0.22, 0.06), emit_k=9.0)
     m_eye = material('demon_eye', base=(1.0, 0.1, 0.03), rough=0.15, emit=(1.0, 0.08, 0.02), emit_k=7.0)
     m_pupil = material('demon_pupil', base=(0.02, 0.0, 0.0), rough=0.1)
-    m_horn = material('demon_horn', rough=0.55, albedo=HA, normal=HN, nstrength=1.0)
+    m_horn = material('demon_horn', rough=0.8, albedo=HA, normal=HN, nstrength=1.4); rough_map(m_horn, HR)
+    m_tip = material('demon_horn_tip', base=(0.09, 0.07, 0.06), rough=0.18, normal=HN, nstrength=0.4)   # 끝: 매끈하게 닳아 광택
     m_tooth = material('demon_tooth', base=(0.86, 0.8, 0.66), rough=0.35)
     m_gum = material('demon_gum', base=(0.22, 0.03, 0.03), rough=0.45, emit=(0.5, 0.03, 0.01), emit_k=0.35)
     m_claw = material('demon_claw', base=(0.05, 0.04, 0.04), rough=0.25, metal=0.2)
-    m_mane = material('demon_mane', base=(0.2, 0.17, 0.16), rough=0.85)
+    m_mane = material('demon_mane', rough=0.7, albedo=MA, normal=MN, nstrength=1.3)
     arm = make_armature('Demon', DEMON_BONES)
 
     # ---------- 몸: 골반 · 굽은 등 · 가슴 근육 · 어깨 · 팔 · 다리 ----------
@@ -110,9 +143,9 @@ def build_demon(out, prev):
     displace(body, carve)
 
     def demon_color(c, nr):
-        base = V((0.74, 0.72, 0.7)) * (0.86 + 0.18 * noise.noise(c * 0.6))
+        base = V((0.86, 0.84, 0.86)) * (0.86 + 0.18 * noise.noise(c * 0.6))
         # 오목한 곳(아래를 향한 면) 은 어둡게: 근육 사이 그늘
-        base = base * (0.72 + 0.28 * smooth(-0.8, 0.6, nr.z))
+        base = base * (0.5 + 0.5 * smooth(-0.8, 0.6, nr.z))
         base = base.lerp(V((0.48, 0.44, 0.46)), 0.35 * smooth(0.2, 0.9, noise.noise(c * 0.25) + 0.3))   # 멍든 듯 탁한 반점
         q = (c - CHEST).length
         if q < 3.6: base = base.lerp(V((0.45, 0.08, 0.06)), 0.85 * (1 - q / 3.6) ** 1.6)                # 균열 둘레 달아오름
@@ -234,7 +267,18 @@ def build_demon(out, prev):
         o = obj_from_bm(f'demon_horns{li}', bm)
         remesh(o, 0.045 if li == 0 else 0.1, 0.5, 2)
         decimate(o, 7000 if li == 0 else 1800)
-        box_uv(o.data, 0.8); fill_colors(o.data, (1, 1, 1)); set_material(o, m_horn)
+        box_uv(o.data, 0.8); set_material(o, m_horn)
+        # 고리 무늬(뿌리에서 끝으로 갈수록 촘촘) · 끝은 매끈한 검은 광택 재질
+        def hc(c, nr):
+            d = (c - H).length; ring = 0.5 + 0.5 * math.sin(d * 9.0 + noise.noise(c * 2.0) * 1.5)
+            k = 0.62 + 0.38 * ring ** 2
+            return (k * 1.0, k * 0.95, k * 0.9)
+        set_colors(o.data, hc)
+        me = o.data; dmax = max((v.co - H).length for v in me.vertices)
+        me.materials.append(m_tip)
+        for p in me.polygons:
+            if (p.center - H).length > dmax * 0.8: p.material_index = 1
+        me.update()
         return o
 
     def mane(li):
@@ -248,7 +292,7 @@ def build_demon(out, prev):
             tip = base + V((s * rnd.uniform(0.2, 0.9), -L * 0.8, rnd.uniform(-0.2, 0.7)))
             cone(bm, base, tip, rnd.uniform(0.18, 0.36), sides=5 if li == 0 else 4, rings=3 if li == 0 else 2, bend=V((0, -0.2, -rnd.uniform(0.4, 1.1))), flat=0.5)
         o = obj_from_bm(f'demon_mane{li}', bm)
-        box_uv(o.data, 0.5); fill_colors(o.data, (1, 1, 1)); set_material(o, m_mane)
+        box_uv(o.data, 0.5); set_colors(o.data, lambda c, n: (0.6 + 0.4 * smooth(-0.6, 0.8, n.z),) * 3); set_material(o, m_mane)
         return o
 
     def hands(li, s):
