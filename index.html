@@ -38,8 +38,9 @@ button, input { font: inherit; color: inherit; }
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: calc(env(safe-area-inset-top, 0px) + 16px) calc(env(safe-area-inset-bottom, 0px) + 16px);
   background: radial-gradient(ellipse at 50% 45%, rgba(28, 32, 80, 0.05), rgba(20, 22, 60, 0.6)); }
-.card { width: 100%; max-width: 430px; margin: auto; display: grid; gap: 16px; padding: 28px 26px 24px; box-sizing: border-box; background: var(--panel);
+.card { width: 100%; max-width: 920px; margin: auto; display: grid; grid-template-columns: minmax(250px, 340px) minmax(0, 1fr); gap: 18px 28px; padding: 24px 26px 22px; box-sizing: border-box; background: var(--panel);
   border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.fcol { display: grid; gap: 14px; align-content: start; min-width: 0; }
 .eyebrow { font-family: var(--f-display); font-size: 14px; letter-spacing: 0.06em; color: var(--ember); }
 .card h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: clamp(34px, 9vw, 44px); line-height: 1.1; text-wrap: balance; color: #ffe2bd; text-shadow: 0 2px 0 rgba(150, 70, 30, 0.45); }
 .card p { margin: 0; line-height: 1.65; color: var(--mist); font-size: 14px; }
@@ -58,6 +59,43 @@ button, input { font: inherit; color: inherit; }
 #enterBtn:disabled { opacity: 0.65; cursor: progress; }
 #nickErr { font-size: 12.5px; color: #ffb384; line-height: 1.5; }
 .chars .robe i { width: 15px; height: 15px; }
+/* avatar preview (left, sticky) + option tabs */
+.pvcol { position: sticky; top: 0; align-self: start; z-index: 3; }
+.pvbox { position: relative; height: min(560px, calc(100vh - 90px)); min-height: 380px; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+  background: radial-gradient(ellipse at 50% 92%, rgba(255, 162, 87, 0.34), transparent 58%), radial-gradient(ellipse at 50% 0%, rgba(150, 160, 255, 0.2), transparent 60%), linear-gradient(180deg, rgba(58, 64, 138, 0.7), rgba(24, 28, 70, 0.85)); }
+#pv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; cursor: grab; outline: none; }
+#pv:active { cursor: grabbing; }
+#pv:focus-visible { box-shadow: inset 0 0 0 2px var(--ember); }
+.pvfall { position: absolute; inset: 0; display: grid; place-items: center; padding: 18px; text-align: center; font-size: 13.5px; line-height: 1.6; color: var(--mist); }
+.pvtools { position: absolute; right: 10px; top: 10px; z-index: 1; }
+.pvhint { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font-size: 12px; color: var(--mist); pointer-events: none; text-shadow: 0 1px 3px rgba(10, 8, 40, 0.8); }
+.chip-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid rgba(255, 210, 150, 0.5); border-radius: 999px; background: rgba(28, 32, 80, 0.7); cursor: pointer; font-family: var(--f-display); font-size: 14.5px; color: var(--sand); touch-action: manipulation; }
+.chip-btn:hover { background: rgba(255, 162, 87, 0.22); } .chip-btn:active { transform: translateY(1px); }
+.chip-btn svg { width: 17px; height: 17px; flex: none; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(255, 243, 223, 0.07); border: 1px solid var(--line); }
+.tab { padding: 9px 12px; border: 0; border-radius: 999px; background: transparent; cursor: pointer; font-family: var(--f-display); font-size: 15px; color: var(--mist); }
+.tab[aria-selected="true"] { background: rgba(255, 162, 87, 0.26); color: #ffe2bd; box-shadow: 0 0 0 1px rgba(255, 162, 87, 0.5) inset; }
+.opts { display: grid; gap: 12px; }
+.opts .field { gap: 6px; }
+.seg .robe { flex: 1 1 0; justify-content: center; padding: 8px 12px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px; }
+.sw { width: 32px; height: 32px; padding: 0; border-radius: 50%; border: 2px solid transparent; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4); touch-action: manipulation; flex: none; }
+.sw[aria-pressed="true"] { border-color: var(--ember); outline: 2px solid rgba(255, 162, 87, 0.35); outline-offset: 1px; transform: scale(1.1); }
+@media (max-width: 760px) {
+  #entry { padding-inline: max(8px, env(safe-area-inset-left, 0px)) max(8px, env(safe-area-inset-right, 0px)); padding-block: 0 calc(env(safe-area-inset-bottom, 0px) + 12px); }
+  .card { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0 14px 16px; border-radius: 0 0 22px 22px; margin-top: 0; }
+  .pvcol { margin: 0 -14px; padding: calc(env(safe-area-inset-top, 0px) + 8px) 14px 8px; background: linear-gradient(180deg, rgba(43, 45, 104, 0.98) 78%, rgba(43, 45, 104, 0)); }
+  .pvbox { height: clamp(210px, 34vh, 320px); min-height: 0; }
+  .card h1 { font-size: clamp(26px, 8vw, 34px); }
+  .story { display: none; }
+  .opts .robes { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; margin-inline: -2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .opts .robes::-webkit-scrollbar { display: none; }
+  .opts .robe { flex: none; padding: 9px 14px; }
+  .seg .robe { flex: 1 0 auto; }
+  .sw { width: 38px; height: 38px; }
+  .swatches { gap: 10px; }
+  #enterBtn { position: sticky; bottom: 4px; z-index: 2; }
+}
 .load { display: grid; gap: 6px; font-size: 12.5px; color: var(--mist); }
 .load .track { height: 8px; border-radius: 999px; background: rgba(255, 243, 223, 0.12); overflow: hidden; }
 #loadBar { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #ffcf8f, var(--ember)); transition: width 0.3s; }
@@ -222,32 +260,54 @@ body.coarse #ammo b { font-size: 32px; }
 
 <div id="entry">
   <form class="card" id="entryForm" autocomplete="off">
-    <div class="eyebrow">함께 보내는 성탄 밤</div>
-    <h1>크리스마스 밤바다 모닥불</h1>
-    <p class="lead">달빛 아래 모래사장, 장식 사이로 모닥불이 따뜻하게 타고 있습니다.</p>
-    <p>이 링크를 연 사람들이 같은 바닷가에 모입니다. 통나무에 앉아 이야기하고, 장작을 넣고, 밤바다에서 헤엄치고, 풍등과 폭죽을 함께 띄워 보세요.</p>
-    <div class="field">
-      <label for="nick">부를 이름 (선택)</label>
-      <input id="nick" maxlength="20" placeholder="비워 두면 '나그네'로 보입니다" aria-describedby="nickErr">
-      <p id="nickErr" role="alert" hidden></p>
+    <section class="pvcol" aria-label="내 캐릭터 미리보기">
+      <div class="pvbox">
+        <canvas id="pv" tabindex="0" aria-label="내 캐릭터 3D 미리보기. 끌어서 돌리거나 좌우 화살표 키로 돌립니다"></canvas>
+        <div class="pvfall" id="pvFall">캐릭터를 불러오는 중…</div>
+        <div class="pvtools"><button id="rndBtn" class="chip-btn" type="button" title="모습과 색을 무작위로 고릅니다"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/></svg>무작위</button></div>
+        <div class="pvhint" id="pvHint">끌어서 돌려 보세요</div>
+      </div>
+    </section>
+    <div class="fcol">
+      <div class="eyebrow">함께 보내는 성탄 밤</div>
+      <h1>크리스마스 밤바다 모닥불</h1>
+      <p class="lead">달빛 아래 모래사장, 장식 사이로 모닥불이 따뜻하게 타고 있습니다.</p>
+      <p class="story">이 링크를 연 사람들이 같은 바닷가에 모입니다. 통나무에 앉아 이야기하고, 장작을 넣고, 밤바다에서 헤엄치고, 풍등과 폭죽을 함께 띄워 보세요.</p>
+      <div class="field">
+        <label for="nick">부를 이름 (선택)</label>
+        <input id="nick" maxlength="20" placeholder="비워 두면 '나그네'로 보입니다" aria-describedby="nickErr">
+        <p id="nickErr" role="alert" hidden></p>
+      </div>
+      <div class="tabs" role="tablist" aria-label="꾸미기">
+        <button type="button" class="tab" role="tab" id="tab-shape" aria-selected="true" aria-controls="panel-shape">모습 · 옷</button>
+        <button type="button" class="tab" role="tab" id="tab-color" aria-selected="false" aria-controls="panel-color" tabindex="-1">색깔</button>
+      </div>
+      <div class="opts" id="panel-shape" role="tabpanel" aria-labelledby="tab-shape">
+        <div class="field"><span class="lab" id="gLab">성별</span><div class="robes seg" id="gender" role="group" aria-labelledby="gLab"></div></div>
+        <div class="field"><span class="lab" id="hLab">헤어스타일</span><div class="robes" id="hairs" role="group" aria-labelledby="hLab"></div></div>
+        <div class="field"><span class="lab" id="tLab">상의</span><div class="robes" id="tops" role="group" aria-labelledby="tLab"></div></div>
+        <div class="field"><span class="lab" id="bLab">하의</span><div class="robes" id="bottoms" role="group" aria-labelledby="bLab"></div></div>
+        <div class="field"><span class="lab" id="sLab">신발</span><div class="robes" id="shoes" role="group" aria-labelledby="sLab"></div></div>
+      </div>
+      <div class="opts" id="panel-color" role="tabpanel" aria-labelledby="tab-color" hidden>
+        <div class="field"><span class="lab" id="cskLab">피부</span><div class="swatches" id="c-skin" role="group" aria-labelledby="cskLab"></div></div>
+        <div class="field"><span class="lab" id="chrLab">머리 색</span><div class="swatches" id="c-hair" role="group" aria-labelledby="chrLab"></div></div>
+        <div class="field"><span class="lab" id="ctpLab">상의 색</span><div class="swatches" id="c-top" role="group" aria-labelledby="ctpLab"></div></div>
+        <div class="field"><span class="lab" id="cbtLab">하의 색</span><div class="swatches" id="c-bottom" role="group" aria-labelledby="cbtLab"></div></div>
+        <div class="field"><span class="lab" id="cshLab">신발 색</span><div class="swatches" id="c-shoe" role="group" aria-labelledby="cshLab"></div></div>
+      </div>
+      <div id="loadRow" class="load" hidden><div class="track"><div id="loadBar"></div></div><span id="loadTxt">바닷가 풍경을 불러오는 중…</span></div>
+      <button id="enterBtn" type="submit">입장하기</button>
+      <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 위에서 아래로 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 7 춤 · 8 환호 · 9 끄덕 · 1~4 무기(1 맨손 · 2 검 · 3 M4A1 · 4 산탄총, 마우스 휠로도 바꿈) · R 총이면 장전 아니면 낚싯대 · E 통나무·낚시 의자에 앉기/장작 넣기/사다리 오르기 · P 사진입니다. 검은 3연 베기와 날아가는 검기, 총은 화면 가운데 조준점으로 거미를 쏩니다(카메라 확대는 Shift+휠). 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기 · C 꾹 눌러 잠수, 놓으면 떠오름). 바닷가 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 판자의 의자에 앉으면 낚시를 할 수 있습니다.</span></div>
     </div>
-    <div class="field">
-      <span class="lab" id="charLab">인물</span>
-      <div class="robes chars" id="chars" role="group" aria-labelledby="charLab"></div>
-    </div>
-    <div class="field">
-      <span class="lab" id="robeLab">옷 색</span>
-      <div class="robes" id="robes" role="group" aria-labelledby="robeLab"></div>
-    </div>
-    <div id="loadRow" class="load" hidden><div class="track"><div id="loadBar"></div></div><span id="loadTxt">바닷가 풍경을 불러오는 중…</span></div>
-    <button id="enterBtn" type="submit">입장하기</button>
-    <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 위에서 아래로 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 7 춤 · 8 환호 · 9 끄덕 · 1~4 무기(1 맨손 · 2 검 · 3 M4A1 · 4 산탄총, 마우스 휠로도 바꿈) · R 총이면 장전 아니면 낚싯대 · E 통나무·낚시 의자에 앉기/장작 넣기/사다리 오르기 · P 사진입니다. 검은 3연 베기와 날아가는 검기, 총은 화면 가운데 조준점으로 거미를 쏩니다(카메라 확대는 Shift+휠). 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기 · C 꾹 눌러 잠수, 놓으면 떠오름). 바닷가 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 판자의 의자에 앉으면 낚시를 할 수 있습니다.</span></div>
   </form>
 </div>
 
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-import { loadAvatarKit, createAvatar, CHARACTERS as KIT_CHARS } from './bf/kit/avatar.js';
+import { loadAvatarKit, createAvatar, customReady, CHARACTERS as KIT_CHARS } from './bf/kit/avatar.js';
+import { createPreview } from './bf/kit/preview.js';
+import * as AP from './bf/kit/appearance.js';
 import { createController, TUNING as KIT_TUNING } from './bf/kit/controller.js';
 import { initNames, claimNick, signPresence, verifyPeer, myNick as claimedNick } from './bf/names.js';
 import { buildPier, createAngler, deckTop as pierDeck, PIER } from './bf/pier.js';
@@ -924,7 +984,8 @@ function updateCamera(dt) {
 }
 
 // ---------- avatar adapter: the ONLY code that knows bf/kit/ (Kenney Mini Characters + the kit's responsive controller) ----------
-// makeAvatar(ch, color) -> kit avatar { root, headY, scale, play, update, setAccent, dispose } (simple figure if the kit cannot load)
+// makeAvatar(ch, color, ap) -> kit avatar { root, headY, scale, play, update, setAccent, dispose } (simple figure if the kit cannot load).
+// ap = a customised look (bf/kit/appearance.js) from a new client; without it (old peers) ch + color pick a stock character tinted by color.
 // makeController(av, local, spawn) -> kit controller; stepLocal(dt) moves me; presenceFields() -> ctrl.netState() + ch;
 // applyRemote(rec, d, x, z) -> sanitised applyNet; avatarTagY(rec, extra) -> label/bubble height above the root
 const kitState = { ok: false, done: false };
@@ -963,8 +1024,8 @@ function simpleAvatar(color) {   // only when bf/kit/ failed to load: a plain fi
   return { root, model: body, shadow: null, scale: 1, headY: 1.3, play() {}, update() {}, get state() { return ''; },
     setAccent(hex) { mat.color.set(hex); }, dispose() { root.parent && root.parent.remove(root); body.geometry.dispose(); mat.dispose(); } };
 }
-function makeAvatar(ch, color) {
-  const av = kitState.ok ? createAvatar(ch, color) : simpleAvatar(color);
+function makeAvatar(ch, color, ap) {
+  const av = kitState.ok ? createAvatar(ch, color, ap) : simpleAvatar(color);
   av.root.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) addFill(m); });
   hatFor(av);
   return av;
@@ -1028,7 +1089,7 @@ function stepLocal(dt) {
   if (mySeat && (s.act !== 'sit' || s.seat !== mySeat.id)) { mySeat = null; fishStop(); sendPresence(performance.now(), true); refreshCtx(); }   // moved / jumped / X: off the log
   return s.speed;
 }
-function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar, ...(WP && WP.slot > 1 ? { wp: WP.slot } : {}) }; }   // x y z r l a as t (s while on a log, w in the water), wp = weapon slot when not bare-handed
+function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar, ap: myApCode, ...(WP && WP.slot > 1 ? { wp: WP.slot } : {}) }; }   // x y z r l a as t (s while on a log, w in the water), ch + color = the closest stock look for old clients, ap = my full look, wp = weapon slot when not bare-handed
 function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the kit's applyNet
   const g = groundY3(x, z, undefined), o = { x, z };
   const y = num(d.y, Math.min(g, heightAt(x, z)) - 1, Math.max(g + 6, 2)); if (y !== null) o.y = y;   // swimmers float metres above a deep seabed (a diver is between the surface and the seabed)
@@ -1095,27 +1156,28 @@ function upsertPeer(p, x, z, ry) {
   const color = (typeof pr.color === 'string' && ROBE_HEX.has(pr.color.toLowerCase())) ? pr.color.toLowerCase() : NEUTRAL;
   const nick = cleanText(pr.nick, 20);
   const ch = validChar(pr.ch);
+  const apd = AP.decodeAppearance(pr.ap), apc = apd ? pr.ap : '';   // a new client sends its full look (`ap`); an old one only ch + color
   const now = performance.now();
   let rec = others.get(p.peer);
   if (!rec) {
-    const av = makeAvatar(ch, color); scene.add(av.root);
-    rec = { peer: p.peer, av, ctrl: makeController(av, false, { x, z, ry }), ch, chAt: now, color, nick, name: '', label: null, bubble: null, bubbleUntil: 0,
+    const av = makeAvatar(ch, color, apd); scene.add(av.root);
+    rec = { peer: p.peer, av, ctrl: makeController(av, false, { x, z, ry }), ch, apc, chAt: now, color, nick, name: '', label: null, bubble: null, bubbleUntil: 0,
       acts: {}, asSeen: undefined, seat: null, st: 0, firstWall: Date.now() };
     others.set(p.peer, rec);
   }
   rec.nick = nick;
   if (color !== rec.color) { rec.color = color; rec.av.setAccent(color); }
-  if (ch !== rec.ch && now - rec.chAt >= 2000) rebuildAvatar(rec, ch);   // character swaps: at most once per 2 s per peer
+  if ((ch !== rec.ch || apc !== rec.apc) && now - rec.chAt >= 2000) rebuildAvatar(rec, ch, apd, apc);   // character / look swaps: at most once per 2 s per peer
   return rec;
 }
-function rebuildAvatar(rec, ch) {   // remote only (my own character is fixed once I enter)
+function rebuildAvatar(rec, ch, apd, apc) {   // remote only (my own character is fixed once I enter)
   if (rec.angler) { rec.angler.dispose(); rec.angler = null; rec.fInit = false; }   // the rod hangs on the old avatar: syncFish builds it again
-  const old = rec.av, st = rec.ctrl.state, av = makeAvatar(ch, rec.color);
+  const old = rec.av, st = rec.ctrl.state, av = makeAvatar(ch, rec.color, apd);
   av.root.visible = old.root.visible;
   for (const s of [rec.label, rec.bubble]) if (s) av.root.add(s);
   rec.ctrl.dispose(); old.dispose(); scene.add(av.root);
   rec.av = av; rec.ctrl = makeController(av, false, { x: st.x, z: st.z, ry: st.ry }); rec.asSeen = undefined;
-  rec.ch = ch; rec.chAt = performance.now(); rec.hitOn = false;
+  rec.ch = ch; rec.apc = apc; rec.chAt = performance.now(); rec.hitOn = false;
 }
 function setLabel(rec, name) {
   if (rec.name === name && rec.label) return;
@@ -1145,7 +1207,7 @@ function animTags(rec, now) {   // labels / bubbles follow the head (lower while
 let meRec = null;
 function ensureMe() {
   if (meRec) return;
-  const av = makeAvatar(myChar, myColor); scene.add(av.root);
+  const av = makeAvatar(myChar, myColor, myAp); scene.add(av.root);
   meRec = { av, ctrl: makeController(av, true, { x: me.x, z: me.z, ry: me.ry }), ch: myChar, color: myColor, label: null, bubble: null, bubbleUntil: 0, name: '' };
 }
 function myDisplayName() {
@@ -1693,7 +1755,9 @@ function logLine(name, text, sys) {
 let mq = null, connecting = true;
 const chatInput = $('chatInput'), sendBtn = $('sendBtn'), waveBtn = $('waveBtn');
 const myNick = () => cleanText($('nick').value, 20);
-let myColor = ROBES[0].hex, myChar = CHARACTERS[0].id;
+let myColor = ROBES[0].hex, myChar = CHARACTERS[0].id;   // the stock-look fields old clients understand (derived from myAp)
+let pv = null;   // the entry-screen 3D preview (bf/kit/preview.js), disposed on entering
+let myAp = AP.defaultAppearance('f'), myApCode = AP.encodeAppearance(myAp);   // my customised look + its 12-char network code
 let nickState = 'none';          // 'none' (나그네) | 'pending' (확인 전, retrying) | 'ok' (claimed)
 let mySig = null;
 const netLive = () => !!(mq && mq.live);
@@ -1885,7 +1949,7 @@ function onMqMessage(topic, payload) {
     if (!kitState.done) return;   // avatar kit still loading: skip (peers resend at 1-10 Hz) so nobody is stuck as a plain figure
     if (!others.has(key) && others.size >= (coarse ? 24 : 80)) return;
     const fresh = !others.has(key);
-    const rec = upsertPeer({ peer: key, presence: { color: d.color, nick: d.nick, ch: d.ch } }, x, z, ry === null ? 0 : ry);
+    const rec = upsertPeer({ peer: key, presence: { color: d.color, nick: d.nick, ch: d.ch, ap: d.ap } }, x, z, ry === null ? 0 : ry);
     applyRemote(rec, d, x, z);
     rec.mq = true; rec.lastSeen = now; rec.rid = id;
     // seat: a known seat id + a sane timestamp; a contested seat goes to the earlier st (tie: smaller id)
@@ -2158,25 +2222,54 @@ $('ctxBtn').addEventListener('click', interact);
 document.body.classList.toggle('coarse', coarse);
 {
   const saved = store.get('bonfire.nick'); if (saved) $('nick').value = cleanText(saved, 20);
-  const savedColor = store.get('bonfire.robe'); if (savedColor && ROBE_HEX.has(savedColor)) myColor = savedColor;
-  myChar = validChar(store.get('bonfire.char'));
-  const cw = $('chars');
-  CHARACTERS.forEach((c) => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'robe'; b.id = 'char-' + c.id;
-    b.setAttribute('aria-pressed', String(c.id === myChar));
-    const i = document.createElement('i'); i.style.background = c.accent || NEUTRAL; b.appendChild(i);
-    b.appendChild(document.createTextNode(c.name));
-    b.addEventListener('click', () => { myChar = c.id; cw.querySelectorAll('.robe').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); });
-    cw.appendChild(b);
+  // my look: the saved customised look (bonfire.ap), else rebuilt from the old saved character + robe colour, else a default
+  myAp = AP.decodeAppearance(store.get('bonfire.ap')) || (store.get('bonfire.char') ? AP.fromLegacy(validChar(store.get('bonfire.char')), store.get('bonfire.robe')) : AP.defaultAppearance(Math.random() < 0.5 ? 'm' : 'f'));
+  const rows = {};   // id -> [{ btn, test() }] so one refresh redraws every pressed state
+  const mkChip = (host, label, test, pick) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'robe'; b.textContent = label;
+    b.addEventListener('click', () => { pick(); lookChanged(true); });
+    host.appendChild(b); (rows[host.id] = rows[host.id] || []).push({ btn: b, test }); return b;
+  };
+  const mkSwatch = (host, c, test, pick) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'sw'; b.style.background = c.hex; b.title = c.name; b.setAttribute('aria-label', c.name);
+    b.addEventListener('click', () => { pick(); lookChanged(true); });
+    host.appendChild(b); (rows[host.id] = rows[host.id] || []).push({ btn: b, test }); return b;
+  };
+  AP.GENDERS.forEach((g) => mkChip($('gender'), g.name, () => myAp.g === g.id, () => { if (myAp.g !== g.id) { myAp = AP.sanitizeAppearance({ ...myAp, g: g.id, h: AP.hairAllowed(myAp.h, g.id) ? myAp.h : AP.defaultAppearance(g.id).h }); buildHairRow(); } }));
+  function buildHairRow() {
+    const host = $('hairs'); host.textContent = ''; rows.hairs = [];
+    AP.hairsFor(myAp.g).forEach((h) => mkChip(host, h.name, () => myAp.h === h.i, () => { myAp.h = h.i; }));
+  }
+  AP.TOPS.forEach((t, i) => mkChip($('tops'), t.name, () => myAp.t === i, () => { myAp.t = i; }));
+  AP.BOTTOMS.forEach((t, i) => mkChip($('bottoms'), t.name, () => myAp.b === i, () => { myAp.b = i; }));
+  AP.SHOES.forEach((t, i) => mkChip($('shoes'), t.name, () => myAp.s === i, () => { myAp.s = i; }));
+  AP.PALETTE_KEYS.forEach((k, ci) => AP.PALETTES[k].forEach((c, i) => mkSwatch($('c-' + k), c, () => myAp.c[ci] === i, () => { myAp.c[ci] = i; })));
+  buildHairRow();
+  function paintRows() { for (const l of Object.values(rows)) for (const r of l) r.btn.setAttribute('aria-pressed', String(!!r.test())); }
+  // a pick changes myAp: refresh the legacy fields old clients read, the pressed states, the saved look and the 3D preview
+  function lookChanged(fromUser) {
+    myAp = AP.sanitizeAppearance(myAp); myApCode = AP.encodeAppearance(myAp);
+    const lg = AP.legacyOf(myAp); myChar = lg.ch; myColor = lg.color;
+    paintRows(); store.set('bonfire.ap', myApCode);
+    if (pv) pv.setAppearance(myAp);
+  }
+  $('rndBtn').addEventListener('click', () => { myAp = AP.randomAppearance(); buildHairRow(); lookChanged(true); });
+  // tabs: shape / colour
+  const tabs = [['tab-shape', 'panel-shape'], ['tab-color', 'panel-color']];
+  const showTab = (id, focus) => tabs.forEach(([t, pnl]) => { const on = t === id, tb = $(t); tb.setAttribute('aria-selected', String(on)); tb.tabIndex = on ? 0 : -1; $(pnl).hidden = !on; if (on && focus) tb.focus(); });
+  tabs.forEach(([t], i) => {
+    $(t).addEventListener('click', () => showTab(t));
+    $(t).addEventListener('keydown', (e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); showTab(tabs[(i + 1) % 2][0], true); } });
   });
-  const wrap = $('robes');
-  ROBES.forEach((r) => {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'robe'; b.id = 'robe-' + r.hex.slice(1);
-    b.setAttribute('aria-pressed', String(r.hex === myColor));
-    const i = document.createElement('i'); i.style.background = r.hex; b.appendChild(i);
-    b.appendChild(document.createTextNode(r.name));
-    b.addEventListener('click', () => { myColor = r.hex; wrap.querySelectorAll('.robe').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); });
-    wrap.appendChild(b);
+  lookChanged(false);
+  // 3D preview: needs the kit (loaded in the background); without WebGL / the kit the choice still works, just unseen
+  kitGate.then(() => {
+    const fall = $('pvFall');
+    try {
+      if (!customReady()) throw new Error('custom avatar unavailable');
+      pv = createPreview(THREE, $('pv'), { createAvatar, reduceMotion });
+      pv.setAppearance(myAp); pv.start(); fall.hidden = true;
+    } catch (e) { console.warn('[bonfire] preview unavailable:', e && e.message); fall.textContent = '미리보기를 띄우지 못했습니다. 고른 모습은 입장하면 그대로 적용됩니다.'; $('pvHint').hidden = true; }
   });
   if (coarse) $('entryHelp').textContent = '화면 왼쪽을 엄지로 밀어 걷고(끝까지 밀면 달립니다), 오른쪽을 끌어 시점을 돌립니다. 두 손가락으로 거리를 조절하고, 오른쪽 버튼으로 무기 바꾸기·장전·공격(총은 꾹 누르면 연사)·대시·점프(공중에서 한 번 더)·구르기·엎드리기·춤을 합니다. 바다로 걸어 들어가면 헤엄치고(구르기 버튼이 「잠수」로 바뀝니다. 꾹 누르면 가라앉고 놓으면 떠오릅니다), 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 의자에 앉으면 「낚싯대 던지기」로 낚시를 합니다. 「사진」으로 지금 장면을 남깁니다.';
 }
@@ -2239,11 +2332,12 @@ $('entryForm').addEventListener('submit', async (e) => {
     await Promise.race([kitGate, new Promise((res) => setTimeout(res, 10000))]);
     entering = false; enterBtn.disabled = false; enterBtn.textContent = '입장하기';
   }
-  store.set('bonfire.nick', nick); store.set('bonfire.robe', myColor); store.set('bonfire.char', myChar);
+  store.set('bonfire.nick', nick); store.set('bonfire.robe', myColor); store.set('bonfire.char', myChar); store.set('bonfire.ap', myApCode);   // the old keys stay so an older page still finds a look
   entered = true;
   ensureMe(); settleOnGround(); refreshMyLabel();
   if (nickState === 'ok') onClaimed(); else if (nickState === 'pending') scheduleClaimRetry();
   $('entry').hidden = true;
+  if (pv) { pv.dispose(); pv = null; }   // free its WebGL context: the world renderer needs the GPU now
   for (const id of ['badge', 'hint', 'log', 'bar', 'tools', 'wslots']) $(id).hidden = false;
   $('acts').hidden = false;   // the action buttons are for the desktop too (keys and mouse still work)
   updateFireHud();
@@ -2459,6 +2553,7 @@ if (location.hostname === '127.0.0.1') {   // local test read-out only
     setCamHook(f) { camHook = f; }, get camera() { return camera; }, hideMe(v) { if (meRec) meRec.av.root.visible = !v; },
     get wpn() { return WP; }, wpnTune: (slot, k, v) => { const T_ = WP.debug.POSE[slot]; if (T_) T_[k] = v; },
     get spider() { return SPIDER; }, bossCreate, bossDelete, bossStrike, get slow() { return { ...SLOW }; }, get webSlow() { return SPIDER ? SPIDER.slowAt(me.x, me.z) : 1; },
+    get myAp() { return { ...myAp, code: myApCode, ch: myChar, color: myColor }; }, get pv() { return pv; },
     get diag() { return { mqIn, mqPresIn, brokers: mqLiveCount(), others: [...others.keys()], lastSent: mq ? Math.round(performance.now() - mq.lastSent) : null }; },
   };
 }
