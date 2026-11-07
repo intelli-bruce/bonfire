@@ -408,7 +408,7 @@ import { initNames, claimNick, signPresence, verifyPeer, myNick as claimedNick }
 import { buildPier, createAngler, deckTop as pierDeck, PIER } from './bf/pier.js';
 import { createSolids } from './bf/solids.js';
 import { createWeapons } from './bf/weapons.js';
-import { SLOT_KEYS, SLOT_COUNT, WEAPONS as WPN_TABLE, wrapSlot, isGun as isGunSlot, HP as HPC, HURT, newHp, hpHit, hpTick, hpRespawn, hpPct, respawnLeft, canInstantRespawn, sanitizeHp } from './bf/weapons-core.js';
+import { SLOT_KEYS, SLOT_COUNT, WEAPONS as WPN_TABLE, wrapSlot, isGun as isGunSlot, HP as HPC, HURT, pvpScaled, newHp, hpHit, hpTick, hpRespawn, hpPct, respawnLeft, canInstantRespawn, sanitizeHp } from './bf/weapons-core.js';
 import { createHealthBars } from './bf/health.js';
 import { createGhosts } from './bf/ghost.js';
 
@@ -2137,7 +2137,7 @@ function onMqMessage(topic, payload) {
         hitStats.onMe++;
         hitFlash(meRec); meRec.ctrl.knock(dx, dz);
         if (mq) mq.boostUntil = now + 700;
-        hurtMe(HURT.punch, who);
+        hurtMe(pvpScaled(HURT.punch), who);   // 주먹도 PvP 이므로 weapons-core 의 PVP_SCALE 을 곱한다
         sendPresence(now, true);
         if (evtOk('*', 'hitlog', 2500)) netLog(null, `${who} 님에게 맞았습니다.`, true);
       } else {
