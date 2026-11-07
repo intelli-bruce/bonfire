@@ -135,6 +135,31 @@ body.under #uw { opacity: 1; }
 #bossHp .fill { background: linear-gradient(180deg, #ff6a4a, #c4201e); transition: transform 0.18s ease-out; }
 #bossHp.rage .fill { background: linear-gradient(180deg, #ff9a3c, #e0301a); box-shadow: 0 0 10px rgba(255, 120, 40, 0.8); }
 #bossHp .state { font-size: 12px; color: var(--sand); text-align: center; min-height: 1.1em; text-shadow: 0 1px 3px #000; }
+/* weapons: slot list (left, desktop), ammo read-out (bottom centre), crosshair (screen centre) */
+#wslots { left: calc(env(safe-area-inset-left, 0px) + 12px); top: 50%; transform: translateY(-50%); display: grid; gap: 6px; z-index: 10; }
+body.coarse #wslots { display: none; }
+.wslot { display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 8px; min-width: 128px; padding: 7px 12px 7px 8px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); cursor: pointer; font-family: var(--f-display); font-size: 14px; color: var(--mist); text-align: left; touch-action: manipulation; }
+.wslot kbd { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: rgba(255, 243, 223, 0.12); font: inherit; font-size: 13px; color: var(--sand); }
+.wslot small { grid-column: 2; margin-top: -4px; font-family: var(--f-ui); font-size: 11.5px; color: var(--mist); opacity: 0.85; }
+.wslot[aria-pressed="true"] { border-color: var(--ember); color: #ffe2bd; background: rgba(255, 162, 87, 0.24); box-shadow: 0 0 0 2px rgba(255, 162, 87, 0.28), var(--shadow); transform: translateX(4px); }
+.wslot[aria-pressed="true"] kbd { background: var(--ember); color: #3a1606; }
+#ammo { left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 72px); display: grid; justify-items: center; gap: 3px; pointer-events: none; z-index: 10; text-shadow: 0 1px 3px #000, 0 0 10px rgba(0,0,0,.65); }
+#ammo .nums { display: flex; align-items: baseline; gap: 8px; font-family: var(--f-display); color: #ffe2bd; }
+#ammo b { font-weight: 400; font-size: 40px; line-height: 1; letter-spacing: 0.02em; }
+#ammo b.low { color: #ff8a6a; } #ammo b.zero { color: #ff4d3a; }
+#ammo .sep { font-size: 22px; color: var(--mist); } #ammo .res { font-size: 22px; color: var(--sand); }
+#ammo .nm { font-size: 12.5px; color: var(--mist); letter-spacing: 0.04em; }
+#ammo .rbar { width: 150px; height: 6px; border-radius: 999px; background: rgba(20, 14, 40, 0.7); border: 1px solid rgba(255, 236, 210, 0.3); overflow: hidden; opacity: 0; transition: opacity 0.12s; }
+#ammo .rbar.on { opacity: 1; } #ammo .rbar i { display: block; height: 100%; width: 100%; transform-origin: left center; transform: scaleX(0); background: linear-gradient(90deg, #ffcf8f, var(--ember)); }
+#cross { left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; pointer-events: none; z-index: 9; --c: rgba(255, 243, 223, 0.92); filter: drop-shadow(0 0 2px rgba(0,0,0,.7)); }
+#cross::before, #cross::after, #cross i { content: ""; position: absolute; background: var(--c); border-radius: 2px; }
+#cross::before { left: 50%; top: 0; width: 2px; height: 9px; margin-left: -1px; box-shadow: 0 21px 0 var(--c); }
+#cross::after { top: 50%; left: 0; height: 2px; width: 9px; margin-top: -1px; box-shadow: 21px 0 0 var(--c); }
+#cross i { left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; }
+#cross.hot { --c: #ff5a4a; } #cross.hot { transform: scale(1.18); transition: transform 0.08s; }
+#reloadBtn[hidden] { display: none; }
+body.coarse #ammo { left: calc(env(safe-area-inset-left, 0px) + 12px); top: calc(env(safe-area-inset-top, 0px) + 92px); bottom: auto; transform: none; justify-items: start; }
+body.coarse #ammo b { font-size: 32px; }
 @media (max-width: 1000px) { #bossHp { top: calc(env(safe-area-inset-top, 0px) + 76px); } }
 @media (max-width: 560px) { #hint { top: calc(env(safe-area-inset-top, 0px) + 104px); max-width: calc(100vw - 24px); } #sendBtn { display: none; } .btn { padding: 9px 12px; font-size: 14.5px; } }
 @media (prefers-reduced-motion: reduce) { #hint, #log div { transition: none; } #flash.on { animation-duration: 0.12s; } }
@@ -164,6 +189,13 @@ body.under #uw { opacity: 1; }
   <div class="track"><div class="ghost" id="bossHpGhost"></div><div class="fill" id="bossHpFill"></div></div>
   <div class="state" id="bossState"></div>
 </div>
+<div id="wslots" class="hud" role="group" aria-label="무기 슬롯 (숫자 1~4 · 마우스 휠)" hidden></div>
+<div id="ammo" class="hud" hidden>
+  <div class="nums"><b id="ammoMag">30</b><span class="sep">/</span><span class="res" id="ammoRes">90</span></div>
+  <div class="nm" id="ammoName">M4A1 · R 장전</div>
+  <div class="rbar" id="rbar"><i id="rfill"></i></div>
+</div>
+<div id="cross" class="hud" hidden aria-hidden="true"><i></i></div>
 <div id="bar" class="hud" hidden>
   <form id="chatForm" autocomplete="off">
     <label class="sr" for="chatInput">대화</label>
@@ -174,11 +206,13 @@ body.under #uw { opacity: 1; }
 </div>
 <div id="acts" class="hud" hidden>
   <button id="castBtn" class="act cast" type="button" title="낚싯대 던지기·감기 (R · 마우스 왼쪽 클릭)" hidden>낚싯대 던지기</button>
-  <button id="emoteBtn" class="act small" type="button" aria-label="감정 표현: 춤" title="감정 표현 (1·2·3)">춤</button>
+  <button id="wpnBtn" class="act small" type="button" aria-label="무기 바꾸기" title="무기 바꾸기 (숫자 1~4 · 마우스 휠)">맨손</button>
+  <button id="reloadBtn" class="act small" type="button" title="장전 (R)" hidden>장전</button>
+  <button id="emoteBtn" class="act small" type="button" aria-label="감정 표현: 춤" title="감정 표현 (7·8·9)">춤</button>
   <button id="proneBtn" class="act small" type="button" title="엎드리기 (Z)">엎드리기</button>
   <button id="rollBtn" class="act" type="button" title="구르기 (C) · 점프 중이면 멀리 날며 구르기">구르기</button>
   <button id="dashBtn" class="act" type="button" title="대시 (Q)">대시</button>
-  <button id="punchBtn" class="act" type="button" title="내려찍기 (마우스 왼쪽 클릭 · F)">내려찍기</button>
+  <button id="punchBtn" class="act" type="button" title="공격 (마우스 왼쪽 클릭 · F)">내려찍기</button>
   <button id="jumpBtn" class="act big" type="button" title="점프 (Space) · 공중에서 한 번 더">점프</button>
 </div>
 <div id="stick" hidden><div id="knob"></div></div>
@@ -207,7 +241,7 @@ body.under #uw { opacity: 1; }
     </div>
     <div id="loadRow" class="load" hidden><div class="track"><div id="loadBar"></div></div><span id="loadTxt">바닷가 풍경을 불러오는 중…</span></div>
     <button id="enterBtn" type="submit">입장하기</button>
-    <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 위에서 아래로 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1 춤 · 2 환호 · 3 끄덕 · E 통나무·낚시 의자에 앉기/장작 넣기/사다리 오르기 · R 낚싯대 던지기·감기 · P 사진입니다. 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기 · C 꾹 눌러 잠수, 놓으면 떠오름). 바닷가 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 판자의 의자에 앉으면 낚시를 할 수 있습니다.</span></div>
+    <div class="fine"><span id="entryCount">연결을 확인하고 있습니다…</span><br><span id="entryHelp">WASD로 걷고 마우스를 움직여 시점을 돌립니다(Esc 마우스 풀기 · M 끌기 방식). 마우스 왼쪽 클릭(또는 F) 위에서 아래로 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(점프 중이면 멀리 날며) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 7 춤 · 8 환호 · 9 끄덕 · 1~4 무기(1 맨손 · 2 검 · 3 M4A1 · 4 산탄총, 마우스 휠로도 바꿈) · R 총이면 장전 아니면 낚싯대 · E 통나무·낚시 의자에 앉기/장작 넣기/사다리 오르기 · P 사진입니다. 검은 3연 베기와 날아가는 검기, 총은 화면 가운데 조준점으로 거미를 쏩니다(카메라 확대는 Shift+휠). 바다로 걸어 들어가면 헤엄칩니다(Shift 빠르게 · Space 물 위로 뛰기 · C 꾹 눌러 잠수, 놓으면 떠오름). 바닷가 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 판자의 의자에 앉으면 낚시를 할 수 있습니다.</span></div>
   </form>
 </div>
 
@@ -218,6 +252,8 @@ import { createController, TUNING as KIT_TUNING } from './bf/kit/controller.js';
 import { initNames, claimNick, signPresence, verifyPeer, myNick as claimedNick } from './bf/names.js';
 import { buildPier, createAngler, deckTop as pierDeck, PIER } from './bf/pier.js';
 import { createSolids } from './bf/solids.js';
+import { createWeapons } from './bf/weapons.js';
+import { SLOT_KEYS, WEAPONS as WPN_TABLE, wrapSlot } from './bf/weapons-core.js';
 
 // ---------- small helpers ----------
 const TAU = Math.PI * 2;
@@ -748,13 +784,13 @@ canvas.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'touch' && lookMode === 'mouse') {   // mouse look: a click while unlocked only re-locks; nothing else happens
     const looking = lockedNow() || lockFails > 0;   // looking around already (locked, or hover look after a refusal): a left click is a punch
     if (!lockedNow() && lockFails < 3) tryLock();
-    if (e.button === 0 && looking) leftAct();
+    if (e.button === 0 && looking) leftDown();
     return;
   }
   if (e.pointerType === 'touch') {
     if (e.clientX < window.innerWidth * 0.45 && joy.id === null) { joy.id = e.pointerId; joy.ox = e.clientX; joy.oy = e.clientY; joy.x = joy.y = 0; feedStick(); setStick(true, e.clientX, e.clientY); $('knob').style.transform = ''; }
     else { touches.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (touches.size === 2) { const [a, b] = [...touches.values()]; pinchD = Math.hypot(a.x - b.x, a.y - b.y); } }
-  } else { mouseDrag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), btn: e.button, moved: 0 }; }
+  } else { mouseDrag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), btn: e.button, moved: 0 }; if (e.button === 0 && lookMode === 'drag' && gunSlot()) leftDown(); }   // drag-look mode: a gun fires on press (hold = auto fire) while the drag still turns the view
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
 });
 canvas.addEventListener('pointermove', (e) => {
@@ -775,14 +811,23 @@ function endPointer(e) {
   if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; feedStick(); setStick(false); }
   if (touches.delete(e.pointerId)) pinchD = 0;
   if (e.pointerType !== 'touch') {
-    if (mouseDrag && e.type === 'pointerup' && mouseDrag.btn === 0 && lookMode === 'drag' && mouseDrag.moved < 6 && performance.now() - mouseDrag.t < 350) leftAct();   // drag look: a click that did not drag is a punch
+    if (mouseDrag && e.type === 'pointerup' && mouseDrag.btn === 0 && lookMode === 'drag' && mouseDrag.moved < 6 && performance.now() - mouseDrag.t < 350 && !gunSlot()) leftAct();   // drag look: a click that did not drag is a punch / a swing (a gun already fired on press)
+    if (mouseDrag && mouseDrag.btn === 0) leftUp();
     mouseDrag = null;
   }
 }
 canvas.addEventListener('pointerup', endPointer);
+window.addEventListener('pointerup', (e) => { if (e.button === 0 && e.pointerType !== 'touch') leftUp(); });   // released outside the canvas / after a pointer-lock click
 canvas.addEventListener('pointercancel', endPointer);
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-canvas.addEventListener('wheel', (e) => { if (!entered) return; e.preventDefault(); cam.dist = clamp(cam.dist * Math.exp(e.deltaY * 0.0012), 2, 9); }, { passive: false });
+let wheelAcc = 0, wheelAt = 0;
+canvas.addEventListener('wheel', (e) => {
+  if (!entered) return; e.preventDefault();
+  if (e.shiftKey || e.ctrlKey || e.metaKey || !WP) { cam.dist = clamp(cam.dist * Math.exp((e.deltaY || e.deltaX) * 0.0012), 2, 9); return; }   // Shift/Ctrl + wheel: camera distance; the plain wheel switches weapons
+  wheelAcc += e.deltaY; const t = performance.now();
+  if (Math.abs(wheelAcc) >= 40 && t - wheelAt > 140) { WP.equip(wrapSlot(WP.slot, wheelAcc > 0 ? 1 : -1)); wheelAt = t; wheelAcc = 0; }
+  else if (t - wheelAt > 400) wheelAcc = 0;
+}, { passive: false });
 const typing = () => document.activeElement && (document.activeElement.tagName === 'INPUT');
 
 // ---------- look mode (fine pointer only): 'mouse' = pointer lock (hover look if refused), 'drag' = click-and-drag ----------
@@ -818,13 +863,17 @@ window.addEventListener('keydown', (e) => {
   initAudio();
   if (typing()) { if (e.key === 'Escape') { document.activeElement.blur(); tryLock(); refreshLook(); } return; }
   if (e.code === 'KeyF' && mySeat && mySeat.fish) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) castRod(); return; }   // on a fishing chair F is the rod, not a chop (this handler runs before the kit's)
+  if (e.code === 'KeyF' && WP && WP.slot >= 2) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) leftDown(); return; }   // a weapon in hand: F swings / fires (hold F: a rifle keeps firing); bare hands: the kit's chop
   if (e.key === 'Enter') { const ci = $('chatInput'); if (!ci.disabled) { e.preventDefault(); if (lockedNow()) document.exitPointerLock(); ci.focus(); refreshLook(); } return; }
   if (e.code === 'KeyM' && !e.repeat && !coarse) { setLook(lookMode === 'mouse' ? 'drag' : 'mouse'); return; }
   if (e.repeat) return;
+  const slotN = SLOT_KEYS[e.code];
+  if (slotN && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); if (WP) { initAudio(); WP.equip(slotN); canvas.focus({ preventScroll: true }); } return; }
   if (e.code === 'KeyE') interact();
   else if (e.code === 'KeyP') takeShot();
-  else if (e.code === 'KeyR') castRod();
+  else if (e.code === 'KeyR') { if (gunSlot() && !(mySeat && mySeat.fish)) WP.reload(); else castRod(); }   // a gun in hand: reload; otherwise the rod
 });
+window.addEventListener('keyup', (e) => { if (e.code === 'KeyF') leftUp(); });
 
 let camLift = 0, camUnder = 0, uwOn = false;
 const UW_FOG = { color: new THREE.Color('#0b6a70'), density: 0.045, bg: new THREE.Color('#0b5f66') };
@@ -847,7 +896,8 @@ function updateCamera(dt) {
   const k = 1 - Math.exp(-dt * 10);
   bossCamZ += (bossCamTarget() - bossCamZ) * (1 - Math.exp(-dt * 2.2));
   const zm = 1 + 2.1 * bossCamZ, camDist = cam.dist * zm;   // zoom factor: up to ~3x of the user's chosen distance
-  cam.tx += (me.x - cam.tx) * k; cam.tz += (me.z - cam.tz) * k;
+  const sh = WP.shoulder;   // a gun up: the view slides over the right shoulder so the muzzle, the tracers and the crosshair are not hidden behind my own back
+  cam.tx += (me.x + Math.cos(cam.yaw) * sh - cam.tx) * k; cam.tz += (me.z - Math.sin(cam.yaw) * sh - cam.tz) * k;
   const st = meRec ? meRec.ctrl.state : null, g = groundY3(me.x, me.z, me.y), swim = !!(st && st.swim === 2), dive = swim ? st.dive : 0;
   const gw = Math.max(g, waterY(me.x, me.z));   // in the air over the sea (a dive off the pier) the view stays above the surface, not the seabed
   const baseY = mySeat ? mySeat.y + 1.0 : swim ? me.y + SWIM_SINK + 0.65 : gw + (st && st.act === 'prone' ? 0.9 : st && st.act === 'sit' ? 1.0 : 1.5);
@@ -866,7 +916,7 @@ function updateCamera(dt) {
   cam.cur += (allow - cam.cur) * (allow < cam.cur ? Math.min(1, dt * 18) : Math.min(1, dt * 3));
   const d = cam.cur, cx = cam.tx + dx * d, cz = cam.tz + dz * d, gy = groundY3(cx, cz, me.y);
   camera.position.set(cx, Math.max(gy + 0.3, gy < 0.05 && camUnder < 0.5 ? waterY(cx, cz) + 0.35 : -Infinity, TY + dy * d), cz);   // never under the sand; under the sea only while diving
-  camera.lookAt(cam.tx, TY + 0.1 + Math.max(0, -cam.pitch) * 9 + 3.4 * bossCamZ, cam.tz);   // aim a little higher: the giant's head, not just my feet
+  camera.lookAt(cam.tx, TY + 0.1 + Math.max(0, -cam.pitch) * 9 + 3.4 * bossCamZ + WP.kick * 1.8, cam.tz);   // WP.kick: a shot's recoil lifts the view for a moment   // aim a little higher: the giant's head, not just my feet
   if (meRec) meRec.av.root.visible = entered && d > 0.9;
   const wy = waterY(camera.position.x, camera.position.z), under = camera.position.y < wy - (uwOn ? 0.0 : 0.04) && gy < wy;
   setUnderwater(under);
@@ -955,7 +1005,19 @@ function onMyAction(act) {   // the kit started one of my actions: tell everyone
   sendPresence(performance.now(), true);
 }
 function myAct(a) { initAudio(); return entered && meRec ? meRec.ctrl.press(a) : false; }
-const leftAct = () => (mySeat && mySeat.fish ? castRod() : myAct('punch'));   // left click / the chop button: a chop, or (on a fishing chair) the rod
+// left click / F / the attack button: a chop, a sword swing or a gun shot by the weapon slot, or (on a fishing chair) the rod
+const gunSlot = () => !!WP && (WP.slot === 3 || WP.slot === 4);
+function leftAct() {
+  if (mySeat && mySeat.fish) return castRod();
+  if (WP && WP.slot >= 2) { initAudio(); if (mySeat) standUp(); return WP.attackPress(); }
+  return myAct('punch');
+}
+function leftDown() {   // the press: a gun also starts holding the trigger (auto fire); the sword swings once per press
+  if (mySeat && mySeat.fish) return castRod();
+  if (gunSlot()) { initAudio(); if (mySeat) standUp(); WP.trigger(true); return true; }
+  return leftAct();
+}
+function leftUp() { if (WP && WP.slot >= 3) WP.trigger(false); }
 function stepLocal(dt) {
   const c = meRec.ctrl; c.update(dt, cam.yaw);
   let s = c.state;
@@ -966,7 +1028,7 @@ function stepLocal(dt) {
   if (mySeat && (s.act !== 'sit' || s.seat !== mySeat.id)) { mySeat = null; fishStop(); sendPresence(performance.now(), true); refreshCtx(); }   // moved / jumped / X: off the log
   return s.speed;
 }
-function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar }; }   // x y z r l a as t (s while on a log, w in the water)
+function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar, ...(WP && WP.slot > 1 ? { wp: WP.slot } : {}) }; }   // x y z r l a as t (s while on a log, w in the water), wp = weapon slot when not bare-handed
 function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the kit's applyNet
   const g = groundY3(x, z, undefined), o = { x, z };
   const y = num(d.y, Math.min(g, heightAt(x, z)) - 1, Math.max(g + 6, 2)); if (y !== null) o.y = y;   // swimmers float metres above a deep seabed (a diver is between the surface and the seabed)
@@ -976,6 +1038,7 @@ function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the ki
   if (typeof d.a === 'string' && ACT_CODES.has(d.a)) o.a = d.a;
   if (Number.isInteger(d.as) && d.as >= 0 && d.as <= 1e9) o.as = d.as;
   const t = num(d.t, 0, 1e6); if (t !== null) o.t = t;
+  if (WP) WP.setRemoteSlot(rec, Number.isInteger(d.wp) && d.wp >= 1 && d.wp <= 4 ? d.wp : 1);   // weapon in hand (shown from the next frame; the models may still be loading)
   if (typeof d.s === 'string' && seatById(d.s.slice(0, 16))) o.s = d.s.slice(0, 16);
   if (o.as !== undefined) {   // read-out of actions seen from this peer (first sight is a baseline, as in the kit)
     if (rec.asSeen === undefined) rec.asSeen = o.as;
@@ -1653,9 +1716,12 @@ function updateCount() {
   $('entryCount').textContent = live ? `지금 ${n}명이 모닥불 곁에 있습니다. · ${net}` : (pending ? `함께 보기에 연결하는 중입니다… · ${net}` : `${net}입니다.`);
 }
 
-const MQ_P = 'brx-bonfire-v1/nd/';
+// local tests only (127.0.0.1 / localhost): `?room=abc` moves everything to a private topic root so a test never shows up for the people on the live page
+const ROOM = LOCAL ? (new URLSearchParams(location.search).get('room') || '').replace(/[^a-z0-9]/gi, '').slice(0, 20) : '';
+const TOPIC_ROOT = 'brx-bonfire-v1' + (ROOM ? '-t-' + ROOM : '');
+const MQ_P = TOPIC_ROOT + '/nd/';
 // nickname registry (bf/names.js) lives beside it under brx-bonfire-v1/names/<sha256> (retained, never through the chat budgets)
-const NAMES_PREFIX = 'brx-bonfire-v1/', NAMES_P = NAMES_PREFIX + 'names/';
+const NAMES_PREFIX = TOPIC_ROOT + '/', NAMES_P = NAMES_PREFIX + 'names/';
 const namesTopics = new Set();
 let namesOnMsg = null, namesInit = false;
 const MQ_BROKERS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
@@ -1665,8 +1731,8 @@ let mqAll = { t: 0, n: 0 };   // inbound budget over all senders combined (after
 const mqLastT = new Map();    // presence de-dup: sender id -> newest presence timestamp already handled
 const mqMids = new Map();     // event de-dup: small LRU of sender+mid
 const bossSeq = new Map();    // boss snapshot de-dup: sender id -> newest sequence number
-const MQ_GLOBAL_BUDGET = 400, MQ_SENDER_BUDGET = 30, MQ_LRU = 200;
-const EVENT_SUBS = new Set(['chat', 'wave', 'wood', 'lantern', 'firework', 'hit']);
+const MQ_GLOBAL_BUDGET = 700, MQ_SENDER_BUDGET = 60, MQ_LRU = 400;   // a rifle adds ~10 `wpn` events/s per shooter next to the 10 Hz presence
+const EVENT_SUBS = new Set(['chat', 'wave', 'wood', 'lantern', 'firework', 'hit', 'wpn']);
 const dec = new TextDecoder();
 const newMid = () => Math.random().toString(36).slice(2, 10);
 const mqLiveCount = () => (mq ? mq.clients.reduce((n, c) => n + (c.live ? 1 : 0), 0) : 0);
@@ -1707,7 +1773,7 @@ async function connectMqtt() {
       client.on('error', () => {});
       client.on('connect', () => {
         c.live = true; c.everUp = true;
-        client.subscribe([MQ_P + 'p/+', MQ_P + 'bye/+', MQ_P + 'chat', MQ_P + 'wave', MQ_P + 'wood', MQ_P + 'fire', MQ_P + 'lantern', MQ_P + 'firework', MQ_P + 'hit', MQ_P + 'boss'], { qos: 0 });
+        client.subscribe([MQ_P + 'p/+', MQ_P + 'bye/+', MQ_P + 'chat', MQ_P + 'wave', MQ_P + 'wood', MQ_P + 'fire', MQ_P + 'lantern', MQ_P + 'firework', MQ_P + 'hit', MQ_P + 'boss', MQ_P + 'wpn'], { qos: 0 });
         if (namesTopics.size) client.subscribe([...namesTopics], { qos: 0 });
         if (!mq) { mq = st; startNames(); if (!connecting) logLine(null, '공개 연결이 되었습니다. 이제 함께 볼 수 있습니다.', true); if (entered && nickState === 'pending') scheduleClaimRetry(); }   // first broker up: public mode; the others join as they connect
         refreshControls(); sendPresence(performance.now(), true);
@@ -1885,6 +1951,8 @@ function onMqMessage(topic, payload) {
       hitStats.recv++;
     } else if (sub === 'boss') {
       onBossMessage(key, rec, id, d);
+    } else if (sub === 'wpn') {   // weapon events (fire / sword swing / reload / damage report): bf/weapons.js validates the shape and the owner books the damage
+      if (WP) WP.onNet(rec, id, d);
     } else if (sub === 'lantern' || sub === 'firework') {
       const lx = num(d.x, P_BOUNDS.x0, P_BOUNDS.x1), lz = num(d.z, P_BOUNDS.z0, P_BOUNDS.z1);
       const seed = typeof d.seed === 'number' && Number.isInteger(d.seed) && d.seed >= 0 && d.seed <= 0xffffffff ? d.seed : null;
@@ -1915,7 +1983,7 @@ function sendPresence(now, full) {   // >= 10 Hz while anything changes, at once
   if (now - mq.lastSent < (urgent ? 45 : fast ? 60 : 90)) { if (full) mq.pend = true; return; }
   const f = presenceFields(), seat = mySeat ? mySeat.id : null;
   const fishOut = FISH.out && fishing();
-  const sig = [f.x, f.y, f.z, f.r, f.l, f.as, f.s || '', f.w || 0, seat || '', fishOut ? FISH.fc : ''].join(',');
+  const sig = [f.x, f.y, f.z, f.r, f.l, f.as, f.s || '', f.w || 0, seat || '', fishOut ? FISH.fc : '', f.wp || 1].join(',');
   if (!urgent && !fast && sig === mq.lastSig && now - mq.lastSent < 1000) return;
   mq.lastSent = now; mq.lastSig = sig; mq.pend = false;
   const claimed = nickState === 'ok' ? claimedNick() : '';
@@ -1944,7 +2012,10 @@ waveBtn.addEventListener('click', doWave);
 $('lanternBtn').addEventListener('click', launchLantern);
 $('fwBtn').addEventListener('click', launchFirework);
 for (const [id, a] of [['dashBtn', 'dash'], ['jumpBtn', 'jump'], ['rollBtn', 'roll'], ['proneBtn', 'prone']]) $(id).addEventListener('click', () => myAct(a));
-$('punchBtn').addEventListener('click', () => leftAct());
+$('punchBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); initAudio(); leftDown(); });   // a gun keeps firing while held
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('punchBtn').addEventListener(ev, leftUp);
+$('wpnBtn').addEventListener('click', () => { initAudio(); if (WP) WP.cycle(1); });
+$('reloadBtn').addEventListener('click', () => { initAudio(); if (WP) WP.reload(); });
 // in deep water the roll button becomes 「잠수」: hold it to sink, let go to float up (key C does the same; Space swims up)
 for (const ev of ['pointerdown']) $('rollBtn').addEventListener(ev, () => { if (meRec && meRec.ctrl.state.swim === 2) meRec.ctrl.setDive(true); });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('rollBtn').addEventListener(ev, () => { if (meRec) meRec.ctrl.setDive(false); });
@@ -2070,7 +2141,7 @@ function refreshCtx() {
 let swimUi = false;
 function refreshSwimUi() {   // in deep water: roll / prone / emotes need footing (the kit ignores them), so the phone buttons dim
   const sw = meRec.ctrl.state.swim === 2; if (sw === swimUi) return;
-  swimUi = sw; for (const id of ['proneBtn', 'emoteBtn', 'punchBtn']) $(id).disabled = sw;
+  swimUi = sw; for (const id of ['proneBtn', 'emoteBtn', 'punchBtn', 'reloadBtn']) $(id).disabled = sw;
   $('rollBtn').textContent = sw ? '잠수' : '구르기'; $('rollBtn').title = sw ? '잠수 (C 꾹) · 놓으면 떠오름 · Space 위로' : '구르기 (C) · 점프 중이면 멀리 날며 구르기'; if (!sw && meRec) meRec.ctrl.setDive(false);
 }
 function interact() {
@@ -2107,7 +2178,7 @@ document.body.classList.toggle('coarse', coarse);
     b.addEventListener('click', () => { myColor = r.hex; wrap.querySelectorAll('.robe').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); });
     wrap.appendChild(b);
   });
-  if (coarse) $('entryHelp').textContent = '화면 왼쪽을 엄지로 밀어 걷고(끝까지 밀면 달립니다), 오른쪽을 끌어 시점을 돌립니다. 두 손가락으로 거리를 조절하고, 오른쪽 버튼으로 내려찍기·대시·점프(공중에서 한 번 더)·구르기·엎드리기·춤을 합니다. 바다로 걸어 들어가면 헤엄치고(구르기 버튼이 「잠수」로 바뀝니다. 꾹 누르면 가라앉고 놓으면 떠오릅니다), 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 의자에 앉으면 「낚싯대 던지기」로 낚시를 합니다. 「사진」으로 지금 장면을 남깁니다.';
+  if (coarse) $('entryHelp').textContent = '화면 왼쪽을 엄지로 밀어 걷고(끝까지 밀면 달립니다), 오른쪽을 끌어 시점을 돌립니다. 두 손가락으로 거리를 조절하고, 오른쪽 버튼으로 무기 바꾸기·장전·공격(총은 꾹 누르면 연사)·대시·점프(공중에서 한 번 더)·구르기·엎드리기·춤을 합니다. 바다로 걸어 들어가면 헤엄치고(구르기 버튼이 「잠수」로 바뀝니다. 꾹 누르면 가라앉고 놓으면 떠오릅니다), 부두 끝에서 점프하면 다이빙, 부두 옆 낚시 의자에 앉으면 「낚싯대 던지기」로 낚시를 합니다. 「사진」으로 지금 장면을 남깁니다.';
 }
 // unique nicknames: first come, first served; see bf/names.js for the honest limits
 const nickErr = $('nickErr'), enterBtn = $('enterBtn');
@@ -2173,10 +2244,10 @@ $('entryForm').addEventListener('submit', async (e) => {
   ensureMe(); settleOnGround(); refreshMyLabel();
   if (nickState === 'ok') onClaimed(); else if (nickState === 'pending') scheduleClaimRetry();
   $('entry').hidden = true;
-  for (const id of ['badge', 'hint', 'log', 'bar', 'tools']) $(id).hidden = false;
+  for (const id of ['badge', 'hint', 'log', 'bar', 'tools', 'wslots']) $(id).hidden = false;
   $('acts').hidden = false;   // the action buttons are for the desktop too (keys and mouse still work)
   updateFireHud();
-  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무·낚시 의자 가까이에서 「앉기」 · 바다에서 수영, 「잠수」 꾹 누르면 가라앉음 · 부두 끝에서 점프하면 다이빙 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(물속에선 꾹 눌러 잠수) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1·2·3 감정 · E 통나무/장작/낚시 의자/사다리 · R 낚싯대 · 부두 끝에서 점프하면 다이빙 · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
+  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무·낚시 의자 가까이에서 「앉기」 · 바다에서 수영, 「잠수」 꾹 누르면 가라앉음 · 부두 끝에서 점프하면 다이빙 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(물속에선 꾹 눌러 잠수) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1~4 무기(휠로도) · R 장전/낚싯대 · 7·8·9 감정 · E 통나무/장작/낚시 의자/사다리 · 부두 끝에서 점프하면 다이빙 · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
   setTimeout(() => $('hint').classList.add('fade'), 9000);
   canvas.focus({ preventScroll: true });
   tryLock(); refreshLook();
@@ -2308,6 +2379,56 @@ function bossFrame(dt, t, now) {
 }
 import('./bf/spider.js').then(initSpider).catch((e) => { console.warn('[bonfire] could not load bf/spider.js', e && e.message); if (LOCAL) window.__bossLoadErr = String((e && e.stack) || e); });
 
+// ---------- weapons (bf/weapons.js; models bf/sword.glb · m4a1.glb · shotgun.glb from tools/weapons/build_weapons.py) ----------
+// 1 bare hands (the kit's chop) · 2 sword (3-hit combo + a flying crescent) · 3 M4A1 (30 rounds, auto) · 4 pump shotgun. Damage lands on the boss and its minions
+// through the same owner-books-it path as the punch; shots, swings, reloads and damage reports ride the `wpn` topic.
+const SLOT_ATTACK = { 1: '내려찍기', 2: '베기', 3: '사격', 4: '사격' };
+const slotBtns = [];
+for (let n = 1; n <= 4; n++) {
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'wslot'; b.setAttribute('aria-pressed', String(n === 1));
+  b.innerHTML = `<kbd>${n}</kbd><span>${WPN_TABLE[n].name}</span><small>${WPN_TABLE[n].hint}</small>`;
+  b.addEventListener('click', () => { initAudio(); WP.equip(n); canvas.focus({ preventScroll: true }); });
+  $('wslots').appendChild(b); slotBtns.push(b);
+}
+$('wslots').addEventListener('mousedown', (e) => e.preventDefault());
+const AMMO = { box: $('ammo'), mag: $('ammoMag'), res: $('ammoRes'), name: $('ammoName'), bar: $('rbar'), fill: $('rfill'), cross: $('cross') };
+const WPN_HUD = {
+  slot(s) {
+    slotBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(i + 1 === s)));
+    const gun = s >= 3;
+    $('punchBtn').textContent = SLOT_ATTACK[s]; $('wpnBtn').textContent = WPN_TABLE[s].name; $('reloadBtn').hidden = !gun;
+    AMMO.box.hidden = !gun; AMMO.cross.hidden = !gun; AMMO.name.textContent = gun ? `${WPN_TABLE[s].name} · R 장전` : '';
+    if (!gun) { AMMO.bar.classList.remove('on'); AMMO.cross.classList.remove('hot'); }
+    sendPresence(performance.now(), true);
+  },
+  ammo(s, g) {
+    if (!g) return;
+    AMMO.mag.textContent = g.mag; AMMO.res.textContent = g.reserve;
+    AMMO.mag.className = g.mag === 0 ? 'zero' : g.mag <= Math.ceil(WPN_TABLE[s].mag * 0.25) ? 'low' : '';
+  },
+  aim(kind) { AMMO.cross.classList.toggle('hot', !!kind); },
+  reload(u, name) {
+    const on = u > 0; AMMO.bar.classList.toggle('on', on); AMMO.fill.style.transform = `scaleX(${u})`;
+    if (WP && WP.slot >= 3) AMMO.name.textContent = on ? `${name} · 장전 중…` : `${name} · R 장전`;
+  },
+};
+const WP = createWeapons({
+  THREE, scene, camera, baseUrl: new URL('./bf/', location.href).href, myId, coarse,
+  addFill,
+  fx: { spark: (x, y, z) => PUFF.spark(x, y, z), poof: (x, y, z, n) => PUFF.poof(x, y, z, n), crown: (x, y, z, n) => PUFF.crown(x, y, z, n) },
+  groundY: groundY3, heightAt, blocked: (x, z, y) => blocked(x, z, y), waterY,
+  me: () => ({ rec: meRec, ctrl: meRec ? meRec.ctrl : null, x: me.x, y: me.y, z: me.z, speed: meRec ? meRec.ctrl.state.speed : 0 }),
+  camState: () => ({ yaw: cam.yaw, pitch: cam.pitch, dist: cam.cur }),
+  spider: () => SPIDER,
+  net: { send: (m) => { if (netLive()) mqPub('wpn', { id: myId, mid: newMid(), ...m }); } },
+  log: (t) => logLine(null, t, true),
+  audio: () => (actx ? { ctx: actx, dest: sfx } : null),
+  canUse: () => !!(entered && meRec && !mySeat && meRec.ctrl.state.swim !== 2),
+  hud: WPN_HUD,
+});
+WP.load().catch((e) => { console.warn('[bonfire] weapons: models not available:', e && e.message); if (LOCAL) window.__wpnLoadErr = String((e && e.stack) || e); });
+WPN_HUD.ammo(3, WP.guns[3]);
+
 // ---------- loop ----------
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -2336,6 +2457,7 @@ if (location.hostname === '127.0.0.1') {   // local test read-out only
     async lastShotData() { if (!lastShot) return null; const b = new Uint8Array(await lastShot.blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return btoa(s); },
     get info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures }; },
     setCamHook(f) { camHook = f; }, get camera() { return camera; }, hideMe(v) { if (meRec) meRec.av.root.visible = !v; },
+    get wpn() { return WP; }, wpnTune: (slot, k, v) => { const T_ = WP.debug.POSE[slot]; if (T_) T_[k] = v; },
     get spider() { return SPIDER; }, bossCreate, bossDelete, bossStrike, get slow() { return { ...SLOW }; }, get webSlow() { return SPIDER ? SPIDER.slowAt(me.x, me.z) : 1; },
     get diag() { return { mqIn, mqPresIn, brokers: mqLiveCount(), others: [...others.keys()], lastSent: mq ? Math.round(performance.now() - mq.lastSent) : null }; },
   };
@@ -2353,6 +2475,7 @@ function frame() {
   if (Math.abs(fuel - lastFuelSet) > 0.004) { lastFuelSet = fuel; fxCall('fire', (f) => f.setFuel(fuel)); if (entered) updateFireHud(); }
   if (entered && meRec) {
     mySpeed = stepLocal(dt);
+    WP.frame(dt, now); WP.afterUpdate(meRec, dt, now);   // weapons: auto fire, reload, the arm pose over the kit's animation
     sendPresence(now, false);
     refreshCtx();
     refreshSwimUi();
@@ -2362,7 +2485,8 @@ function frame() {
   updateCamera(dt);
   if (camHook) camHook(camera);
   if (meRec) { animTags(meRec, now); swimFx(meRec, dt, true); moveFx(meRec, dt); hitFx(meRec, dt); }
-  for (const rec of others.values()) { rec.ctrl.update(dt); animTags(rec, now); swimFx(rec, dt, false); moveFx(rec, dt); hitFx(rec, dt); }   // kit: 100 ms buffered interpolation + counter-driven actions
+  for (const rec of others.values()) { rec.ctrl.update(dt); WP.afterUpdate(rec, dt, now); animTags(rec, now); swimFx(rec, dt, false); moveFx(rec, dt); hitFx(rec, dt); }   // kit: 100 ms buffered interpolation + counter-driven actions
+  if (!entered) WP.frame(dt, now);
   SWF.update(dt); PUFF.update(dt);
   if (PR.mod) PR.mod.update(dt, t);
   bossFrame(dt, t, now);
