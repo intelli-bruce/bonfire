@@ -435,10 +435,21 @@ export function sanitizeHp(pct, dd) {
 // 판정은 공격자 화면(자기 화면에 보이는 상대 몸에 맞았나)이고, 맞은 사람 화면이 이 표로 피해를 정한다(보낸 사람이 말한 값은 믿지 않는다).
 // 보스용 피해(dmgFor·ultDmg)에 무기별 배율을 곱한다. HP 1,000 기준 — 소총 28발 · 권총 20발 · 산탄 6발(근접) · 저격 3발 · 검 3타×3 · 수류탄 3개 · RPG 2발 · 死 2번.
 export const PVP_MULT = { punch: 3, sword: 3, slash: 3, rush: 3, death: 2.5, rifle: 3, shotgun: 2.6, pistol: 2.5, sniper: 2, grenade: 2.3, rocket: 2.5 };
-export function pvpDmgFor(w, how, c, n, x) {
+// 플레이어 → 플레이어 피해 전체 배율(이 상수 하나로 조정). 보스·몬스터가 주는 피해(HURT·BOSS_DMG_K)와 플레이어가 보스에게 주는 피해(dmgFor)에는 곱하지 않는다.
+export const PVP_SCALE = 0.35;
+export const pvpScaled = (amount) => Math.round(amount * PVP_SCALE);
+// 배율 전 표(HP 1,000 기준 처치 횟수 설계값)
+export function pvpBaseDmgFor(w, how, c, n, x) {
   const d = w === 2 && (x === 'r' || x === 'u') ? ultDmg(x) : dmgFor(w, how, c, n);
   if (!d) return null;
   const amount = Math.round(d.amount * (PVP_MULT[d.key] || 1));
+  return amount > 0 ? { amount, cd: d.cd, key: d.key } : null;
+}
+// 맞은 사람이 실제로 받는 PvP 피해 = 배율 전 표 × PVP_SCALE (공격자·피격자 화면이 같은 함수를 쓴다)
+export function pvpDmgFor(w, how, c, n, x) {
+  const d = pvpBaseDmgFor(w, how, c, n, x);
+  if (!d) return null;
+  const amount = pvpScaled(d.amount);
   return amount > 0 ? { amount, cd: d.cd, key: d.key } : null;
 }
 // 맞은 사람이 받는 밀림(0 = 없음): 무거운 무기일수록 센 밀림

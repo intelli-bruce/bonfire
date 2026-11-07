@@ -365,9 +365,9 @@ console.warn = () => {};
 // 15) PvP: 모든 무기가 다른 접속자의 HP 를 깎는다(공격자 판정 → 맞은 쪽이 표로 피해 결정) · 몸 판정 · 메시지 · 거리·간격 검증
 {
   const HPM = C.HP.max;
-  // 피해 표: 무기 12가지(맨손·검 베기·검기·난무·死·소총·산탄·권총·저격·수류탄·RPG)가 모두 0 보다 크다
-  const rows = [['punch', C.pvpDmgFor(1, 'm', 0, 1)], ['sword', C.pvpDmgFor(2, 'm', 0, 1)], ['sword3', C.pvpDmgFor(2, 'm', 2, 1)], ['slash', C.pvpDmgFor(2, 'sl', 0, 1)], ['rush', C.pvpDmgFor(2, 'm', 0, 1, 'r')], ['death', C.pvpDmgFor(2, 'm', 0, 1, 'u')],
-    ['rifle', C.pvpDmgFor(3, 'm', 0, 1)], ['shotgun', C.pvpDmgFor(4, 'm', 0, 7)], ['pistol', C.pvpDmgFor(5, 'm', 0, 1)], ['sniper', C.pvpDmgFor(7, 'm', 0, 1)], ['grenade', C.pvpDmgFor(6, 'm', 0, 0)], ['rocket', C.pvpDmgFor(8, 'm', 0, 0)]];
+  // 피해 표(배율 전, HP 1,000 기준 처치 횟수 설계): 무기 12가지(맨손·검 베기·검기·난무·死·소총·산탄·권총·저격·수류탄·RPG)가 모두 0 보다 크다
+  const rows = [['punch', C.pvpBaseDmgFor(1, 'm', 0, 1)], ['sword', C.pvpBaseDmgFor(2, 'm', 0, 1)], ['sword3', C.pvpBaseDmgFor(2, 'm', 2, 1)], ['slash', C.pvpBaseDmgFor(2, 'sl', 0, 1)], ['rush', C.pvpBaseDmgFor(2, 'm', 0, 1, 'r')], ['death', C.pvpBaseDmgFor(2, 'm', 0, 1, 'u')],
+    ['rifle', C.pvpBaseDmgFor(3, 'm', 0, 1)], ['shotgun', C.pvpBaseDmgFor(4, 'm', 0, 7)], ['pistol', C.pvpBaseDmgFor(5, 'm', 0, 1)], ['sniper', C.pvpBaseDmgFor(7, 'm', 0, 1)], ['grenade', C.pvpBaseDmgFor(6, 'm', 0, 0)], ['rocket', C.pvpBaseDmgFor(8, 'm', 0, 0)]];
   ok(rows.every(([, d]) => d && d.amount > 0 && d.cd > 0), 'every weapon hurts players');
   const by = Object.fromEntries(rows.map(([k, d]) => [k, d.amount]));
   ok(by.punch === C.HURT.punch, 'fist: the punch event and the table agree');
@@ -377,6 +377,18 @@ console.warn = () => {};
   ok(hits(by.sniper) === 3 && hits(by.rocket) === 2 && hits(by.death) === 2 && hits(by.grenade) === 3, 'sniper 3 shots · RPG 2 · 死 2 · gift grenade 3');
   ok(hits(by.shotgun) >= 5 && hits(by.shotgun) <= 8 && hits(by.sword3) <= 12 && hits(by.slash) <= 25, 'shotgun a handful of blasts · sword a dozen swings');
   ok(by.sniper > by.shotgun && by.rocket > by.sniper && by.rifle < by.pistol && by.punch < by.sword, 'heavier weapons hit harder');
+  // PvP 배율: 플레이어 → 플레이어 피해에만 PVP_SCALE(약 0.35) 을 곱한다. 보스·몬스터 피해는 그대로
+  ok(C.PVP_SCALE > 0.3 && C.PVP_SCALE < 0.4, 'PvP scale is about 0.35');
+  const scaled = [['punch', [1, 'm', 0, 1]], ['sword', [2, 'm', 0, 1]], ['slash', [2, 'sl', 0, 1]], ['rush', [2, 'm', 0, 1, 'r']], ['death', [2, 'm', 0, 1, 'u']], ['rifle', [3, 'm', 0, 1]], ['shotgun', [4, 'm', 0, 7]], ['pistol', [5, 'm', 0, 1]], ['sniper', [7, 'm', 0, 1]], ['grenade', [6, 'm', 0, 0]], ['rocket', [8, 'm', 0, 0]]];
+  ok(scaled.every(([, a]) => C.pvpDmgFor(...a).amount === Math.round(C.pvpBaseDmgFor(...a).amount * C.PVP_SCALE) && C.pvpDmgFor(...a).amount < C.pvpBaseDmgFor(...a).amount), 'every PvP hit = table x PVP_SCALE (and smaller than the table)');
+  ok(C.pvpDmgFor(3, 'm', 0, 1).amount === Math.round(12 * C.PVP_MULT.rifle * C.PVP_SCALE) && C.pvpDmgFor(3, 'm', 0, 1).amount < by.rifle, 'M4A1: one bullet hits a player for 36 x 0.35');
+  ok(C.pvpScaled(C.HURT.punch) === C.pvpDmgFor(1, 'm', 0, 1).amount, 'fist: the punch event path and the PvP table agree after scaling');
+  ok(Math.ceil(HPM / C.pvpDmgFor(3, 'm', 0, 1).amount) > Math.ceil(HPM / by.rifle) * 2, 'M4A1 magazine (30 rounds) no longer comes close to a kill');
+  // 보스·몬스터 피해는 PvP 배율의 영향을 받지 않는다: 플레이어가 보스에게 주는 피해(dmgFor) 와 보스가 플레이어에게 주는 값(HURT)
+  ok(C.dmgFor(3, 'm', 0, 1).amount === C.WEAPONS[3].dmg && C.dmgFor(7, 'm', 0, 1).amount === C.WEAPONS[7].dmg && C.dmgFor(5, 'm', 0, 1).amount === C.WEAPONS[5].dmg, 'damage dealt to bosses is unscaled');
+  ok(C.HURT.swipe === 165 && C.HURT.spit === 90 && C.HURT.bite === 52 && C.HURT.punch === 45, 'damage dealt by bosses / monsters is unscaled');
+  ok(/hurtMe\(pvpScaled\(HURT\.punch\), who\)/.test(fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8')), 'player punch event applies the PvP scale');
+  ok(/h\.dmg \* BOSS_DMG_K : HURT\[/.test(fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8')) && !/BOSS_DMG_K[^\n]*pvpScaled|pvpScaled[^\n]*BOSS_DMG_K/.test(fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8')), 'boss hits to the player do not use the PvP scale');
   // 거리 감쇠: 폭발은 가까울수록 센 피해, 반경 밖은 0
   ok(C.pvpDmgFor(8, 'm', 0, 0).amount > C.pvpDmgFor(8, 'm', 0, C.ROCKET.r / 2).amount && C.pvpDmgFor(8, 'm', 0, C.ROCKET.r) .amount < C.pvpDmgFor(8, 'm', 0, 1).amount && C.pvpDmgFor(6, 'm', 0, 0).amount > C.pvpDmgFor(6, 'm', 0, 4).amount, 'explosions: closer = more damage');
   ok(C.pvpDmgFor(0, 'm', 0, 1) === null && C.pvpDmgFor(9, 'm', 0, 1) === null, 'unknown weapon: no damage');
@@ -406,8 +418,8 @@ console.warn = () => {};
   ok(C.pvpReachOk(6, 'm', 40) && !C.pvpReachOk(6, 'm', 100) && C.pvpReachOk(8, 'm', 120) && !C.pvpReachOk(8, 'm', 200) && C.pvpReachOk(1, 'm', 5) && !C.pvpReachOk(1, 'm', 30), 'grenade / RPG / fist reach');
 
   // 죽은 사람 · 무적은 맞지 않는다 (hpHit)
-  const v = C.newHp(); for (let i = 0; i < 4; i++) C.hpHit(v, C.pvpDmgFor(7, 'm', 0, 1).amount, i + 1);
-  ok(v.dead && v.deaths === 1 && C.hpHit(v, 100, 6) === null, 'four sniper shots drop a full-HP player; the body takes no more');
+  const sn = C.pvpDmgFor(7, 'm', 0, 1).amount, need = Math.ceil(HPM / sn), v = C.newHp(); for (let i = 0; i < need - 1; i++) C.hpHit(v, sn, i + 1);
+  ok(!v.dead && C.hpHit(v, sn, need) === 'dead' && v.deaths === 1 && C.hpHit(v, 100, need + 2) === null, 'enough scaled sniper shots drop a full-HP player; the body takes no more');
 }
 
 // 16) 띠용·유령 연출 곡선, 사망 화면·부활 버튼·설정 패널 (정적 확인)

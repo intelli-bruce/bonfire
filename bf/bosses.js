@@ -12,6 +12,7 @@
 // (다리 사이·배 밑 땅에 떨어진 수류탄·검기도 맞는다).
 
 import { raySphere, rayCapsule } from './weapons-core.js';
+import { DEMON } from './demon.js';   // 대악마: 정의 + 확장(ext) 은 bf/demon.js
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -77,13 +78,15 @@ export const KINDS = {
       { code: 'dive', w: 3, cd: 10, minD: 10, maxD: 60, dur: 4.2 },
     ],
   },
+  demon: DEMON,
 };
-export const KIND_LIST = ['spider', 'shark', 'golem', 'seraph', 'commander'];
+export const KIND_LIST = ['spider', 'shark', 'golem', 'seraph', 'demon', 'commander'];
 // 패턴 피해(내 HP 100 기준) · 넉백 세기
 export const HITS = {
   bite: [32, 2.4], lunge: [34, 2.8], tail: [22, 2.6], rush: [26, 2.2],
   slam: [34, 2.6], wave: [18, 1.6], hurl: [26, 2.0], charge: [30, 3.0],
   pillar: [30, 1.4], hellfire: [16, 1.2], burn: [7, 0.2], dive: [34, 3.0], ring: [16, 1.8],
+  ...DEMON.hits,
 };
 const A_BASE = ['idle', 'move', 'spawn', 'die'];
 export const ACTS = {};
@@ -154,6 +157,7 @@ export function createGiantBoss(ctx, kind) {
     let light = null;
     if (kind === 'golem') { light = new THREE.PointLight('#ff7a2a', 0, 34, 1.6); root.add(light); light.position.set(0, 10.6, -3.6); }
     if (kind === 'seraph') { light = new THREE.PointLight('#ffd890', 0, 40, 1.5); root.add(light); light.position.set(0, 14.3, 1.6); }
+    if (D.ext && D.ext.light) light = D.ext.light(THREE, root);
     scene.add(root);
     const qs = { q: new THREE.Quaternion(), e: new THREE.Euler(), qa: new THREE.Quaternion() };
     return { root, bones, lods, mats, base, rest, hull, light, flash: 0, flashK: 1, qs, lod: -1, glow: 0 };
@@ -183,6 +187,7 @@ export function createGiantBoss(ctx, kind) {
     for (const f of fxl) killFx(f); fxl.length = 0;
     for (const [, v] of hazVis) { scene.remove(v.g); } hazVis.clear();
     capsW.length = 0;
+    if (D.ext && D.ext.reset) D.ext.reset(X);
   }
   function baseY(x, z) {   // 몸 뿌리의 높이(땅·물·공중)
     if (D.water) return ctx.waterLevel() - 1.5;
@@ -210,6 +215,7 @@ export function createGiantBoss(ctx, kind) {
     const g = ctx.heightAt(B.x, B.z);
     ctx.sfx(kind, 'intro', B.x, B.z);
     ctx.shake(0.9, 2.2);
+    if (D.ext && D.ext.intro) { D.ext.intro(X); return; }
     if (kind === 'shark') { for (let i = 0; i < 4; i++) setTimeout(() => ctx.fx.crown(B.x + (Math.random() - 0.5) * 8, ctx.waterLevel(), B.z + (Math.random() - 0.5) * 8, 24), i * 260); }
     else if (kind === 'golem') { for (let i = 0; i < 10; i++) setTimeout(() => ctx.fx.poof(B.x + (Math.random() - 0.5) * 12, g + 0.1, B.z + (Math.random() - 0.5) * 12, 6), i * 180); addFx({ type: 'ring', x: B.x, z: B.z, r0: 2, r1: 26, t: 0, life: 1.6, hit: false, color: '#c8a070' }); }
     else { addFx({ type: 'beam', x: B.x, z: B.z, r: 7, t: 0, warn: 0, life: 2.6, hit: false, intro: true }); }
@@ -386,6 +392,7 @@ export function createGiantBoss(ctx, kind) {
           if (!moved) { a.t = Math.max(a.t, 2.9); ctx.shake(0.8, 0.6); }
         }
       }
+    } else if (D.ext && D.ext.run) { D.ext.run(X, a, dt, { F, T, tgA, turnTo });
     } else if (kind === 'seraph') {
       if (a.code === 'pillar') {   // 빛 기둥: 표식 → 1.3 s 뒤 내리꽂힘
         turnTo(tgA, 1.2);
@@ -577,6 +584,7 @@ export function createGiantBoss(ctx, kind) {
       const hk = dying ? 1 - dk : se;
       rig.glow = hk * (0.8 + 0.2 * Math.sin(t * 3.1) + (B.rage ? 0.5 : 0));
       if (rig.light) rig.light.intensity = 60 * rig.glow;
+    } else if (D.ext && D.ext.anim) { const o = { y, pitch, roll }; D.ext.anim(X, o, dt, t, { a, at, code, se, dying, dk, dieU, ph }); y = o.y; pitch = o.pitch; roll = o.roll;
     } else if (kind === 'seraph') {
       const fl = Math.sin(ph * 1.6), flap = code === 'dive' ? (at < 1.2 ? 1 : 0.15) : 1;
       pose('wingL1', 0, 0.15 * fl, -0.55 * fl * flap); pose('wingL2', 0, 0, -0.35 * Math.sin(ph * 1.6 - 0.7) * flap);
@@ -652,6 +660,7 @@ export function createGiantBoss(ctx, kind) {
     for (const h of B.haz) if (m.ok && h.age < 7 && Math.hypot(m.x - h.x, m.z - h.z) < 4.5 && m.y - floorAt(m.x, m.z) < 1.5) hitMe('burn', 0, 0);
     if (THREE.Mesh) {
       tickFx(dt);
+      if (D.ext && D.ext.tick) D.ext.tick(X, dt, t);
       const seen = new Set();
       for (const h of B.haz) {
         seen.add(h.id); const v = hazVisual(h), k = clamp(h.age / 0.3, 0, 1) * clamp((7.5 - h.age) / 1.2, 0, 1), gy = ctx.heightAt(h.x, h.z) + 0.12;
@@ -764,6 +773,9 @@ export function createGiantBoss(ctx, kind) {
     }
     return true;
   }
+
+  // 확장(ext) 에 넘기는 도구 묶음
+  const X = { THREE, scene, ctx, B, D, kind, S: {}, pose, hitCircle, hitCone, hitMe, addFx, handPos, moveBy, once, get rig() { return rig; } };
 
   return {
     kind, load, spawn, despawn, update, snapshot, applySnapshot, hitTest, hitRay, damage, slowAt,
