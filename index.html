@@ -173,7 +173,7 @@ body.under #uw { opacity: 1; }
 #bossHp .fill { background: linear-gradient(180deg, #ff6a4a, #c4201e); transition: transform 0.18s ease-out; }
 #bossHp.rage .fill { background: linear-gradient(180deg, #ff9a3c, #e0301a); box-shadow: 0 0 10px rgba(255, 120, 40, 0.8); }
 #bossHp .state { font-size: 12px; color: var(--sand); text-align: center; min-height: 1.1em; text-shadow: 0 1px 3px #000; }
-#setPanel { right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 116px); width: min(300px, calc(100vw - 24px)); display: grid; gap: 10px; padding: 14px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
+#setPanel { right: calc(env(safe-area-inset-right, 0px) + 164px); bottom: calc(env(safe-area-inset-bottom, 0px) + 116px); width: min(300px, calc(100vw - 188px)); display: grid; gap: 10px; padding: 14px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
 #setPanel[hidden] { display: none; }
 #bossPick { right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 116px); width: min(320px, calc(100vw - 24px)); display: grid; gap: 8px; padding: 12px; background: var(--panel-soft); border: 1px solid rgba(255, 90, 70, 0.5); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
 #bossPick[hidden] { display: none; }
@@ -183,13 +183,28 @@ body.under #uw { opacity: 1; }
 #bossIntro.on { opacity: 1; }
 #bossIntro b { display: block; font-family: var(--f-display); font-size: clamp(28px, 6vw, 56px); color: #ffdcc0; letter-spacing: 0.06em; text-shadow: 0 2px 10px #000, 0 0 24px rgba(255, 60, 30, 0.75); }
 #bossIntro small { display: block; margin-top: 6px; font-size: 15px; color: var(--sand); text-shadow: 0 1px 4px #000; }
+@media (max-width: 640px) { #setPanel { right: auto; left: 50%; transform: translateX(-50%); bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 96px); width: min(300px, calc(100vw - 24px)); } }   /* narrow screens: the action buttons take the whole right side, so the panel sits at the top centre */
 #setPanel .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 #setPanel input[type=range] { width: 100%; accent-color: var(--ember); }
 #myHp { left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 40px); display: flex; align-items: center; gap: 8px; pointer-events: none; z-index: 10; font-family: var(--f-display); color: #ffe2bd; text-shadow: 0 1px 3px #000; }
 #myHp .track { width: 180px; height: 10px; border-radius: 999px; background: rgba(20, 14, 40, 0.78); border: 1px solid rgba(255, 236, 210, 0.35); overflow: hidden; }
 #myHp i { display: block; height: 100%; width: 100%; transform-origin: left center; background: linear-gradient(90deg, #3fcf6a, #8ff09a); transition: transform 0.15s; }
 #myHp.low i { background: linear-gradient(90deg, #e0301a, #ff7a4a); }
-#downMsg { left: 50%; top: 38%; transform: translateX(-50%); padding: 10px 18px; border-radius: 14px; background: rgba(60, 10, 14, 0.8); color: #ffd9d0; font-family: var(--f-display); font-size: 18px; z-index: 12; pointer-events: none; }
+#downMsg { left: 50%; top: 30%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 8px; min-width: 230px; padding: 16px 26px 18px; border-radius: 20px; background: rgba(40, 8, 14, 0.82); border: 1px solid rgba(255, 150, 130, 0.38); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); color: #ffd9d0; font-family: var(--f-display); z-index: 12; text-align: center; }
+#downMsg[hidden] { display: none; }
+#downMsg .ttl { font-size: 22px; letter-spacing: 0.04em; }
+#downMsg .why { font-size: 13.5px; color: #ffb9a8; min-height: 1.2em; font-family: var(--f-ui); }
+#downMsg .ring { position: relative; width: 96px; height: 96px; }
+#downMsg .ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+#downMsg .ring circle { fill: none; stroke-width: 8; }
+#downMsg .ring .bg { stroke: rgba(255, 220, 210, 0.16); }
+#downMsg .ring .fg { stroke: #ff8a6a; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 0; filter: drop-shadow(0 0 6px rgba(255, 120, 90, 0.7)); }
+#downMsg .ring b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 42px; font-weight: 400; line-height: 1; color: #fff1e8; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6); }
+#downMsg .sub { font-size: 13px; color: #ffcfc2; font-family: var(--f-ui); }
+#respawnBtn { margin-top: 2px; padding: 11px 22px; font-size: 17px; border-color: rgba(255, 170, 120, 0.85); background: linear-gradient(180deg, #ffb877, var(--ember-deep)); color: #3a1606; pointer-events: auto; }
+#respawnBtn:disabled { opacity: 0.55; filter: saturate(0.6); }
+#respawnBtn kbd { display: inline-grid; place-items: center; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: rgba(58, 22, 6, 0.18); font: inherit; font-size: 12px; }
+body.coarse #respawnBtn kbd { display: none; }
 #hurt { position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(220, 20, 20, 0.55) 100%); transition: opacity 0.35s; }
 #hurt.on { opacity: 1; transition: none; }
 .wslot svg { width: 46px; height: 22px; display: block; }
@@ -269,8 +284,14 @@ body.coarse #ammo b { font-size: 32px; }
   <button class="btn" type="button" data-kind="seraph"><b>반천사·반악마</b><small>빛 기둥 · 지옥불 · 비행 강하</small></button>
 </div>
 <div id="bossIntro" class="hud" aria-live="polite"><b id="bossIntroName"></b><small id="bossIntroSub"></small></div>
-<div id="myHp" class="hud" hidden><div class="track"><i id="myHpFill"></i></div><span id="myHpTxt">100</span></div>
-<div id="downMsg" class="hud" hidden>쓰러졌습니다 · <span id="downT">4</span>초 뒤 부활</div>
+<div id="myHp" class="hud" hidden><div class="track"><i id="myHpFill"></i></div><span id="myHpTxt">400</span></div>
+<div id="downMsg" class="hud" role="alertdialog" aria-labelledby="downTitle" hidden>
+  <div id="downTitle" class="ttl">쓰러졌습니다</div>
+  <div id="downWhy" class="why"></div>
+  <div class="ring" id="downRing" role="timer" aria-live="off"><svg viewBox="0 0 100 100" aria-hidden="true"><circle class="bg" cx="50" cy="50" r="44"></circle><circle class="fg" id="downArc" cx="50" cy="50" r="44" pathLength="100"></circle></svg><b id="downT">5</b></div>
+  <div class="sub"><span id="downS">5</span>초 뒤 자동 부활</div>
+  <button id="respawnBtn" class="btn" type="button">즉시 리스폰 <kbd>Enter</kbd></button>
+</div>
 <div id="bossHp" class="hud" role="status" aria-live="off" hidden>
   <div class="name"><span id="bossName">인면 거미 · 직녀</span><small id="bossHpTxt"></small></div>
   <div class="track"><div class="ghost" id="bossHpGhost"></div><div class="fill" id="bossHpFill"></div></div>
@@ -366,8 +387,9 @@ import { initNames, claimNick, signPresence, verifyPeer, myNick as claimedNick }
 import { buildPier, createAngler, deckTop as pierDeck, PIER } from './bf/pier.js';
 import { createSolids } from './bf/solids.js';
 import { createWeapons } from './bf/weapons.js';
-import { SLOT_KEYS, SLOT_COUNT, WEAPONS as WPN_TABLE, wrapSlot, isGun as isGunSlot, HP as HPC, HURT, newHp, hpHit, hpTick, sanitizeHp } from './bf/weapons-core.js';
+import { SLOT_KEYS, SLOT_COUNT, WEAPONS as WPN_TABLE, wrapSlot, isGun as isGunSlot, HP as HPC, HURT, newHp, hpHit, hpTick, hpRespawn, hpPct, respawnLeft, canInstantRespawn, sanitizeHp } from './bf/weapons-core.js';
 import { createHealthBars } from './bf/health.js';
+import { createGhosts } from './bf/ghost.js';
 
 // ---------- small helpers ----------
 const TAU = Math.PI * 2;
@@ -998,6 +1020,7 @@ function onGameKey(e) {
   if (weaponKey(e)) { e.preventDefault(); e.stopImmediatePropagation(); }
   if (e.code === 'KeyF' && mySeat && mySeat.fish) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) castRod(); return; }   // on a fishing chair F is the rod, not a chop (this handler runs before the kit's)
   if (e.code === 'KeyF' && WP && WP.slot >= 2) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) leftDown(); return; }   // a weapon in hand: F swings / fires (hold F: a rifle keeps firing); bare hands: the kit's chop
+  if (e.key === 'Enter' && MYHP.dead) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat && respawnMe(false)) { canvas.focus({ preventScroll: true }); tryLock(); } return; }   // down: Enter = instant respawn (chat opens again after reviving)
   if (e.key === 'Enter') { const ci = $('chatInput'); if (!ci.disabled) { e.preventDefault(); if (lockedNow()) document.exitPointerLock(); ci.focus(); refreshLook(); } return; }
   if (e.code === 'KeyM' && !e.repeat && !coarse) { setLook(lookMode === 'mouse' ? 'drag' : 'mouse'); return; }
   if (e.repeat) return;
@@ -1170,7 +1193,7 @@ function stepLocal(dt) {
   if (mySeat && (s.act !== 'sit' || s.seat !== mySeat.id)) { mySeat = null; fishStop(); sendPresence(performance.now(), true); refreshCtx(); }   // moved / jumped / X: off the log
   return s.speed;
 }
-function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar, ap: myApCode, ...(WP && WP.slot > 1 ? { wp: WP.slot } : {}), ...(WP && WP.ads > 0.5 ? { za: 1 } : {}), hp: Math.round(MYHP.hp), ...(MYHP.dead ? { dd: 1 } : {}) }; }   // x y z r l a as t (s while on a log, w in the water), ch + color = the closest stock look for old clients, ap = my full look, wp = weapon slot when not bare-handed
+function presenceFields() { return { ...meRec.ctrl.netState(), ch: myChar, ap: myApCode, ...(WP && WP.slot > 1 ? { wp: WP.slot } : {}), ...(WP && WP.ads > 0.5 ? { za: 1 } : {}), hp: hpPct(MYHP), ...(MYHP.dead ? { dd: 1 } : {}) }; }   // x y z r l a as t (s while on a log, w in the water), ch + color = the closest stock look for old clients, ap = my full look, wp = weapon slot when not bare-handed
 function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the kit's applyNet
   const g = groundY3(x, z, undefined), o = { x, z };
   const y = num(d.y, Math.min(g, heightAt(x, z)) - 1, Math.max(g + 6, 2)); if (y !== null) o.y = y;   // swimmers float metres above a deep seabed (a diver is between the surface and the seabed)
@@ -1180,7 +1203,7 @@ function applyRemote(rec, d, x, z) {   // hostile-input guard in front of the ki
   if (typeof d.a === 'string' && ACT_CODES.has(d.a)) o.a = d.a;
   if (Number.isInteger(d.as) && d.as >= 0 && d.as <= 1e9) o.as = d.as;
   const t = num(d.t, 0, 1e6); if (t !== null) o.t = t;
-  rec.hpNet = sanitizeHp(d.hp, d.dd);   // old clients send no hp: a full bar
+  rec.hpNet = sanitizeHp(d.hp, d.dd);   // hp is a percent (0..100) of HP.max; old clients send no hp: a full bar
   if (WP) { WP.setRemoteSlot(rec, Number.isInteger(d.wp) && d.wp >= 1 && d.wp <= SLOT_COUNT ? d.wp : 1); WP.setRemoteAds(rec, d.za === 1 ? 1 : 0); }   // weapon in hand (shown from the next frame; the models may still be loading)
   if (typeof d.s === 'string' && seatById(d.s.slice(0, 16))) o.s = d.s.slice(0, 16);
   if (o.as !== undefined) {   // read-out of actions seen from this peer (first sight is a baseline, as in the kit)
@@ -2464,13 +2487,14 @@ const BOSS_HIT_MSG = {
 };
 function initBosses(spMod, gMod) {
   const meFn = () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2 && !MYHP.dead, x: me.x, y: me.y, z: me.z });
+  const BOSS_DMG_K = 3;
   const onHitMe = (h) => {
     if (!entered || !meRec) return;
     const now = performance.now();
     hitFlash(meRec); meRec.ctrl.knock(h.dx, h.dz, h.power);
     if (mq) mq.boostUntil = now + 700;
     const kind = h.boss || 'spider';
-    hurtMe(typeof h.dmg === 'number' ? h.dmg : HURT[h.src === 'swipe' ? 'swipe' : h.src === 'spit' ? 'spit' : 'bite'], BOSS_HURT_NAME[kind] || '보스');
+    hurtMe(typeof h.dmg === 'number' ? h.dmg * BOSS_DMG_K : HURT[h.src === 'swipe' ? 'swipe' : h.src === 'spit' ? 'spit' : 'bite'], BOSS_HURT_NAME[kind] || '보스');   // 보스 표(HITS)는 HP 100 기준 → HP 400 에 맞춰 3배(거미 HURT 와 같은 비율)
     if (h.src !== 'burn') camShake(0.5, 0.35);
     sendPresence(now, true);
     if (h.poison) { SLOW.poison = 0.55; SLOW.until = now + 2600; }
@@ -2655,35 +2679,101 @@ for (let n = 1; n <= SLOT_COUNT; n++) {
   $('wslots').appendChild(b); slotBtns.push(b);
 }
 $('wslots').addEventListener('mousedown', (e) => e.preventDefault());
-// ---------- health: my HP is decided on my screen (boss attacks, punches), sent as `hp` / `dd` in presence; everyone sees a bar over every head ----------
-const MYHP = newHp(), HPBARS = createHealthBars({ THREE });
-function hurtMe(amount, why) {
-  if (!entered || !meRec) return;
+// ---------- health: my HP is decided on my screen (boss attacks, punches, other players' weapons), sent as `hp` (percent of HP.max) / `dd` in presence; everyone sees a bar over every head ----------
+// A hit on another player is judged on the ATTACKER's screen (bf/weapons.js: the shot touched the body I see) and reported to the victim, whose screen applies the damage from the weapon table.
+const MYHP = newHp(), HPBARS = createHealthBars({ THREE }), GHOSTS = createGhosts({ THREE, scene, camera });
+const DOWN = { why: '', shown: false, lastN: -1 };
+function hurtMe(amount, why, src) {   // src = { knock, from: [x, z] } for a weapon hit from another player; returns 'hit' | 'dead' | null (shielded / already down)
+  if (!entered || !meRec) return null;
   const now = performance.now() / 1000, r = hpHit(MYHP, amount, now);
-  if (!r) return;
+  if (!r) return null;
+  if (src) {
+    hitFlash(meRec);
+    if (src.knock > 0 && src.from) { let dx = me.x - src.from[0], dz = me.z - src.from[1]; const l = Math.hypot(dx, dz); if (l < 0.05) { dx = 0; dz = 1; } else { dx /= l; dz /= l; } meRec.ctrl.knock(dx, dz, src.knock); }
+    if (mq) mq.boostUntil = performance.now() + 700;
+  }
   const h = $('hurt'); h.classList.add('on'); setTimeout(() => h.classList.remove('on'), 90);
   if (WP) WP.sfx(r === 'dead' ? 'down' : 'hurt', 1);
-  if (r === 'dead') { netLog(null, `쓰러졌습니다${why ? ` (${why})` : ''}. ${HPC.respawnT}초 뒤 부활합니다.`, true); if (WP) WP.trigger(false); meRec.ctrl.setMoveScale(0.001); }
+  if (r === 'dead') {
+    DOWN.why = why || '';
+    netLog(null, `쓰러졌습니다${why ? ` (${why})` : ''}. ${HPC.respawnT}초 뒤 자동으로 부활합니다.`, true);
+    if (WP) { WP.trigger(false); WP.alt(false); }
+    meRec.ctrl.setMoveScale(0.001);
+    if (lockedNow()) document.exitPointerLock();   // the cursor is needed for the respawn button
+  }
   refreshMyHp(); sendPresence(performance.now(), true);
+  return r;
+}
+function hurtByPlayer(amount, info) {   // called by bf/weapons.js once the report passed the table / reach / rate checks
+  const rec = info.rec, who = (rec && rec.name) || DEFAULT_NAME, wn = WPN_TABLE[info.w] ? WPN_TABLE[info.w].name : '무기';
+  const r = hurtMe(amount, `${who} 님의 ${wn}`, { knock: info.knock, from: info.from });
+  if (r && evtOk('*', 'pvphitlog', 2500)) netLog(null, `${who} 님의 ${wn}에 맞았습니다.`, true);
+}
+function respawnMe(auto) {   // the timer (auto) and the button / Enter (instant) take the same path
+  const now = performance.now() / 1000;
+  if (!MYHP.dead) return false;
+  if (!auto && !canInstantRespawn(MYHP, now)) return false;
+  hpRespawn(MYHP, now); afterRespawn(); return true;
+}
+function afterRespawn() {
+  const sx = (Math.random() - 0.5) * 4, sz = 9 + Math.random() * 2;
+  meRec.ctrl.teleport(sx, sz, 0); me.x = sx; me.z = sz; meRec.ctrl.setMoveScale(1);
+  PUFF.spark(sx, 1.0, sz); PUFF.poof(sx, 0.2, sz, 5);
+  if (WP) WP.sfx('respawn', 1);
+  netLog(null, '부활했습니다.', true); sendPresence(performance.now(), true);
+}
+function downUiFrame(now) {   // the "down" card: reason, auto-respawn count (number + ring), instant-respawn button
+  const dead = MYHP.dead;
+  if (dead !== DOWN.shown) {
+    DOWN.shown = dead; $('downMsg').hidden = !dead; DOWN.lastN = -1;
+    if (dead) { $('downWhy').textContent = DOWN.why; $('respawnBtn').disabled = true; }
+    else if (document.activeElement === $('respawnBtn')) canvas.focus({ preventScroll: true });
+  }
+  if (!dead) return;
+  const left = respawnLeft(MYHP, now), n = Math.max(0, Math.ceil(left - 1e-6));
+  $('downArc').style.strokeDashoffset = String((100 * (1 - left / HPC.respawnT)).toFixed(2));   // the ring empties as the timer runs
+  if (n !== DOWN.lastN) { DOWN.lastN = n; $('downT').textContent = String(n); $('downS').textContent = String(n); }
+  const can = canInstantRespawn(MYHP, now), btn = $('respawnBtn');
+  if (btn.disabled === can) btn.disabled = !can;   // no auto-focus: a mashed Space (jump) must not press the button
+}
+// death / respawn seen from outside (me and everyone else): the ghost, the "boing" sound, a sparkle on revival
+function deathFx(rec, dead, isMe) {
+  const was = rec._wasDead; rec._wasDead = dead;
+  if (was === undefined || was === dead) return;   // first sight is a baseline (someone who was already down when I arrived gets no show)
+  const p = rec.av.root.position, lv = isMe ? 1 : clamp(1 - Math.hypot(p.x - me.x, p.z - me.z) / 40, 0, 1);
+  if (dead) { GHOSTS.spawn(p.x, p.y, p.z); if (WP) { WP.sfx('boing', Math.max(isMe ? 0.9 : 0, lv)); WP.sfx('ghost', Math.max(isMe ? 0.8 : 0, lv * 0.9)); } }
+  else if (!isMe) { PUFF.spark(p.x, p.y + 1.0, p.z); PUFF.poof(p.x, p.y + 0.2, p.z, 4); if (WP) WP.sfx('respawn', lv * 0.7); }
 }
 function healthFrame(dt) {
   if (!entered || !meRec) return;
+  GHOSTS.warm(renderer);   // once: compile the ghost's materials now, not at the first death
   const now = performance.now() / 1000;
-  if (hpTick(MYHP, now, dt) === 'respawn') {
-    const sx = (Math.random() - 0.5) * 4, sz = 9 + Math.random() * 2;
-    meRec.ctrl.teleport(sx, sz, 0); me.x = sx; me.z = sz; meRec.ctrl.setMoveScale(1);
-    if (WP) WP.sfx('respawn', 1); netLog(null, '부활했습니다.', true); sendPresence(performance.now(), true);
-  }
-  if (MYHP.dead) { meRec.ctrl.setMoveScale(0.001); $('downT').textContent = String(Math.max(0, Math.ceil(HPC.respawnT - (now - MYHP.deadAt)))); }
-  $('downMsg').hidden = !MYHP.dead;
+  if (hpTick(MYHP, now, dt) === 'respawn') afterRespawn();
+  if (MYHP.dead) meRec.ctrl.setMoveScale(0.001);
+  downUiFrame(now);
   refreshMyHp();
+  deathFx(meRec, MYHP.dead, true);
   HPBARS.update(meRec, MYHP.hp, MYHP.dead, dt, (meRec.label ? meRec.label.position.y : tagY(meRec, 0.3)) + 0.22);
-  for (const rec of others.values()) { const q = rec.hpNet || { hp: HPC.max, dead: false }; HPBARS.update(rec, q.hp, q.dead, dt, (rec.label ? rec.label.position.y : tagY(rec, 0.3)) + 0.22); }
+  for (const rec of others.values()) {
+    const q = rec.hpNet || { hp: HPC.max, dead: false };
+    deathFx(rec, q.dead, false);
+    HPBARS.update(rec, q.hp, q.dead, dt, (rec.label ? rec.label.position.y : tagY(rec, 0.3)) + 0.22);
+  }
+  GHOSTS.update(dt);
 }
+function pvpPlayers() {   // everyone I can hit: other real players who are up (a ghost / a downed body is not a target)
+  const out = [];
+  for (const rec of others.values()) {
+    if (!rec.mq || !rec.rid || (rec.hpNet && rec.hpNet.dead)) continue;
+    const s = rec.ctrl.state; out.push({ id: rec.rid, x: s.x, y: s.y, z: s.z });
+  }
+  return out;
+}
+$('respawnBtn').addEventListener('click', () => { if (respawnMe(false)) { initAudio(); canvas.focus({ preventScroll: true }); tryLock(); } });
 let myHpShown = -1;
 function refreshMyHp() {
   const v = Math.round(MYHP.hp); if (v === myHpShown) return; myHpShown = v;
-  $('myHpFill').style.transform = `scaleX(${v / HPC.max})`; $('myHpTxt').textContent = String(v); $('myHp').classList.toggle('low', v <= 30);
+  $('myHpFill').style.transform = `scaleX(${v / HPC.max})`; $('myHpTxt').textContent = String(v); $('myHp').classList.toggle('low', v <= HPC.max * 0.3);
 }
 const AMMO = { box: $('ammo'), mag: $('ammoMag'), res: $('ammoRes'), name: $('ammoName'), bar: $('rbar'), fill: $('rfill'), cross: $('cross') };
 let adsSent = false;
@@ -2732,6 +2822,8 @@ const WP = createWeapons({
   log: (t) => logLine(null, t, true),
   audio: () => (actx ? { ctx: actx, dest: sfx } : null),
   canUse: () => !!(entered && meRec && !mySeat && meRec.ctrl.state.swim !== 2 && !MYHP.dead),
+  players: pvpPlayers, canBeHit: () => !!(entered && meRec && !MYHP.dead), hurtPlayer: hurtByPlayer,
+  pvpFeedback: (id) => { const r = others.get('mq:' + id); if (r) hitFlash(r); },   // the target flashes red on my screen
   hud: WPN_HUD,
 });
 WP.load().catch((e) => { console.warn('[bonfire] weapons: models not available:', e && e.message); if (LOCAL) window.__wpnLoadErr = String((e && e.stack) || e); });
@@ -2765,7 +2857,7 @@ if (location.hostname === '127.0.0.1') {   // local test read-out only
     async lastShotData() { if (!lastShot) return null; const b = new Uint8Array(await lastShot.blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return btoa(s); },
     get info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures }; },
     setCamHook(f) { camHook = f; }, get camera() { return camera; }, hideMe(v) { if (meRec) meRec.av.root.visible = !v; },
-    get wpn() { return WP; }, get hp() { return { ...MYHP }; }, hurt: (n, w) => hurtMe(n, w), get sens() { return SENS.v; }, wpnTune: (slot, k, v) => { const T_ = WP.debug.POSE[slot]; if (T_) T_[k] = v; },
+    get wpn() { return WP; }, get hp() { return { ...MYHP }; }, hurt: (n, w, src) => hurtMe(n, w, src), respawn: () => respawnMe(false), get ghosts() { return GHOSTS; }, get downUi() { return { ...DOWN, hidden: $('downMsg').hidden }; }, get sens() { return SENS.v; }, wpnTune: (slot, k, v) => { const T_ = WP.debug.POSE[slot]; if (T_) T_[k] = v; },
     get spider() { return SPIDER; }, bossCreate, bossDelete, camShake, bossStrike, get slow() { return { ...SLOW }; }, get webSlow() { return SPIDER ? SPIDER.slowAt(me.x, me.z) : 1; },
     get myAp() { return { ...myAp, code: myApCode, ch: myChar, color: myColor }; }, get pv() { return pv; },
     get diag() { return { mqIn, mqPresIn, brokers: mqLiveCount(), others: [...others.keys()], lastSent: mq ? Math.round(performance.now() - mq.lastSent) : null }; },
