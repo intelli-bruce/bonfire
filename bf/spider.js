@@ -492,6 +492,11 @@ const feet = [];                                   // per leg { k: tibia start, 
         const py = y + 0.9; let best = -1, bd = BOSS.legR + radius + 0.35;
         feet.forEach((f, i) => { const d = Math.min(segDist(cx, py, cz, f.k, f.a), segDist(cx, py, cz, f.a, f.e)); if (d < bd) { bd = d; best = i; } });
         if (best >= 0) { O.lastFoot = best; out.push({ kind: 'boss', id: 0 }); }
+        // 다리 사이 · 배 밑: 몸통·머리·배 구체를 땅까지 기둥으로 친다(땅에 떨어진 수류탄·낮게 나는 검기가 다리 틈에서 피해 0 이 되던 문제)
+        else if (bodyS.length) {
+          const gy = ctx.heightAt(cx, cz);
+          for (const q of bodyS) if (Math.hypot(cx - q.x, cz - q.z) < q.r + radius && py < q.y + q.r && py > gy - 1.5) { O.lastFoot = -1; out.push({ kind: 'boss', id: 0 }); break; }
+        }
       } else if (Math.hypot(cx - B.x, cz - B.z) < BOSS.bodyR + 0.6 + radius && Math.abs(y - ctx.heightAt(B.x, B.z)) < 3.2) out.push({ kind: 'boss', id: 0 });
     }
     for (const m of B.minions) { const v = minVis.get(m.id), px = v ? v.x : m.x, pz = v ? v.z : m.z; if (Math.hypot(cx - px, cz - pz) < 0.45 + radius) out.push({ kind: 'minion', id: m.id }); }
@@ -608,7 +613,7 @@ const feet = [];                                   // per leg { k: tibia start, 
     act(name) { if (B.owner && B.active && !O.act && B.spawnT <= 0 && B.dieT <= 0 && ['sw', 'sp', 'wb', 'sm'].includes(name)) { ownerBegin(name, nearest(B.x, B.z)); return true; } return false; },   // test hook
     get active() { return B.active; }, get owner() { return B.owner; }, get ownerId() { return B.ownerId; },
     get view() { return { born: B.born, active: B.active, owner: B.owner, hp: B.hp, maxHp: B.maxHp, a: B.a, rage: B.rage, x: B.x, z: B.z, ry: B.ry, minions: B.minions.length, webs: B.webs.length, proj: proj.length, spawnT: B.spawnT, dying: B.a === 'd' }; },
-    get debug() { return { B, O, R, boss, proj, arcs, webVis, minVis, ghosts, timers, myHit }; },
+    get debug() { return { B, O, R, boss, proj, arcs, webVis, minVis, ghosts, timers, myHit, feet, bodyS }; },
     BOSS, MINI,
   };
 }

@@ -108,5 +108,19 @@ const snap = (o = {}) => ({ id: 'aaa', n: 1, b: 1000, ep: 0, hp: 400, mh: 480, x
   ok(r.sp.applySnapshot(snap({ a: 'sp', ac: 3, sa: 0.4 }), 'aaa') === true && r.sp.debug.B.sd === 40, 'a snapshot without it falls back to a mid range');
 }
 
+// 다리 틈: 다리에서 먼 땅(배 밑)에 떨어진 수류탄·검기도 몸통 기둥으로 맞는다
+{
+  const { sp } = make('bbb');
+  sp.spawn(0, 0, 0); sp.debug.B.spawnT = 0;
+  const V = (x, y, z) => ({ x, y, z });
+  const fe = sp.debug.feet; fe.length = 0;
+  for (const sx of [-1, 1]) fe.push({ k: V(sx * 14, 8, 0), a: V(sx * 18, 3, 0), e: V(sx * 20, 0, 0) });
+  const bs = sp.debug.bodyS; bs.length = 0; bs.push({ n: 'body', x: 0, y: 8.7, z: 0, r: 3.4 }, { n: 'abdomen', x: 0, y: 9.9, z: 6.3, r: 4.75 });
+  ok(sp.hitTest(0.5, 0.5, 0.8, -0.4).some((h) => h.kind === 'boss'), 'a grenade on the ground under the belly (between the legs) hits');
+  ok(sp.hitTest(2, 5, 1.2, 0.3).some((h) => h.kind === 'boss'), 'a low sword wave between the legs under the abdomen hits');
+  ok(!sp.hitTest(9, -12, 0.8, -0.4).length, 'the open ground beside the body still misses');
+  ok(!sp.hitTest(0.5, 0.5, 0.8, 20).length, 'high above the body misses');
+}
+
 console.log(`${n - fails}/${n} spider checks passed`);
 process.exit(fails ? 1 : 0);

@@ -175,6 +175,14 @@ body.under #uw { opacity: 1; }
 #bossHp .state { font-size: 12px; color: var(--sand); text-align: center; min-height: 1.1em; text-shadow: 0 1px 3px #000; }
 #setPanel { right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 116px); width: min(300px, calc(100vw - 24px)); display: grid; gap: 10px; padding: 14px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
 #setPanel[hidden] { display: none; }
+#bossPick { right: calc(env(safe-area-inset-right, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 116px); width: min(320px, calc(100vw - 24px)); display: grid; gap: 8px; padding: 12px; background: var(--panel-soft); border: 1px solid rgba(255, 90, 70, 0.5); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
+#bossPick[hidden] { display: none; }
+#bossPick .btn { text-align: left; display: grid; gap: 2px; }
+#bossPick .btn small { color: var(--mist); font-size: 12px; }
+#bossIntro { left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; z-index: 13; opacity: 0; transition: opacity 0.6s; }
+#bossIntro.on { opacity: 1; }
+#bossIntro b { display: block; font-family: var(--f-display); font-size: clamp(28px, 6vw, 56px); color: #ffdcc0; letter-spacing: 0.06em; text-shadow: 0 2px 10px #000, 0 0 24px rgba(255, 60, 30, 0.75); }
+#bossIntro small { display: block; margin-top: 6px; font-size: 15px; color: var(--sand); text-shadow: 0 1px 4px #000; }
 #setPanel .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 #setPanel input[type=range] { width: 100%; accent-color: var(--ember); }
 #myHp { left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 40px); display: flex; align-items: center; gap: 8px; pointer-events: none; z-index: 10; font-family: var(--f-display); color: #ffe2bd; text-shadow: 0 1px 3px #000; }
@@ -246,7 +254,7 @@ body.coarse #ammo b { font-size: 32px; }
   <button id="shotBtn" class="btn" type="button" aria-label="사진 찍기 (P)" title="사진 찍기 (P)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>사진</button>
   <button id="lanternBtn" class="btn" type="button">풍등 날리기</button>
   <button id="fwBtn" class="btn" type="button">폭죽</button>
-  <button id="bossBtn" class="btn" type="button" aria-pressed="false" title="인면 거미 보스를 불러오거나 지웁니다" disabled>보스 생성</button>
+  <button id="bossBtn" class="btn" type="button" aria-pressed="false" title="보스를 골라 불러오거나 지웁니다" disabled>보스 생성</button>
   <button id="setBtn" class="btn" type="button" aria-expanded="false" aria-controls="setPanel">설정</button>
 </div>
 <div id="setPanel" class="hud" role="dialog" aria-label="설정" hidden>
@@ -254,10 +262,17 @@ body.coarse #ammo b { font-size: 32px; }
   <input id="sensIn" type="range" min="0.1" max="2" step="0.05" value="0.5">
   <div class="row"><button id="sensReset" class="btn" type="button">기본값(0.5배)</button><button id="setClose" class="btn" type="button">닫기</button></div>
 </div>
+<div id="bossPick" class="hud" role="dialog" aria-label="보스 고르기" hidden>
+  <button class="btn" type="button" data-kind="spider"><b>인면 거미</b><small>앞다리 휘두르기 · 독침 · 거미줄 · 새끼 소환</small></button>
+  <button class="btn" type="button" data-kind="shark"><b>메갈로돈</b><small>바다에서 덮침 · 물기 · 꼬리치기 · 수면 돌진</small></button>
+  <button class="btn" type="button" data-kind="golem"><b>초거대 바위 골렘</b><small>내려찍기 충격파 · 바위 던지기 · 돌진</small></button>
+  <button class="btn" type="button" data-kind="seraph"><b>반천사·반악마</b><small>빛 기둥 · 지옥불 · 비행 강하</small></button>
+</div>
+<div id="bossIntro" class="hud" aria-live="polite"><b id="bossIntroName"></b><small id="bossIntroSub"></small></div>
 <div id="myHp" class="hud" hidden><div class="track"><i id="myHpFill"></i></div><span id="myHpTxt">100</span></div>
 <div id="downMsg" class="hud" hidden>쓰러졌습니다 · <span id="downT">4</span>초 뒤 부활</div>
 <div id="bossHp" class="hud" role="status" aria-live="off" hidden>
-  <div class="name"><span>인면 거미 · 직녀</span><small id="bossHpTxt"></small></div>
+  <div class="name"><span id="bossName">인면 거미 · 직녀</span><small id="bossHpTxt"></small></div>
   <div class="track"><div class="ghost" id="bossHpGhost"></div><div class="fill" id="bossHpFill"></div></div>
   <div class="state" id="bossState"></div>
 </div>
@@ -1010,8 +1025,10 @@ let bossCamZ = 0;   // 0..1: how much the camera has pulled back and up for the 
 function bossCamTarget() {   // the boss is ~13 m tall and ~45 m wide: while it is within ~55 m the view widens so the whole body fits next to me
   if (!SPIDER || !SPIDER.active || SPIDER.view.dying) return 0;
   const v = SPIDER.view, d = Math.hypot(v.x - me.x, v.z - me.z);
-  return clamp((58 - d) / 22, 0, 1);
+  return clamp((58 - d) / 22, 0, 1) * (v.camR || 1);
 }
+const SHAKE = { a: 0, t: 0, dur: 1 };   // boss slams / roars: the view trembles for a moment
+function camShake(a, dur) { if (reduceMotion) a *= 0.3; if (a >= SHAKE.a * (SHAKE.t / SHAKE.dur)) { SHAKE.a = a; SHAKE.t = dur; SHAKE.dur = dur; } }
 function updateCamera(dt) {
   const k = 1 - Math.exp(-dt * 10);
   bossCamZ += (bossCamTarget() - bossCamZ) * (1 - Math.exp(-dt * 2.2));
@@ -1036,7 +1053,8 @@ function updateCamera(dt) {
   cam.cur += (allow - cam.cur) * (allow < cam.cur ? Math.min(1, dt * 18) : Math.min(1, dt * 3));
   const d = cam.cur, cx = cam.tx + dx * d, cz = cam.tz + dz * d, gy = groundY3(cx, cz, me.y);
   camera.position.set(cx, Math.max(gy + 0.3, gy < 0.05 && camUnder < 0.5 ? waterY(cx, cz) + 0.35 : -Infinity, TY + dy * d), cz);   // never under the sand; under the sea only while diving
-  camera.lookAt(cam.tx, TY + 0.1 + Math.max(0, -cam.pitch) * 9 + 3.4 * bossCamZ + WP.kick * 1.8, cam.tz);   // WP.kick: a shot's recoil lifts the view for a moment   // aim a little higher: the giant's head, not just my feet
+  camera.lookAt(cam.tx, TY + 0.1 + Math.max(0, -cam.pitch) * 9 + 3.4 * bossCamZ * (SPIDER ? SPIDER.view.camLift || 1 : 1) + WP.kick * 1.8, cam.tz);
+  if (SHAKE.t > 0) { SHAKE.t = Math.max(0, SHAKE.t - dt); const q = SHAKE.a * (SHAKE.t / SHAKE.dur) * 0.35, tt = performance.now() / 1000; camera.position.x += Math.sin(tt * 61) * q; camera.position.y += Math.sin(tt * 53 + 1) * q; camera.position.z += Math.sin(tt * 47 + 2) * q * 0.6; }   // WP.kick: a shot's recoil lifts the view for a moment   // aim a little higher: the giant's head, not just my feet
   if (meRec) meRec.av.root.visible = entered && d > 0.9 && !(WP && WP.scope > 0.5);   // through the sniper scope my own body would fill the lens
   const fov = WP ? WP.fov(baseFov) : baseFov; if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
   const wy = waterY(camera.position.x, camera.position.z), under = camera.position.y < wy - (uwOn ? 0.0 : 0.04) && gy < wy;
@@ -2416,7 +2434,7 @@ $('entryForm').addEventListener('submit', async (e) => {
   logLine(null, '크리스마스 모닥불 곁으로 왔습니다. 통나무 가까이에서 E(또는 「앉기」)로 앉고, 불 옆에서 장작을 넣을 수 있습니다.', true);
 });
 
-// ---------- spider boss (bf/spider.js; model bf/spider.glb, minions bf/spider_mini.glb) ----------
+// ---------- bosses: spider (bf/spider.js) + megalodon / golem / seraph (bf/bosses.js; models from tools/bosses/build_bosses.py), behind one hub ----------
 // One client (the owner) runs the AI and streams ~8 snapshots/s on `boss`; everyone renders the same fight. Hits on ME are judged on my screen.
 let SPIDER = null;
 const BOSS_UI = { btn: $('bossBtn'), bar: $('bossHp'), fill: $('bossHpFill'), ghost: $('bossHpGhost'), txt: $('bossHpTxt'), state: $('bossState'), last: '', sentAt: 0 };
@@ -2429,49 +2447,120 @@ function bossPlayers() {
   return out;
 }
 function bossLandOk(x, z) { return x > -58 && x < 58 && z > -11 && z < 58 && heightAt(x, z) > 0.3; }
-function initSpider(mod) {
-  SPIDER = mod.createSpiderBoss({
-    THREE, scene, baseUrl: new URL('./bf/', location.href).href, myId, heightAt, canStand: bossLandOk,
-    players: bossPlayers,
-    me: () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2, x: me.x, y: me.y, z: me.z }),
-    pushMe: (x, z) => { if (meRec && !mySeat && bossLandOk(x, z)) meRec.ctrl.teleport(x, z); },
-    onHitMe: (h) => {
-      if (!entered || !meRec) return;
-      const now = performance.now();
-      hitFlash(meRec); meRec.ctrl.knock(h.dx, h.dz, h.power);
-      if (mq) mq.boostUntil = now + 700;
-      hurtMe(HURT[h.src === 'swipe' ? 'swipe' : h.src === 'spit' ? 'spit' : 'bite'], '거미');
-      sendPresence(now, true);
-      if (h.poison) { SLOW.poison = 0.55; SLOW.until = now + 2600; }
-      if (evtOk('*', 'bosshitlog', 1500)) netLog(null, h.src === 'swipe' ? '거미의 앞다리에 맞았습니다.' : h.src === 'spit' ? '독침에 맞았습니다. 잠시 느려집니다.' : '새끼 거미에게 물렸습니다.', true);
-    },
-    fx: {
-      poof: (x, y, z, n) => PUFF.poof(x, y, z, n),
-      spark: (x, y, z) => PUFF.spark(x, y, z),
-      thump: (v) => thumpSound(clamp(v, 0, 1)),
-    },
-  });
-  SPIDER.on('spawn', () => { refreshBossUi(true); logLine(null, '모닥불 밖 어둠에서 인면 거미가 올라옵니다!', true); });
+function bossSwimOk(x, z) { return x > -85 && x < 85 && z > -110 && z < 20 && heightAt(x, z) < -2.4; }   // the megalodon: deep enough water
+function bossFlyOk(x, z) { return x > -70 && x < 70 && z > -40 && z < 62; }
+const BOSS_LOG = {
+  spider: { spawn: '모닥불 밖 어둠에서 인면 거미가 올라옵니다!', die: '인면 거미를 쓰러뜨렸습니다!', gone: '인면 거미' },
+  shark: { spawn: '검은 바다가 갈라지며 메갈로돈이 솟구칩니다!', die: '메갈로돈이 배를 드러내고 가라앉습니다!', gone: '메갈로돈' },
+  golem: { spawn: '땅이 갈라지고 바위 골렘이 일어섭니다! 가슴의 심장이 타오릅니다.', die: '바위 골렘이 무너져 내렸습니다!', gone: '바위 골렘' },
+  seraph: { spawn: '하늘이 갈라지고 반천사·반악마가 내려옵니다!', die: '반천사·반악마가 추락했습니다! 후광이 부서집니다.', gone: '반천사·반악마' },
+};
+const BOSS_HURT_NAME = { spider: '거미', shark: '메갈로돈', golem: '바위 골렘', seraph: '반천사·반악마' };
+const BOSS_HIT_MSG = {
+  swipe: '거미의 앞다리에 맞았습니다.', spit: '독침에 맞았습니다. 잠시 느려집니다.', minion: '새끼 거미에게 물렸습니다.',
+  bite: '메갈로돈에게 물렸습니다!', lunge: '물 밖으로 덮친 메갈로돈에 깔렸습니다!', tail: '꼬리에 얻어맞았습니다.', rush: '돌진하는 메갈로돈에 부딪혔습니다.', ring: '충격파에 휩쓸렸습니다.',
+  slam: '골렘의 주먹에 내리찍혔습니다!', wave: '충격파에 넘어졌습니다. (점프로 넘을 수 있습니다)', hurl: '날아온 바위에 맞았습니다!', charge: '돌진하는 골렘에 치였습니다!',
+  pillar: '빛 기둥에 맞았습니다!', hellfire: '지옥불에 휩싸였습니다!', burn: '불 장판 위에서 타고 있습니다.', dive: '내리꽂힌 날개에 휩쓸렸습니다!',
+};
+function initBosses(spMod, gMod) {
+  const meFn = () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2 && !MYHP.dead, x: me.x, y: me.y, z: me.z });
+  const onHitMe = (h) => {
+    if (!entered || !meRec) return;
+    const now = performance.now();
+    hitFlash(meRec); meRec.ctrl.knock(h.dx, h.dz, h.power);
+    if (mq) mq.boostUntil = now + 700;
+    const kind = h.boss || 'spider';
+    hurtMe(typeof h.dmg === 'number' ? h.dmg : HURT[h.src === 'swipe' ? 'swipe' : h.src === 'spit' ? 'spit' : 'bite'], BOSS_HURT_NAME[kind] || '보스');
+    if (h.src !== 'burn') camShake(0.5, 0.35);
+    sendPresence(now, true);
+    if (h.poison) { SLOW.poison = 0.55; SLOW.until = now + 2600; }
+    if (evtOk('*', 'bosshitlog:' + h.src, 1500)) netLog(null, BOSS_HIT_MSG[h.src] || '보스에게 맞았습니다.', true);
+  };
+  const fx = { poof: (x, y, z, n) => PUFF.poof(x, y, z, n), spark: (x, y, z) => PUFF.spark(x, y, z), thump: (v) => thumpSound(clamp(v, 0, 1)), crown: (x, y, z, n) => PUFF.crown(x, y, z, coarse ? Math.ceil(n / 2) : n) };
+  const base = { THREE, scene, baseUrl: new URL('./bf/', location.href).href, myId, heightAt, canStand: bossLandOk, players: bossPlayers, me: meFn, onHitMe, fx };
+  const spider = spMod.createSpiderBoss({ ...base, me: () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2, x: me.x, y: me.y, z: me.z }), pushMe: (x, z) => { if (meRec && !mySeat && bossLandOk(x, z)) meRec.ctrl.teleport(x, z); } });
+  const gctx = { ...base, canSwim: bossSwimOk, canFly: bossFlyOk, waterLevel: () => WATER.level, camPos: () => camera.position, shake: (a, d) => camShake(a, d), sfx: (k, n, x, z) => bossSound(k, n, x, z) };
+  const map = { spider };
+  for (const k of ['shark', 'golem', 'seraph']) map[k] = gMod.createGiantBoss(gctx, k);
+  SPIDER = gMod.createBossHub(map);
+  SPIDER.on('spawn', (e) => { refreshBossUi(true); logLine(null, (BOSS_LOG[e.kind] || BOSS_LOG.spider).spawn, true); bossIntro(e.kind); });
   SPIDER.on('despawn', () => refreshBossUi(true));
-  SPIDER.on('gone', (e) => { refreshBossUi(true); logLine(null, e && e.dead ? '인면 거미가 쓰러졌습니다.' : '인면 거미가 사라졌습니다.', true); });
-  SPIDER.on('die', () => logLine(null, '인면 거미를 쓰러뜨렸습니다!', true));
-  SPIDER.on('rage', () => logLine(null, '거미가 분노했습니다! 더 빠르고 더 자주 공격합니다.', true));
+  SPIDER.on('gone', (e) => { refreshBossUi(true); const n = (BOSS_LOG[e.kind] || BOSS_LOG.spider).gone; logLine(null, e && e.dead ? `${n}이(가) 쓰러졌습니다.` : `${n}이(가) 사라졌습니다.`, true); });
+  SPIDER.on('die', (e) => logLine(null, (BOSS_LOG[e.kind] || BOSS_LOG.spider).die, true));
+  SPIDER.on('rage', (e) => logLine(null, `${BOSS_HURT_NAME[e.kind] || '보스'}이(가) 분노했습니다! 더 빠르고 더 자주 공격합니다.`, true));
   SPIDER.on('takeover', () => logLine(null, '보스를 이어 받아 진행합니다.', true));
   SPIDER.on('request-despawn', () => bossDelete(true));
   BOSS_UI.btn.disabled = false;
-  BOSS_UI.btn.addEventListener('click', () => { initAudio(); SPIDER.active ? bossDelete(false) : bossCreate(); canvas.focus({ preventScroll: true }); });
+  BOSS_UI.btn.addEventListener('click', () => { initAudio(); if (SPIDER.active) { bossDelete(false); $('bossPick').hidden = true; } else $('bossPick').hidden = !$('bossPick').hidden; canvas.focus({ preventScroll: true }); });
+  for (const b of $('bossPick').querySelectorAll('button[data-kind]')) b.addEventListener('click', () => { initAudio(); $('bossPick').hidden = true; bossCreate(b.dataset.kind); canvas.focus({ preventScroll: true }); });
 }
-function bossCreate() {
+let introTimer = 0;
+function bossIntro(kind) {
+  const v = SPIDER && SPIDER.view; if (!v || !v.active) return;
+  const [nm, sub] = (v.title || '').split(' · ');
+  $('bossIntroName').textContent = sub || nm || ''; $('bossIntroSub').textContent = sub ? nm : '';
+  $('bossIntro').classList.add('on'); clearTimeout(introTimer); introTimer = setTimeout(() => $('bossIntro').classList.remove('on'), 2800);
+}
+// ---------- boss sounds: synthesised on the spot (no recorded audio) ----------
+function bossSound(kind, name, x, z) {
+  if (!actx || actx.state !== 'running' || !evtOk('*', 'bsnd:' + name, 90)) return;
+  const d = Math.hypot(x - me.x, z - me.z), lv = clamp(1.15 - d / 90, 0.12, 1);
+  const t = actx.currentTime;
+  const env = (node, a, peak, dur) => { const g = actx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak * lv), t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); node.connect(g); g.connect(sfx); return g; };
+  const osc = (type, f0, f1, a, peak, dur, delay = 0) => { const o = actx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t + delay); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + delay + dur); env(o, a + delay, peak, dur + delay); o.start(t + delay); o.stop(t + delay + dur + 0.05); return o; };
+  const noise = (type, f0, f1, q, a, peak, dur) => { const src = actx.createBufferSource(), bq = actx.createBiquadFilter(); src.buffer = whiteBuffer(); src.loop = true; bq.type = type; bq.Q.value = q; bq.frequency.setValueAtTime(f0, t); bq.frequency.exponentialRampToValueAtTime(Math.max(30, f1), t + dur); src.connect(bq); env(bq, a, peak, dur); src.start(t); src.stop(t + dur + 0.05); };
+  const roar = (f, dur, gr) => { const o = actx.createOscillator(), lfo = actx.createOscillator(), lg = actx.createGain(), lp = actx.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.setValueAtTime(f * 1.4, t); o.frequency.exponentialRampToValueAtTime(f, t + dur * 0.3); o.frequency.exponentialRampToValueAtTime(f * 0.6, t + dur); lfo.frequency.value = gr; lg.gain.value = f * 0.25; lfo.connect(lg); lg.connect(o.frequency); lp.type = 'lowpass'; lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(240, t + dur); o.connect(lp); env(lp, 0.15, 0.55, dur); o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05); };
+  const rumble = (dur, peak = 0.8) => { osc('sine', 52, 30, 0.08, peak, dur); noise('lowpass', 260, 60, 0.7, 0.1, peak * 0.9, dur); };
+  if (name === 'intro' || name === 'rage' || name === 'die') {
+    const dur = name === 'die' ? 3.2 : 2.6;
+    if (kind === 'shark') { roar(70, dur, 9); noise('lowpass', 900, 160, 0.5, 0.05, 0.9, dur); }
+    else if (kind === 'golem') { rumble(dur + 0.6, 1); roar(48, dur, 4); noise('bandpass', 420, 140, 1.4, 0.3, 0.5, dur); }
+    else if (kind === 'seraph') { [262, 330, 392, 523].forEach((f, i) => osc('sine', f, name === 'die' ? f * 0.5 : f, 0.4, 0.16, dur, i * 0.05)); roar(58, dur, 6); osc('sawtooth', 110, 98, 0.3, 0.12, dur); }
+    return;
+  }
+  switch (name) {
+    case 'snap': noise('bandpass', 2200, 900, 1.2, 0.004, 0.9, 0.18); osc('square', 140, 60, 0.004, 0.4, 0.2); break;
+    case 'splash': noise('lowpass', 2400, 300, 0.6, 0.01, 1, 1.4); osc('sine', 90, 40, 0.01, 0.5, 0.6); break;
+    case 'bite': case 'tail': case 'rush': case 'lunge': roar(90, 1.0, 11); break;
+    case 'slam': case 'impact': rumble(1.6, 1); noise('bandpass', 900, 200, 1, 0.005, 0.9, 0.5); break;
+    case 'step': rumble(0.5, 0.45); break;
+    case 'grab': noise('bandpass', 600, 220, 2, 0.05, 0.6, 0.8); break;
+    case 'whoosh': noise('bandpass', 300, 1600, 3, 0.2, 0.6, 0.7); break;
+    case 'hurl': case 'charge': roar(55, 1.2, 4); break;
+    case 'slam_': break;
+    case 'pillar': [523, 659, 784].forEach((f, i) => osc('sine', f, f * 1.01, 0.3, 0.12, 1.8, i * 0.08)); break;
+    case 'beam': osc('sine', 300, 1600, 0.01, 0.4, 0.5); noise('highpass', 3000, 6000, 0.7, 0.01, 0.4, 0.6); rumble(0.6, 0.5); break;
+    case 'hellfire': osc('sawtooth', 82, 62, 0.2, 0.3, 1.6); noise('lowpass', 700, 300, 0.6, 0.2, 0.6, 1.6); break;
+    case 'fire': noise('lowpass', 1800, 400, 0.6, 0.05, 0.8, 0.9); break;
+    case 'burst': noise('lowpass', 1400, 200, 0.6, 0.005, 0.9, 0.7); osc('sine', 110, 45, 0.005, 0.5, 0.5); break;
+    case 'dive': noise('bandpass', 200, 1200, 2, 0.6, 0.7, 1.9); roar(64, 1.4, 6); break;
+    default: break;
+  }
+}
+function bossCreate(kind = 'spider') {
   if (!SPIDER || SPIDER.active || !entered || !meRec) return;
   let spot = null;
-  // the root: the face ends up ~20 m from me. The body is ~40 m long, so prefer a spot whose ground is fairly level all round (the beach rises into a hill behind)
-  const level = (x, z) => { let lo = 1e9, hi = -1e9; for (const [dx, dz] of [[0, 0], [14, 0], [-14, 0], [0, 14], [0, -14]]) { const h = heightAt(x + dx, z + dz); lo = Math.min(lo, h); hi = Math.max(hi, h); } return hi - lo; };
-  outer: for (const r of [30, 24, 36]) for (const da of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, Math.PI]) {
-    const a = me.ry + da, x = me.x - Math.sin(a) * r, z = me.z - Math.cos(a) * r;
-    if (bossLandOk(x, z) && level(x, z) < 3.2) { spot = { x, z }; break outer; }
+  if (kind === 'shark') {   // the nearest deep water about 20-40 m away, preferring the direction I face
+    let bd = 1e9;
+    for (let r = 18; r <= 60; r += 6) for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2, x = me.x - Math.sin(a) * r, z = me.z - Math.cos(a) * r;
+      if (!bossSwimOk(x, z) || !bossSwimOk(x + 6, z) || !bossSwimOk(x - 6, z) || !bossSwimOk(x, z - 8)) continue;
+      const sc = r + Math.abs(((a - me.ry + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * 6; if (sc < bd) { bd = sc; spot = { x, z }; }
+    }
+    if (!spot) spot = { x: 0, z: -40 };
+  } else if (kind === 'seraph') {
+    for (const r of [26, 20, 32]) { const x = me.x - Math.sin(me.ry) * r, z = me.z - Math.cos(me.ry) * r; if (bossFlyOk(x, z)) { spot = { x, z }; break; } }
+    if (!spot) spot = { x: 0, z: 22 };
+  } else {
+    // the root: the face ends up ~20 m from me. The body is ~40 m long, so prefer a spot whose ground is fairly level all round (the beach rises into a hill behind)
+    const level = (x, z) => { let lo = 1e9, hi = -1e9; for (const [dx, dz] of [[0, 0], [14, 0], [-14, 0], [0, 14], [0, -14]]) { const h = heightAt(x + dx, z + dz); lo = Math.min(lo, h); hi = Math.max(hi, h); } return hi - lo; };
+    outer: for (const r of kind === 'golem' ? [24, 30, 20] : [30, 24, 36]) for (const da of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, Math.PI]) {
+      const a = me.ry + da, x = me.x - Math.sin(a) * r, z = me.z - Math.cos(a) * r;
+      if (bossLandOk(x, z) && level(x, z) < 3.2) { spot = { x, z }; break outer; }
+    }
+    if (!spot) spot = { x: 0, z: 18 };
   }
-  if (!spot) spot = { x: 0, z: 18 };
-  SPIDER.spawn(spot.x, spot.z, Math.atan2(-(me.x - spot.x), -(me.z - spot.z)));
+  SPIDER.spawn(spot.x, spot.z, Math.atan2(-(me.x - spot.x), -(me.z - spot.z)), kind);
   bossSendNow();
 }
 function bossDelete(dead) {
@@ -2514,17 +2603,18 @@ function bossStrike(cx, cz, y) {   // my punch's contact frame: tell the owner (
 }
 function refreshBossUi(force) {
   if (!SPIDER) return;
-  const v = SPIDER.view, key = v.active ? `${Math.ceil(v.hp)}/${v.maxHp}/${v.rage ? 1 : 0}/${v.dying ? 1 : 0}/${v.minions}/${v.spawnT > 0 ? 1 : 0}` : 'off';
+  const v = SPIDER.view, key = v.active ? `${v.kind}/${Math.ceil(v.hp)}/${v.maxHp}/${v.rage ? 1 : 0}/${v.dying ? 1 : 0}/${v.minions}/${v.haz || 0}/${v.spawnT > 0 ? 1 : 0}` : 'off';
   if (!force && key === BOSS_UI.last) return;
   BOSS_UI.last = key;
   BOSS_UI.bar.hidden = !v.active;
+  if (v.active) $('bossName').textContent = v.title || '보스';
   BOSS_UI.btn.textContent = v.active ? '보스 삭제' : '보스 생성'; BOSS_UI.btn.setAttribute('aria-pressed', v.active ? 'true' : 'false');
   if (!v.active) return;
   const k = v.maxHp > 0 ? clamp(v.hp / v.maxHp, 0, 1) : 0;
   BOSS_UI.fill.style.transform = `scaleX(${k})`; BOSS_UI.ghost.style.transform = `scaleX(${k})`;
   BOSS_UI.txt.textContent = `${Math.ceil(v.hp)} / ${v.maxHp}`;
   BOSS_UI.bar.classList.toggle('rage', v.rage);
-  BOSS_UI.state.textContent = v.dying ? '쓰러졌습니다' : v.spawnT > 0 ? '올라오는 중…' : v.rage ? '분노' : (v.minions ? `새끼 거미 ${v.minions}마리` : '');
+  BOSS_UI.state.textContent = v.dying ? '쓰러졌습니다' : v.spawnT > 0 ? '나타나는 중…' : v.rage ? '분노' : (v.minions ? `새끼 거미 ${v.minions}마리` : v.haz ? `불 장판 ${v.haz}곳` : '');
 }
 function bossFrame(dt, t, now) {
   if (!SPIDER) return;
@@ -2539,7 +2629,7 @@ function bossFrame(dt, t, now) {
   if (now < SLOW.until) f = Math.min(f, 1 - SLOW.poison); else SLOW.poison = 0;
   if (Math.abs(f - SLOW.cur) > 0.01) { SLOW.cur = f; for (const k in SLOW.base) KIT_TUNING[k] = SLOW.base[k] * f; }
 }
-import('./bf/spider.js').then(initSpider).catch((e) => { console.warn('[bonfire] could not load bf/spider.js', e && e.message); if (LOCAL) window.__bossLoadErr = String((e && e.stack) || e); });
+Promise.all([import('./bf/spider.js'), import('./bf/bosses.js')]).then(([a, b]) => initBosses(a, b)).catch((e) => { console.warn('[bonfire] could not load the bosses', e && e.message); if (LOCAL) window.__bossLoadErr = String((e && e.stack) || e); });
 
 // ---------- weapons (bf/weapons.js; models bf/sword.glb · m4a1.glb · shotgun.glb from tools/weapons/build_weapons.py) ----------
 // 1 bare hands (the kit's chop) · 2 sword (3-hit combo + a flying crescent) · 3 M4A1 (30 rounds, auto) · 4 pump shotgun. Damage lands on the boss and its minions
@@ -2676,7 +2766,7 @@ if (location.hostname === '127.0.0.1') {   // local test read-out only
     get info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures }; },
     setCamHook(f) { camHook = f; }, get camera() { return camera; }, hideMe(v) { if (meRec) meRec.av.root.visible = !v; },
     get wpn() { return WP; }, get hp() { return { ...MYHP }; }, hurt: (n, w) => hurtMe(n, w), get sens() { return SENS.v; }, wpnTune: (slot, k, v) => { const T_ = WP.debug.POSE[slot]; if (T_) T_[k] = v; },
-    get spider() { return SPIDER; }, bossCreate, bossDelete, bossStrike, get slow() { return { ...SLOW }; }, get webSlow() { return SPIDER ? SPIDER.slowAt(me.x, me.z) : 1; },
+    get spider() { return SPIDER; }, bossCreate, bossDelete, camShake, bossStrike, get slow() { return { ...SLOW }; }, get webSlow() { return SPIDER ? SPIDER.slowAt(me.x, me.z) : 1; },
     get myAp() { return { ...myAp, code: myApCode, ch: myChar, color: myColor }; }, get pv() { return pv; },
     get diag() { return { mqIn, mqPresIn, brokers: mqLiveCount(), others: [...others.keys()], lastSent: mq ? Math.round(performance.now() - mq.lastSent) : null }; },
   };
