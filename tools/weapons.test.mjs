@@ -311,12 +311,10 @@ console.warn = () => {};
   ok(up.top > lvl.top && lvl.top > down.top, 'looking up throws higher');
   ok(Math.hypot(...C.throwVel(0, -0.5)) <= C.GREN.speed * 1.6, 'the strongest throw still passes the message guard');
   ok(C.sanitizeWpn(C.wpnMsg.grenade([0, 1, 0], C.throwVel(1, -0.5))) !== null, 'an upward throw is accepted by others');
-  // 반동: 연사로 누적, 조준하면 줄고, 멈추면 돌아온다
-  const a0 = C.recoilKick(3, 0, 0, 0)[0], a9 = C.recoilKick(3, 9, 0, 0)[0], ads = C.recoilKick(3, 9, 1, 0)[0];
-  ok(a9 > a0 && ads < a9, 'recoil grows in a burst and shrinks while aiming');
-  let acc = 0.2; for (let i = 0; i < 60; i++) acc -= C.recoilRecover(acc, 1 / 60, false); ok(acc < 0.01, 'recoil returns within a second after the trigger is released');
-  let acc2 = 0.2; for (let i = 0; i < 10; i++) acc2 -= C.recoilRecover(acc2, 1 / 60, true); ok(acc2 > 0.15, 'while firing the recoil mostly stays');
-  ok(C.GUN_SLOTS.every((s) => C.RECOIL[s]), 'every gun has recoil');
+  // 반동: 모든 총에서 0 — 연사·조준·무작위 좌우 어느 쪽도 시점을 움직이지 않는다
+  ok(C.GUN_SLOTS.every((s) => [0, 3, 9, 12, 40].every((n) => [0, 1].every((a) => [-1, 0, 1].every((r) => { const [u, d] = C.recoilKick(s, n, a, r); return u === 0 && d === 0; })))), 'no gun kicks the view up or sideways, however long the burst');
+  ok(C.recoilRecover(0, 1 / 60, true) === 0, 'nothing to recover when no recoil builds up');
+  ok(C.GUN_SLOTS.every((s) => C.RECOIL[s] && C.RECOIL[s][0] === 0 && C.RECOIL[s][1] === 0), 'every gun has a recoil entry, and it is zero');
   ok([3, 4, 5, 7].every((s) => C.CASING[s]) && C.CASING[4].shell, 'every cartridge gun ejects a casing (shotgun: a shell)');
   // 상하 조준: 위를 보면 위로, 아래를 보면 아래로(땅에 붙지 않음)
   ok(C.aimDir(0, -0.6)[1] > 0.5 && C.aimDir(0, 0.6)[1] < -0.3 && Math.abs(Math.hypot(...C.aimDir(1, 0.3)) - 1) < 1e-9, 'aim direction follows the camera pitch');
