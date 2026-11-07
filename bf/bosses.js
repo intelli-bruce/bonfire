@@ -197,11 +197,11 @@ export function createGiantBoss(ctx, kind) {
     return ctx.heightAt(x, z);
   }
   function standOk(x, z) { return D.water ? ctx.canSwim(x, z) : D.fly ? ctx.canFly(x, z) : ctx.canStand(x, z); }
-  function spawn(x, z, ry) {
+  function spawn(x, z, ry, born) {
     if (B.active) return false;
     const n = Math.max(1, ctx.players().length);
     resetState();
-    B.active = true; B.owner = true; B.ownerId = ctx.myId; B.ep = 0; B.born = Date.now(); B.seq = 0;
+    B.active = true; B.owner = true; B.ownerId = ctx.myId; B.ep = 0; B.born = born > 0 ? born : Date.now(); B.seq = 0;
     B.x = x; B.z = z; B.ry = ry; B.y = baseY(x, z); B.maxHp = B.hp = D.hp + D.hpPerExtra * (n - 1);
     B.a = 'spawn'; B.spawnT = D.spawnT; B.ac++;
     R.tx = x; R.tz = z; R.ty = B.y; R.try_ = ry; R.lastSnap = performance.now();
@@ -856,4 +856,90 @@ export function createBossHub(map) {
     on(k, f) { (listeners[k] = listeners[k] || []).push(f); },
   };
   return hub;
+}
+
+// ---------- 여러 마리 동시 소환: 보스 명부(roster) ----------
+// const R = createBossRoster({ spider: () => createSpiderBoss(ctx), golem: () => createGiantBoss(gctx, 'golem'), … }, { cap: 8, me: () => ({ x, z }) })
+// 보스마다 따로 만든 인스턴스를 born(태어난 시각 ms, 접속자 모두에게 같은 값)으로 구분한다. 같은 종류도 여러 마리.
+// 허브와 같은 이름(active · owner · view · BOSS · hitTest · hitRay · damage · slowAt · update · on)을 그대로 내므로 무기 코드는 그대로 쓴다.
+// 맞은 곳 id 는 「보스 꼬리표 × HID + 안쪽 id」로 묶어 보낸다(꼬리표 = born % 90000 + 1, 무기 메시지 id 상한 1e9 안).
+export const ROSTER_CAP = 8;
+export const HID = 10000;
+export const tagOf = (born) => (Math.floor(born) % 90000) + 1;
+export function createBossRoster(factories, opt = {}) {
+  const cap = opt.cap || ROSTER_CAP;
+  const meFn = opt.me || (() => ({ x: 0, z: 0 }));
+  const KL = [...KIND_LIST, ...Object.keys(factories).filter((k) => !KIND_LIST.includes(k))];
+  const list = [];                    // [{ kind, b, born, tag }]
+  const listeners = {};
+  const EVS = ['spawn', 'despawn', 'gone', 'die', 'rage', 'takeover', 'request-despawn', 'hp', 'headbreak'];
+  let lastBorn = 0;
+  const emit = (ev, v) => { for (const f of listeners[ev] || []) { try { f(v); } catch (e) { /* listener */ } } };
+  function make(kind) {
+    const f = factories[kind]; if (!f) return null;
+    const b = f(); if (!b) return null;
+    const e = { kind, b, born: 0, tag: 0 };
+    for (const ev of EVS) b.on(ev, (v) => emit(ev, { ...(v || {}), kind, born: e.born || b.view.born }));
+    return e;
+  }
+  const setBorn = (e, born) => { e.born = born; e.tag = tagOf(born); };
+  const live = () => list.filter((e) => e.b.active);
+  const byTag = (tag) => list.find((e) => e.tag === tag && e.b.active) || null;
+  const viewOf = (e) => { const v = e.b.view; return e.kind === 'spider' ? { camR: 1, camLift: 1, act: '', ...v, kind: 'spider', name: '인면 거미', title: '인면 거미 · 직녀', born: e.born } : { ...v, born: e.born }; };
+  function nearest() {
+    const m = meFn(); let best = null, bd = 1e18;
+    for (const e of live()) { const v = e.b.view; if (v.dying && best) continue; const d = (v.x - m.x) ** 2 + (v.z - m.z) ** 2 + (v.dying ? 1e12 : 0); if (d < bd) { bd = d; best = e; } }
+    return best;
+  }
+  const enc = (e, id) => e.tag * HID + (Math.round(id) % HID);
+  function prune() { for (let i = list.length - 1; i >= 0; i--) if (!list[i].b.active) list.splice(i, 1); }
+  const R = {
+    cap, kinds: KL.filter((k) => factories[k]),
+    get count() { return live().length; },
+    get full() { return live().length >= cap; },
+    get active() { return live().length > 0; },
+    get owner() { return live().some((e) => e.b.owner); },
+    get ownerId() { const e = nearest(); return e ? e.b.ownerId : ''; },
+    get kind() { const e = nearest(); return e ? e.kind : ''; },
+    get view() { const e = nearest(); return e ? viewOf(e) : { active: false, kind: '', born: 0, hp: 0, maxHp: 0, minions: 0, spawnT: 0, dying: false, rage: false, x: 0, z: 0, ry: 0, camR: 1, camLift: 1 }; },
+    views() { return live().map(viewOf); },
+    get BOSS() { const e = nearest(); return e ? e.b.BOSS : { hitReach: 34 }; },
+    get MINI() { const e = list.find((q) => q.kind === 'spider'); return e ? e.b.MINI : null; },
+    get debug() { const e = nearest(); return e ? e.b.debug : null; },
+    get(born) { const e = list.find((q) => q.born === born && q.b.active); return e ? e.b : null; },
+    of(id) { const e = byTag(Math.floor(id / HID)); return e ? e.b : null; },
+    spawn(x, z, ry, kind = 'spider') {
+      prune();
+      if (live().length >= cap) return false;
+      const e = make(kind); if (!e) return false;
+      const born = Math.max(Date.now(), lastBorn + 1);
+      if (!e.b.spawn(x, z, ry, born)) return false;
+      lastBorn = born; setBorn(e, e.b.view.born || born); list.push(e);
+      return e.born;
+    },
+    despawn(born) { for (const e of list.slice()) if (born === undefined || e.born === born) { if (e.b.active) e.b.despawn(); } prune(); },
+    update(dt, t) { for (const e of list.slice()) e.b.update(dt, t); prune(); },
+    snapshots() { const out = []; for (const e of live()) if (e.b.owner) { const s = e.b.snapshot(); if (s) out.push(s); } return out; },
+    snapshot() { return R.snapshots()[0] || null; },
+    applySnapshot(d, senderId) {
+      if (!d || typeof d !== 'object' || typeof d.b !== 'number' || !Number.isFinite(d.b) || d.b <= 0) return false;
+      const kind = typeof d.kd === 'string' ? d.kd : 'spider';
+      if (!factories[kind]) return false;
+      const ex = list.find((q) => q.born === d.b);
+      if (ex) return ex.kind === kind ? ex.b.applySnapshot(d, senderId) : false;
+      prune();
+      if (live().length >= cap) return false;
+      const e = make(kind); if (!e) return false;
+      if (!e.b.applySnapshot(d, senderId)) { if (e.b.active) e.b.despawn(); return false; }
+      setBorn(e, d.b); list.push(e);
+      return true;
+    },
+    hitTest(cx, cz, r, y) { const out = []; for (const e of live()) for (const h of e.b.hitTest(cx, cz, r, y)) out.push({ ...h, id: enc(e, h.id), born: e.born }); return out; },
+    hitRay(...a) { let best = null; for (const e of live()) { const h = e.b.hitRay(...a); if (h && (!best || h.d < best.d)) best = { ...h, id: enc(e, h.id), born: e.born }; } return best; },
+    damage(kind, id, ...rest) { const e = byTag(Math.floor(id / HID)); return e ? e.b.damage(kind, id % HID, ...rest) : false; },
+    slowAt(x, z) { let s = 1; for (const e of live()) s = Math.min(s, e.b.slowAt(x, z)); return s; },
+    act(code, born) { const e = born ? list.find((q) => q.born === born && q.b.active) : nearest(); return e && e.b.act ? e.b.act(code) : false; },
+    on(k, f) { (listeners[k] = listeners[k] || []).push(f); },
+  };
+  return R;
 }
