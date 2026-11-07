@@ -13,6 +13,7 @@ import { applyLook, spring, breath as breathe } from './bosslook.js';
 //       · hdive(날아올라 내리꽂는 비행 강하 + 충격파).
 
 import { rayCapsule } from './weapons-core.js';
+import { bossVfx } from './bossfx.js';   // 셰이더 재질 + 풀링 파티클(공용 · node 테스트에선 아무것도 안 하는 가짜)
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -100,10 +101,32 @@ export const ACTS = new Set(['idle', 'move', 'spawn', 'die', ...DEF.patterns.map
 export const LOG = { spawn: '하늘이 붉게 물들고 뼈 가면 히드라가 내려앉습니다! 세 머리가 동시에 울부짖습니다.', die: '히드라의 마지막 머리가 쓰러졌습니다!', gone: '히드라' };
 export const HIT_MSG = { hbreath: '히드라의 화염 브레스에 휩싸였습니다!', hsnap: '히드라의 머리에 물렸습니다!', hsweep: '가시 꼬리에 휩쓸렸습니다! (점프로 넘을 수 있습니다)', hdive: '내리꽂힌 히드라에 깔렸습니다!', hring: '충격파에 휩쓸렸습니다.' };
 
+// 꼬리 휩쓸기 궤적 셰이더(공용 slash 는 호 끝이 뚝 끊겨서, 앞날 → 꼬리로 점점 사라지는 이 전용을 쓴다). 부채꼴 안 각도 φ∈[-len, 0] 가 앞날 0 → 꼬리 끝 -len.
+const ARC_LEN = 2.2;
+const ARC_V = /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const ARC_F = /* glsl */`uniform vec3 uC; uniform vec3 uHot; uniform float uO; uniform float uT; uniform float uLen; uniform float uTime; varying vec2 vUv;
+float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+void main(){
+  vec2 d = vUv - 0.5; float r = length(d) * 2.0, ang = atan(d.y, d.x);
+  float tr = clamp(-ang / uLen, 0.0, 1.0);                       // 0 = 앞날, 1 = 꼬리 끝
+  float t = clamp((r - 0.6) / 0.4, 0.0, 1.0);                    // 0 = 안쪽, 1 = 바깥
+  float n = vn(vec2(ang * 9.0 - uTime * 3.0, r * 16.0)) * 0.65 + vn(vec2(ang * 23.0, r * 40.0 + uTime * 2.0)) * 0.35;
+  float blade = smoothstep(0.0, 0.25, t) * smoothstep(1.0, 0.72, t);
+  float edge = exp(-pow((t - 0.8) * 7.0, 2.0)) * pow(1.0 - tr, 2.5);
+  float fade = pow(1.0 - tr, 1.7);
+  float a = (blade * (0.25 + 0.85 * n) * fade + edge * 0.9) * smoothstep(uT - 0.25, uT + 0.05, n * 0.8 + (1.0 - tr) * 0.3);
+  a *= uO; if (a < 0.003) discard;
+  gl_FragColor = vec4(mix(uC, uHot, clamp(edge * 1.3, 0.0, 1.0)) * a, a);
+}`;
+
 // ---------------------------------------------------------------------------------------------------------------------
 export function createHydraBoss(ctx) {
   const kind = 'hydra', D = DEF;
   const { THREE, scene } = ctx;
+  const VX = bossVfx(THREE, scene);   // 셰이더 재질 + 풀링 파티클(보스 공용)
+  const acc = {};   // 초당 방출량을 프레임 수와 무관하게 맞추는 누적기
+  const rate = (k, perSec, dt) => { const v = (acc[k] || 0) + perSec * dt, n = Math.floor(v); acc[k] = v - n; return n; };
   const B = { kind, active: false, owner: false, ownerId: '', ep: 0, born: 0, x: 0, z: 0, y: 0, ry: 0, hp: 0, maxHp: 0, a: 'idle', ac: 0, sa: 0, tx: 0, tz: 0, pt: [], seq: 0, spawnT: 0, dieT: 0, rage: false, haz: [], hh: [0, 0, 0], hMax: 0, pitch: 0 };
   const R = { tx: 0, tz: 0, ty: 0, try_: 0, lastAc: 0, lastSnap: 0 };
   const O = { cd: {}, gap: 1.2, hitAt: new Map(), hazId: 0 };
@@ -159,10 +182,11 @@ export function createHydraBoss(ctx) {
     const local = (bn, p) => { const v = new THREE.Vector3(...bl(p)); if (bones[bn]) v.applyMatrix4(rest[bn].invW); return v; };
     const hull = D.hull.map(([bn, a, b, r, col, hd]) => ({ bone: bones[bn], a: local(bn, a), b: local(bn, b), r, col: !!col, hd }));
     const mouths = HEADS.map((k) => ({ bone: bones[`head${k}`], p: local(`head${k}`, mouthPt(k)) }));
+    const tail = { bone: bones.t4, p: local('t4', TAIL[4]) };   // 꼬리 끝(휩쓸기 궤적·불똥)
     const light = new THREE.PointLight('#ff5a1e', 0, 46, 1.6); root.add(light); light.position.set(0, 13, -9);
     scene.add(root);
     const qs = { q: new THREE.Quaternion(), qa: new THREE.Quaternion() };
-    const R = { root, bones, lods, mats, base, rest, hull, mouths, light, eyeMat, flash: 0, flashK: 1, qs, lod: -1, sp: {} };
+    const R = { root, bones, lods, mats, base, rest, hull, mouths, tail, light, eyeMat, flash: 0, flashK: 1, qs, lod: -1, sp: {} };
     applyLook(THREE, R, LOOK, 'hydraLook');
     return R;
   }
@@ -209,11 +233,14 @@ export function createHydraBoss(ctx) {
   function despawn() { const was = B.active; resetState(); if (was) emit('despawn', { kind }); }
   function intro() {   // 하늘에서 날개를 치며 내려앉는다: 바닥에 붉은 원 → 착지 때 흙먼지 · 충격파 · 큰 흔들림
     ctx.sfx(kind, 'intro', B.x, B.z); ctx.shake(0.7, 2.0);
-    addFx({ type: 'ring', x: B.x, z: B.z, r0: 18, r1: 6, t: 0, life: D.spawnT * 0.8, hit: false, color: '#ff3a1a' });
+    addFx({ type: 'ring', x: B.x, z: B.z, r0: 18, r1: 6, t: 0, life: D.spawnT * 0.8, hit: false, warn: true, color: '#ff3a1a' });
     setTimeout(() => {
       if (!B.active) return;
       ctx.shake(1.3, 1.2); ctx.sfx(kind, 'impact', B.x, B.z);
       for (let i = 0; i < 12; i++) ctx.fx.poof(B.x + (Math.random() - 0.5) * 16, ctx.heightAt(B.x, B.z) + 0.2, B.z + (Math.random() - 0.5) * 16, 6);
+      const gy = ctx.heightAt(B.x, B.z);   // 착지: 날개바람에 밀린 흙먼지 고리 · 파편 · 섬광 · 불티
+      VX.impact(B.x, gy, B.z, { color: '#ffc890', hot: '#ffffff', sparks: 40, smokeKind: 'dust', smokeN: 24, size: 2.2 });
+      VX.burst('debris', B.x, gy, B.z, { n: 44, speed: 1.3, spread: 3 }); VX.burst('fire', B.x, gy, B.z, { n: 14, color: '#c02010', speed: 2, size: 1.4 });
       addFx({ type: 'ring', x: B.x, z: B.z, r0: 4, r1: 30, t: 0, life: 1.4, hit: false, color: '#e0b090' });
     }, D.spawnT * 820);
   }
@@ -298,6 +325,15 @@ export function createHydraBoss(ctx) {
     if (rig && rig.mouths[i].bone && tv) { tv.copy(rig.mouths[i].p).applyMatrix4(rig.mouths[i].bone.matrixWorld); return { x: tv.x, y: tv.y, z: tv.z }; }
     return restW(mouthPt(HEADS[i]));
   }
+  function tailW() {   // 꼬리 끝(세계 좌표)
+    if (rig && rig.tail.bone && tv) { tv.copy(rig.tail.p).applyMatrix4(rig.tail.bone.matrixWorld); return { x: tv.x, y: tv.y, z: tv.z }; }
+    return restW(TAIL[4]);
+  }
+  // 입 → 목표로 뻗는 불줄기의 방향·길이(눈에 보이는 원뿔과 같은 값)
+  function flameVec(m, q, k) {
+    const gy = ctx.heightAt(q[0], q[1]) + 0.4, dx = q[0] - m.x, dy = gy - m.y, dz = q[1] - m.z, l = Math.hypot(dx, dy, dz) || 1;
+    return { ux: dx / l, uy: dy / l, uz: dz / l, L: l * (0.6 + 0.65 * k), gy };
+  }
   function runPattern(dt) {
     const a = act.cur; if (!a) return;
     a.t += dt;
@@ -307,8 +343,17 @@ export function createHydraBoss(ctx) {
     if (a.code === 'hbreath') {   // 0~1.0 s 머리를 뒤로 젖혀 숨을 모음(입 안이 달아오름) → 1.0~2.9 s 머리마다 자기 목표로 불줄기 → 땅에 불 장판
       turnTo(tgA, 1.1);
       if (once(a, 'charge', 0.15)) ctx.sfx(kind, 'charge', B.x, B.z);
+      if (a.t < 1.0) for (let i = 0; i < 3; i++) {   // 숨 모음: 입 둘레에 불씨가 모이고 빛이 차오른다(머리마다 따로)
+        if (!headUp(i)) continue;
+        const m = mouthW(i), c = ease(clamp(a.t, 0, 1));
+        for (let s = rate('ch' + i, 30 + 110 * c, dt); s-- > 0;) { const an = Math.random() * TAU, rr = 2.2 + Math.random() * 2.8 * (1 - 0.6 * c); VX.burst('ember', m.x + Math.cos(an) * rr, m.y + (Math.random() - 0.4) * rr, m.z + Math.sin(an) * rr, { n: 1, speed: 0.3, spread: 0.3, size: 0.8 + c }); }
+        for (let s = rate('chl' + i, 8 + 30 * c, dt); s-- > 0;) VX.burst('light', m.x, m.y, m.z, { n: 1, color: '#ff8a30', hot: '#fff0c0', spread: 1.2, speed: 0.5, size: 0.8 + c });
+      }
       if (a.t >= 1.0 && a.t < 2.9) {
-        if (once(a, 'fire', 1.0)) { ctx.sfx(kind, 'flame', B.x, B.z); ctx.shake(0.45, 1.8); }
+        if (once(a, 'fire', 1.0)) {
+          ctx.sfx(kind, 'flame', B.x, B.z); ctx.shake(0.45, 1.8);
+          for (let i = 0; i < 3; i++) if (headUp(i)) { const m = mouthW(i); VX.burst('flash', m.x, m.y, m.z, { color: '#ffb060', size: 0.8 }); VX.burst('fire', m.x, m.y, m.z, { n: 12, speed: 2, size: 1.2 }); VX.burst('spark', m.x, m.y, m.z, { n: 18 }); }
+        }
         for (let i = 0; i < 3; i++) {
           if (!headUp(i) || !a.pt[i]) continue;
           const m = mouthW(i), q = a.pt[i], k = clamp((a.t - 1.0) / 0.6, 0, 1);
@@ -317,6 +362,26 @@ export function createHydraBoss(ctx) {
           hitLine(m.x, m.z, ex, ez, 1.2 + 2.6 * k, 'hbreath', 4.5);
           if (a.t > 1.6 && once(a, 'pool' + i, 1.6) && B.owner && B.haz.length < 8) B.haz.push({ id: ++O.hazId, x: r2(q[0]), z: r2(q[1]), age: 0 });
           if (ctx.fx && Math.random() < dt * 24) ctx.fx.spark(ex + (Math.random() - 0.5) * 3, g(ex, ez) + Math.random() * 2, ez + (Math.random() - 0.5) * 3);
+          if (VX.ok) {   // 불줄기: 입에서 목표로 쏠리는 불길 · 불씨 · 불똥, 땅에 닿으면 바닥이 타오르고 연기가 인다
+            const fv = flameVec(m, q, k), cone = 3.2 * k + 0.3, fwd3 = [fv.ux, fv.uy, fv.uz];
+            for (let s = rate('fl' + i, 150, dt); s-- > 0;) {
+              const tt = Math.random() * fv.L, f0 = tt / fv.L, rc = cone * (0.12 + 0.88 * f0) * 0.5;
+              VX.burst('fire', m.x + fv.ux * tt + (Math.random() - 0.5) * rc, m.y + fv.uy * tt + (Math.random() - 0.5) * rc, m.z + fv.uz * tt + (Math.random() - 0.5) * rc, { n: 1, dir: fwd3, speed: 2.5, up: 0.4, spread: 0.2, size: 0.55 + 0.85 * f0 });
+            }
+            for (let s = rate('fe' + i, 45, dt); s-- > 0;) { const tt = Math.random() * fv.L; VX.burst('ember', m.x + fv.ux * tt, m.y + fv.uy * tt, m.z + fv.uz * tt, { n: 1, dir: fwd3, speed: 1.2, spread: 1.2 }); }
+            for (let s = rate('fs' + i, 28, dt); s-- > 0;) { const tt = fv.L * (0.3 + 0.7 * Math.random()); VX.burst('spark', m.x + fv.ux * tt, m.y + fv.uy * tt, m.z + fv.uz * tt, { n: 1, dir: fwd3, speed: 0.7, color: '#ffc060' }); }
+            if (0.6 + 0.65 * k >= 0.95) {   // 불줄기가 땅에 닿은 곳
+              if (once(a, 'gl' + i, a.t)) { VX.burst('flash', q[0], fv.gy + 0.6, q[1], { color: '#ff9040', size: 0.9 }); VX.burst('debris', q[0], fv.gy, q[1], { n: 12, color: '#3a2a20' }); }
+              for (let s = rate('gf' + i, 70, dt); s-- > 0;) VX.burst('fire', q[0], fv.gy, q[1], { n: 1, spread: 2.2, up: 0.9, size: 1.1 + k * 0.5 });
+              for (let s = rate('gs' + i, 16, dt); s-- > 0;) VX.burst('smoke', q[0], fv.gy + 1, q[1], { n: 1, spread: 2, size: 1.1 });
+              for (let s = rate('gm' + i, 26, dt); s-- > 0;) VX.burst('ember', q[0], fv.gy + 0.5, q[1], { n: 1, spread: 2.2, speed: 1.6 });
+            }
+          }
+          if (a.t > 1.6 && once(a, 'scorch' + i, 1.6)) {   // 불 장판이 생기는 순간: 폭발하듯 번진 뒤 가라앉는다
+            const gq = g(q[0], q[1]);
+            VX.impact(q[0], gq, q[1], { color: '#ff6a1a', hot: '#fff0b0', sparks: 24, smokeN: 8, size: 1.3 }); VX.burst('fire', q[0], gq, q[1], { n: 22, speed: 2, size: 1.4, spread: 2 });
+            addFx({ type: 'ring', x: q[0], z: q[1], r0: 1, r1: 8, t: 0, life: 0.6, hit: false, color: '#ff8a3a' });
+          }
         }
       }
     } else if (a.code === 'hsnap') {   // 세 머리가 차례로 앞을 덮쳐 문다
@@ -326,25 +391,59 @@ export function createHydraBoss(ctx) {
         const m = mouthW(i), [fx, fz] = fwd(B.ry);
         const c = { x: m.x + fx, z: m.z + fz };   // 머리가 땅까지 내리꽂힌다: 입 앞 반지름 6 m
         hitCircle(c.x, c.z, 6, 'hsnap', 4.5); ctx.fx.poof(c.x, g(c.x, c.z) + 0.2, c.z, 4); ctx.sfx(kind, 'snap', c.x, c.z); ctx.shake(0.3, 0.3);
+        const gc = g(c.x, c.z);   // 물리는 순간: 입 앞 섬광 · 땅을 때린 흙먼지·파편·불티 · 작은 충격파 고리
+        VX.burst('flash', m.x, m.y, m.z, { color: '#ffd9a0', size: 0.55 });
+        VX.impact(c.x, gc, c.z, { color: '#ffc890', hot: '#ffffff', sparks: 22, smokeKind: 'dust', smokeN: 10, size: 1.3 }); VX.burst('debris', c.x, gc, c.z, { n: 16, speed: 1.1 });
+        VX.burst('fire', m.x, m.y, m.z, { n: 6, speed: 1.2, size: 0.9 });
+        addFx({ type: 'ring', x: c.x, z: c.z, r0: 1, r1: 8, t: 0, life: 0.5, hit: false, color: '#ffd0a0' });
+      }
+      if (a.t > 0.5 && a.t < 1.1) for (let i = 0; i < 3; i++) if (headUp(i)) {   // 내리꽂는 동안 입에서 흐르는 불티
+        const m = mouthW(i); for (let s = rate('sn' + i, 40, dt); s-- > 0;) VX.burst('ember', m.x, m.y, m.z, { n: 1, spread: 0.6, speed: 0.8 });
       }
     } else if (a.code === 'hsweep') {   // 0.5 s 웅크림 → 몸을 한 바퀴 돌리며 가시 꼬리로 바닥을 쓸어버림(점프로 넘김) → 버팀
       if (a.t < 0.5) turnTo(tgA, 1.2);
-      else if (a.t < 1.7) { const s = ease((a.t - 0.5) / 1.2); B.ry = wrapA(a.rot0 === undefined ? (a.rot0 = B.ry) : a.rot0 + s * TAU * (B.rage ? -1 : 1)); if (Math.random() < dt * 14) { const tp = restW(TAIL[4]); ctx.fx.poof(tp.x, g(tp.x, tp.z) + 0.2, tp.z, 3); } }
+      else if (a.t < 1.7) {
+        const s = ease((a.t - 0.5) / 1.2); B.ry = wrapA(a.rot0 === undefined ? (a.rot0 = B.ry) : a.rot0 + s * TAU * (B.rage ? -1 : 1)); if (Math.random() < dt * 14) { const tp = restW(TAIL[4]); ctx.fx.poof(tp.x, g(tp.x, tp.z) + 0.2, tp.z, 3); }
+        if (VX.ok) {   // 꼬리 끝이 바닥을 긁으며 도는 길: 흙먼지 · 파편 · 바깥으로 튀는 불똥
+          const tp = tailW(), gt = g(tp.x, tp.z), ox = tp.x - B.x, oz = tp.z - B.z, ol = Math.hypot(ox, oz) || 1, sp = clamp(Math.sin(clamp((a.t - 0.5) / 1.2, 0, 1) * Math.PI) * 1.4, 0.2, 1);
+          for (let n = rate('td', 90 * sp, dt); n-- > 0;) VX.burst('dust', tp.x, gt, tp.z, { n: 1, up: 0.7, speed: 0.6, size: 1.2 });
+          for (let n = rate('tb', 30 * sp, dt); n-- > 0;) VX.burst('debris', tp.x, gt, tp.z, { n: 1, spread: 3, dir: [ox / ol, 0.25, oz / ol], speed: 0.5 });
+          for (let n = rate('ts', 70 * sp, dt); n-- > 0;) VX.burst('spark', tp.x, gt + 0.6, tp.z, { n: 1, color: '#ffc890', dir: [ox / ol, 0.2, oz / ol], speed: 0.8 });
+        }
+      }
+      if (once(a, 'arc', 0.5)) addFx({ type: 'arc', t: 0, life: 1.25 });
       if (once(a, 'whoosh', 0.6)) ctx.sfx(kind, 'hsweep', B.x, B.z);
-      if (once(a, 'hit', 1.1)) { hitAnnulus(B.x, B.z, 4, 25, 'hsweep', 2.2); ctx.shake(0.8, 0.7); addFx({ type: 'ring', x: B.x, z: B.z, r0: 6, r1: 26, t: 0, life: 0.9, hit: true, dmg: 'hring', color: '#e8d6c0' }); }
+      if (once(a, 'hit', 1.1)) {
+        hitAnnulus(B.x, B.z, 4, 25, 'hsweep', 2.2); ctx.shake(0.8, 0.7); addFx({ type: 'ring', x: B.x, z: B.z, r0: 6, r1: 26, t: 0, life: 0.9, hit: true, dmg: 'hring', color: '#e8d6c0' });
+        VX.burst('flash', B.x, g(B.x, B.z) + 1, B.z, { color: '#ffe0b0', size: 1.4 }); VX.burst('debris', B.x, g(B.x, B.z), B.z, { n: 34, speed: 1.4, spread: 4 });
+      }
     } else if (a.code === 'hdive') {   // 날아오름(1.4 s) → 활강해 내리꽂음(0.9 s) → 충격파 · 흙먼지 → 다시 일어섬
       const up = 1.4, dn = 0.9;
       if (once(a, 'flap', 0.05)) ctx.sfx(kind, 'flap', B.x, B.z);
-      if (a.t < up) { turnTo(tgA, 1.8); B.y = F.y + 20 * ease(a.t / up); B.pitch = -0.25 * (a.t / up); if (once(a, 'lift', 0.25)) for (let i = 0; i < 8; i++) ctx.fx.poof(F.x + (Math.random() - 0.5) * 16, g(F.x, F.z) + 0.2, F.z + (Math.random() - 0.5) * 16, 5); }
-      else if (a.t < up + dn) {
+      if (a.t < up) {
+        turnTo(tgA, 1.8); B.y = F.y + 20 * ease(a.t / up); B.pitch = -0.25 * (a.t / up); if (once(a, 'lift', 0.25)) for (let i = 0; i < 8; i++) ctx.fx.poof(F.x + (Math.random() - 0.5) * 16, g(F.x, F.z) + 0.2, F.z + (Math.random() - 0.5) * 16, 5);
+        if (once(a, 'gust', 0.25)) { const gf = g(F.x, F.z); VX.ring('dust', F.x, gf, F.z, 5, { n: 26, speed: 1.4, size: 1.3 }); VX.ring('debris', F.x, gf, F.z, 4, { n: 12 }); VX.burst('flash', F.x, gf + 1, F.z, { color: '#ffd0a0', size: 1.1 }); }
+        for (let n = rate('up', 70 * (1 - a.t / up * 0.6), dt); n-- > 0;) { const an = Math.random() * TAU, rr = 3 + Math.random() * 11; VX.burst('dust', F.x + Math.cos(an) * rr, g(F.x, F.z), F.z + Math.sin(an) * rr, { n: 1, up: 0.5, speed: 1.2 }); }   // 날갯바람이 쓸어 올리는 먼지
+        for (let i = 0; i < 3; i++) if (headUp(i)) { const m = mouthW(i); for (let n = rate('dm' + i, 24, dt); n-- > 0;) VX.burst('fire', m.x, m.y, m.z, { n: 1, spread: 0.4, size: 0.8 }); }   // 울부짖는 입에서 새는 불길
+      } else if (a.t < up + dn) {
         const s = (a.t - up) / dn, e = s * s; B.x = F.x + (T.x - F.x) * e; B.z = F.z + (T.z - F.z) * e;
         B.y = lerp(F.y + 20, g(B.x, B.z) + 0.5, e); B.pitch = 0.55 * Math.sin(s * Math.PI * 0.5);
-        if (once(a, 'mark', up)) addFx({ type: 'ring', x: T.x, z: T.z, r0: 11, r1: 9, t: 0, life: dn, hit: false, color: '#ff4a20' });
+        if (once(a, 'mark', up)) addFx({ type: 'ring', x: T.x, z: T.z, r0: 11, r1: 9, t: 0, life: dn, hit: false, warn: true, color: '#ff4a20' });
+        for (let n = rate('dv', 200, dt); n-- > 0;) { const o = 10; VX.burst('fire', B.x + (Math.random() - 0.5) * o, B.y + 3 + (Math.random() - 0.3) * 9, B.z + (Math.random() - 0.5) * o, { n: 1, size: 2.6, up: 0.1, spread: 0.3 }); }   // 급강하 불꼬리
+        for (let n = rate('dvl', 70, dt); n-- > 0;) VX.burst('light', B.x + (Math.random() - 0.5) * 12, B.y + 2 + Math.random() * 8, B.z + (Math.random() - 0.5) * 12, { n: 1, color: '#ff8a40', hot: '#ffe8c0', size: 1.4, spread: 0.3 });
+        for (let n = rate('dvs', 60, dt); n-- > 0;) VX.burst('spark', B.x + (Math.random() - 0.5) * 14, B.y + 2 + Math.random() * 8, B.z + (Math.random() - 0.5) * 14, { n: 1, color: '#ffe0b0', dir: [0, 1, 0], speed: 0.6 });   // 바람을 가르는 줄
+        for (let n = rate('dvm', 22, dt); n-- > 0;) VX.burst('smoke', B.x, B.y + 5, B.z, { n: 1, spread: 3, size: 1.3 });
+        { const gm = g(T.x, T.z); for (let n = rate('mk', 40, dt); n-- > 0;) { const an = Math.random() * TAU, rr = 4 + Math.random() * 6; VX.burst('light', T.x + Math.cos(an) * rr, gm + 0.3, T.z + Math.sin(an) * rr, { n: 1, color: '#ff6a30', hot: '#ffd8b0', spread: 0.3, speed: 0.3 }); } }   // 떨어질 자리에 붉은 빛 티끌
       } else {
         if (once(a, 'impact', up + dn)) {
           hitCircle(T.x, T.z, 10, 'hdive', 0); ctx.shake(1.5, 1.1); ctx.sfx(kind, 'impact', T.x, T.z);
           addFx({ type: 'ring', x: T.x, z: T.z, r0: 4, r1: 28, t: 0, life: 1.3, hit: true, dmg: 'hring', color: '#ffb080' });
           for (let i = 0; i < 10; i++) ctx.fx.poof(T.x + (Math.random() - 0.5) * 14, g(T.x, T.z) + 0.2, T.z + (Math.random() - 0.5) * 14, 6);
+          const gi = g(T.x, T.z);   // 내리꽂힘: 큰 섬광 · 불티·불길 · 파편 · 먼지 고리, 땅에 그을음이 남는다
+          VX.impact(T.x, gi, T.z, { color: '#ffb080', hot: '#ffffff', sparks: 60, smokeKind: 'dust', smokeN: 26, size: 2.2 });
+          VX.burst('debris', T.x, gi, T.z, { n: 50, speed: 1.4, spread: 4 }); VX.burst('light', T.x, gi, T.z, { n: 30, speed: 3, color: '#ff9a50' }); VX.burst('fire', T.x, gi, T.z, { n: 24, color: '#c02010', speed: 2.2, size: 1.6, spread: 3 });
+          VX.ring('dust', T.x, gi, T.z, 5, { n: 28, speed: 1.6, size: 1.5 }); VX.ring('debris', T.x, gi, T.z, 4, { n: 14 });
+          addFx({ type: 'scar', x: T.x, z: T.z, r: 9, t: 0, life: 2.4 });
         }
         const s = clamp((a.t - up - dn - 0.3) / 1.4, 0, 1); B.y = lerp(g(B.x, B.z) + 0.5, baseY(B.x, B.z), ease(s)); B.pitch = 0.55 * (1 - s);
       }
@@ -361,23 +460,46 @@ export function createHydraBoss(ctx) {
       ring: new THREE.RingGeometry(0.86, 1, 64).rotateX(-Math.PI / 2), disc: new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2),
       ball: new THREE.SphereGeometry(1, 14, 10),
       cone: new THREE.CylinderGeometry(1, 0.12, 1, 20, 6, true).translate(0, 0.5, 0).rotateX(Math.PI / 2),   // 입(원점) → +z 로 넓어지는 불줄기
+      // 꼬리 휩쓸기 궤적: 바깥 반지름 1, 안쪽 0.6, 앞날(각도 0)에서 뒤로 2.2 라디안 부채꼴(ARC_F 가 각도로 사라지게 한다)
+      arc: new THREE.RingGeometry(0.6, 1, 56, 1, -ARC_LEN, ARC_LEN).rotateX(-Math.PI / 2),
       add,
     };
     return fxRes;
   }
   function addFx(f) { fxl.push(f); return f; }
-  function killFx(f) { if (f.g) { scene.remove(f.g); f.g.traverse((o) => { if (o.material && o.material.userData.own) o.material.dispose(); }); } }
+  function killFx(f) {
+    if (f.g) { scene.remove(f.g); f.g.traverse((o) => { if (o.material && o.material.userData.own) o.material.dispose(); }); }
+    if (f.extra) for (const o of f.extra) { scene.remove(o); if (o.material.userData.own) o.material.dispose(); }   // 불줄기 입 빛 구슬·열기 장판은 그룹 밖에 있다
+  }
   const ownMat = (c, o = 1) => { const m = new THREE.MeshBasicMaterial({ color: c, ...res().add, opacity: o }); m.userData.own = true; return m; };
+  const vMat = (mode, c, o = 1, opt) => (VX.ok && VX.mat(mode, c, o, opt)) || ownMat(c, o);   // 셰이더 재질(없으면 단색)
   function tickFx(dt, t) {
     const m = ctx.me();
+    VX.tick(dt);
     for (let i = fxl.length - 1; i >= 0; i--) {
       const f = fxl[i]; f.t += dt;
       if (f.t < 0) continue;
       const u = f.t / f.life;
       if (f.type === 'ring') {
-        const r = f.r0 + (f.r1 - f.r0) * Math.min(1, u);
-        if (!f.g) { f.g = new THREE.Mesh(res().ring, ownMat(f.color || '#ffffff', 0.9)); f.g.renderOrder = 3; scene.add(f.g); }
-        f.g.position.set(f.x, ctx.heightAt(f.x, f.z) + 0.25, f.z); f.g.scale.set(r, 1, r); f.g.material.opacity = 0.85 * (1 - u);
+        const r = f.r0 + (f.r1 - f.r0) * Math.min(1, u), y = ctx.heightAt(f.x, f.z) + 0.25;
+        if (!f.g) {
+          f.g = new THREE.Group(); f.g.renderOrder = 3;
+          if (f.warn) {   // 바닥 표식: 돌아가는 문장 + 붉은 바닥 빛
+            const sg = new THREE.Mesh(res().disc, vMat('sigil', f.color || '#ff3a1a', 0.9, { hot: '#ffd8b0', inner: 0.2 })), fl = new THREE.Mesh(res().disc, vMat('pool', f.color || '#ff3a1a', 0.3, { hot: '#ffb070' }));
+            f.g.add(fl, sg); f.parts = { sg, fl };
+          } else {   // 충격파: 셰이더 고리 + 안쪽 열기 장판, 출발할 때 먼지 고리와 섬광
+            const rg = new THREE.Mesh(res().disc, vMat('shock', f.color || '#ffffff', 0.9, { hot: '#ffffff', inner: 0.72 })), fl = new THREE.Mesh(res().disc, vMat('pool', f.color || '#ffffff', 0.25, { hot: '#fff6e0' }));
+            f.g.add(rg, fl); f.parts = { rg, fl };
+            VX.ring('dust', f.x, y, f.z, f.r0, { n: 18, color: f.color }); VX.burst('flash', f.x, y + 0.5, f.z, { color: f.color, size: 0.5 + f.r1 / 30 });
+          }
+          scene.add(f.g);
+        }
+        f.g.position.set(f.x, y, f.z); f.g.scale.set(r, 1, r);
+        if (f.warn) { f.parts.sg.rotation.y = f.t * 0.8; f.parts.sg.material.opacity = 0.9 * Math.min(1, f.t / 0.25) * (1 - 0.3 * u); f.parts.fl.material.opacity = 0.15 + 0.25 * u; }
+        else {
+          f.parts.rg.material.opacity = 1.1 * (1 - u); f.parts.rg.material.uT = u * 0.9; f.parts.fl.material.opacity = 0.3 * (1 - u) * (1 - u);
+          for (let n = rate('rg' + i, 30, dt); n-- > 0;) { const an = Math.random() * TAU; VX.burst('dust', f.x + Math.cos(an) * r, y, f.z + Math.sin(an) * r, { n: 1, speed: 0.4, color: f.color }); }
+        }
         if (f.hit && m.ok && !f.done) {
           const d = Math.hypot(m.x - f.x, m.z - f.z);
           if (Math.abs(d - r) < 1.4 && m.y - floorAt(m.x, m.z) < 1.1) { f.done = true; hitMe(f.dmg || 'hring', (m.x - f.x) / (d || 1), (m.z - f.z) / (d || 1)); }
@@ -386,10 +508,10 @@ export function createHydraBoss(ctx) {
       } else if (f.type === 'flame') {   // 머리 하나의 불줄기: 입에서 목표 쪽으로 길어지며 일렁인다
         const a = act.cur, q = a && a.code === 'hbreath' ? a.pt[f.i] : null;
         if (!q || !headUp(f.i) || u >= 1) { killFx(f); fxl.splice(i, 1); continue; }
-        if (!f.g) {
+        if (!f.g) {   // 바깥 불길(주황) · 속불(노랑) 두 겹의 흐르는 노이즈 원뿔 + 입 빛 구슬 + 땅에 닿는 곳의 열기 장판
           f.g = new THREE.Group();
-          const o = new THREE.Mesh(res().cone, ownMat('#ff5a14', 0.75)), c = new THREE.Mesh(res().cone, ownMat('#ffd27a', 0.9)), gl = new THREE.Mesh(res().ball, ownMat('#ff8a2a', 0.6));
-          c.scale.set(0.45, 0.45, 0.92); f.g.add(o, c); f.parts = { o, c, gl }; scene.add(f.g, gl);
+          const o = new THREE.Mesh(res().cone, vMat('beam', '#ff5a14', 1.0, { hot: '#ffb060' })), c = new THREE.Mesh(res().cone, vMat('beam', '#ffd27a', 1.1, { hot: '#ffffff' })), gl = new THREE.Mesh(res().ball, vMat('orb', '#ff7a1e', 0.8, { hot: '#ffe8a0' })), hot = new THREE.Mesh(res().disc, vMat('pool', '#ff4a10', 0.9, { hot: '#ffd070' }));
+          c.scale.set(0.45, 0.45, 0.92); f.g.add(o, c); f.parts = { o, c, gl, hot }; f.extra = [gl, hot]; hot.renderOrder = 3; scene.add(f.g, gl, hot);
         }
         const mo = mouthW(f.i), gy = ctx.heightAt(q[0], q[1]) + 0.4, k = clamp(f.t / 0.5, 0, 1);
         const dx = q[0] - mo.x, dy = gy - mo.y, dz = q[1] - mo.z, L = Math.hypot(dx, dy, dz) * (0.6 + 0.65 * k);
@@ -397,22 +519,41 @@ export function createHydraBoss(ctx) {
         const fl = 1 + 0.12 * Math.sin(t * 40 + f.i * 2) + 0.08 * Math.sin(t * 67 + f.i);
         f.g.scale.set(3.2 * fl * k + 0.3, 3.2 * fl * k + 0.3, L);
         const fade = clamp((f.life - f.t) / 0.3, 0, 1);
-        f.parts.o.material.opacity = 0.7 * fade; f.parts.c.material.opacity = 0.9 * fade;
+        f.parts.o.material.opacity = 1.0 * fade; f.parts.c.material.opacity = 1.1 * fade; f.parts.o.material.uT = f.parts.c.material.uT = (1 - fade) * 0.9;
         f.parts.gl.position.set(mo.x, mo.y, mo.z); f.parts.gl.scale.setScalar(0.9 * fl);
-        f.parts.gl.material.opacity = 0.6 * fade;
-      } else if (f.type === 'glow') {   // 숨 모을 때 입 안의 불씨
+        f.parts.gl.material.opacity = 0.7 * fade;
+        // 불줄기가 땅에 닿는 곳의 열기 장판(줄기가 충분히 뻗었을 때만 켜진다)
+        const reach = clamp((0.6 + 0.65 * k - 0.85) / 0.15, 0, 1), hs = 2.2 + 2.4 * k;
+        f.parts.hot.position.set(q[0], gy - 0.25, q[1]); f.parts.hot.scale.set(hs * fl, 1, hs * fl); f.parts.hot.material.opacity = 0.9 * reach * fade;
+      } else if (f.type === 'glow') {   // 숨 모을 때 입 안의 빛 덩어리: 커지며 일렁인다
         const a = act.cur;
         if (!a || a.code !== 'hbreath' || a.t > 1.05 || !headUp(f.i)) { killFx(f); fxl.splice(i, 1); continue; }
-        if (!f.g) { f.g = new THREE.Mesh(res().ball, ownMat('#ff6a1e', 0.8)); scene.add(f.g); }
-        const mo = mouthW(f.i); f.g.position.set(mo.x, mo.y, mo.z); f.g.scale.setScalar(0.25 + 0.9 * clamp(a.t, 0, 1) * (1 + 0.2 * Math.sin(t * 30)));
+        if (!f.g) { f.g = new THREE.Group(); f.parts = { in: new THREE.Mesh(res().ball, vMat('orb', '#ff7a1e', 0.9, { hot: '#ffe8a0' })), out: new THREE.Mesh(res().ball, vMat('orb', '#ff3a08', 0.5, { hot: '#ff9a30' })) }; f.g.add(f.parts.out, f.parts.in); scene.add(f.g); }
+        const mo = mouthW(f.i), gk = 0.25 + 0.9 * clamp(a.t, 0, 1) * (1 + 0.2 * Math.sin(t * 30));
+        f.g.position.set(mo.x, mo.y, mo.z); f.parts.in.scale.setScalar(gk); f.parts.out.scale.setScalar(gk * 1.9); f.parts.out.material.opacity = 0.5 * clamp(a.t, 0, 1);
+      } else if (f.type === 'arc') {   // 꼬리 휩쓸기 궤적: 꼬리 끝을 따라 도는 하얀 날 + 흩어지는 꼬리(부채꼴 셋이 겹침)
+        const a = act.cur;
+        if (!a || a.code !== 'hsweep' || u >= 1) { killFx(f); fxl.splice(i, 1); continue; }
+        if (!f.g) {
+          const mk = (c, h, o) => { const mm = new THREE.ShaderMaterial({ vertexShader: ARC_V, fragmentShader: ARC_F, uniforms: { uC: { value: new THREE.Color(c) }, uHot: { value: new THREE.Color(h) }, uO: { value: o }, uT: { value: 0 }, uLen: { value: ARC_LEN }, uTime: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }); mm.userData.own = true; return mm; };
+          f.g = new THREE.Mesh(res().arc, mk('#ff9a50', '#fff0d8', 1)); f.g.renderOrder = 4; f.g.scale.setScalar(24); scene.add(f.g);
+        }
+        const tp = tailW(), ang = Math.atan2(-(tp.z - B.z), tp.x - B.x), env = Math.min(1, f.t / 0.12) * clamp((f.life - f.t) / 0.25, 0, 1), U = f.g.material.uniforms;
+        f.g.position.set(B.x, ctx.heightAt(B.x, B.z) + 0.45, B.z); f.g.rotation.y = ang; f.g.scale.set(24, 24, B.rage ? -24 : 24);
+        U.uO.value = 0.9 * env; U.uT.value = u * 0.4; U.uTime.value = t;
+      } else if (f.type === 'scar') {   // 내리꽂힌 자리의 그을음: 열기가 식으며 가장자리부터 사라진다
+        if (!f.g) { f.g = new THREE.Mesh(res().disc, vMat('pool', '#ff4a10', 0.9, { hot: '#ffd070' })); f.g.renderOrder = 2; scene.add(f.g); }
+        f.g.position.set(f.x, ctx.heightAt(f.x, f.z) + 0.14, f.z); f.g.scale.set(f.r, 1, f.r);
+        f.g.material.opacity = 0.95 * Math.min(1, f.t / 0.1) * (1 - u) * (1 - u); f.g.material.uT = u * 0.85;
+        if (u >= 1) { killFx(f); fxl.splice(i, 1); }
       }
     }
   }
   function hazVisual(h) {
     let v = hazVis.get(h.id);
     if (!v) {
-      const g = new THREE.Group(), disc = new THREE.Mesh(res().disc, ownMat('#ff4a10', 0.55)), ring = new THREE.Mesh(res().ring, ownMat('#ffb040', 0.8)), flames = [];
-      for (let k = 0; k < 7; k++) { const f = new THREE.Mesh(res().ball, ownMat(k % 2 ? '#ff6a1a' : '#ffb24a', 0.7)); f.userData.ph = Math.random() * TAU; f.userData.r = Math.random() * 3.4; f.userData.a = Math.random() * TAU; g.add(f); flames.push(f); }
+      const g = new THREE.Group(), disc = new THREE.Mesh(res().disc, vMat('pool', '#ff3a08', 0.55, { hot: '#ffd070' })), ring = new THREE.Mesh(res().disc, vMat('shock', '#ff7a20', 0.8, { hot: '#ffe0a0', inner: 0.8 })), flames = [];
+      for (let k = 0; k < 7; k++) { const f = new THREE.Mesh(res().ball, vMat('orb', k % 2 ? '#ff4a10' : '#ff8a2a', 0.7, { hot: '#ffe8a0' })); f.userData.ph = Math.random() * TAU; f.userData.r = Math.random() * 3.4; f.userData.a = Math.random() * TAU; g.add(f); flames.push(f); }
       g.add(disc, ring); scene.add(g); v = { g, disc, ring, flames }; hazVis.set(h.id, v);
     }
     return v;
@@ -566,6 +707,11 @@ export function createHydraBoss(ctx) {
         seen.add(h.id); const v = hazVisual(h), k = clamp(h.age / 0.3, 0, 1) * clamp((7.5 - h.age) / 1.2, 0, 1), gy = ctx.heightAt(h.x, h.z) + 0.12;
         v.g.position.set(h.x, gy, h.z); v.disc.scale.set(4.5 * k, 1, 4.5 * k); v.ring.scale.set(4.6, 1, 4.6); v.disc.material.opacity = 0.45 * k; v.ring.material.opacity = 0.7 * k;
         for (const f of v.flames) { const q = f.userData, fl = 0.6 + 0.4 * Math.sin(t * 9 + q.ph); f.position.set(Math.cos(q.a) * q.r, 0.6 + fl * 1.2, Math.sin(q.a) * q.r); f.scale.set(0.55 * k, (1.4 + fl) * k, 0.55 * k); }
+        if (VX.ok && k > 0.1) {   // 장판 위로 불길이 일고 불씨가 오르며 가끔 연기가 피어오른다
+          for (let n = rate('hf' + h.id, 40 * k, dt); n-- > 0;) { const an = Math.random() * TAU, rr = Math.sqrt(Math.random()) * 4.2; VX.burst('fire', h.x + Math.cos(an) * rr, gy, h.z + Math.sin(an) * rr, { n: 1, size: 0.9 * k }); }
+          for (let n = rate('he' + h.id, 12 * k, dt); n-- > 0;) { const an = Math.random() * TAU, rr = Math.sqrt(Math.random()) * 4.2; VX.burst('ember', h.x + Math.cos(an) * rr, gy, h.z + Math.sin(an) * rr, { n: 1 }); }
+          for (let n = rate('hs' + h.id, 4 * k, dt); n-- > 0;) VX.burst('smoke', h.x, gy + 2, h.z, { n: 1, spread: 2 });
+        }
       }
       for (const [id, v] of hazVis) if (!seen.has(id)) { scene.remove(v.g); hazVis.delete(id); }
     }
@@ -630,6 +776,7 @@ export function createHydraBoss(ctx) {
     const m = mouthW(i);
     ctx.sfx(kind, 'headbreak', m.x, m.z); ctx.shake(0.6, 0.8);
     for (let k = 0; k < 6; k++) ctx.fx.poof(m.x + (Math.random() - 0.5) * 3, m.y - Math.random() * 2, m.z + (Math.random() - 0.5) * 3, 4);
+    VX.impact(m.x, m.y - 0.6, m.z, { color: '#f0e0c0', hot: '#ffffff', sparks: 34, smokeN: 8, size: 1.8 }); VX.burst('debris', m.x, m.y, m.z, { n: 30, color: '#d8ccb0', speed: 1.1 }); VX.burst('fire', m.x, m.y, m.z, { n: 12, speed: 1.6, size: 1.2 });   // 가면 파편 · 불티
     emit('headbreak', { head: i + 1, left: headsUp(), kind });
   }
   function die(by) {
