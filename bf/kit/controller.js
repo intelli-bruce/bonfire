@@ -70,6 +70,7 @@ export function createController({
   const keys = new Set();
   let stick = { x: 0, y: 0, on: false };
   let camYawLast = 0, leanCur = 0, poseName = null, poseKey = 0;   // poseName: page-chosen seated pose (fishing)
+  let aimYaw = null, moveScale = 1;   // aimYaw: while a gun is up the body faces where the camera looks (null: face the way it moves); moveScale: page-set walking-speed factor (a sword swing, a rifle burst)
   // remote mode
   let remote = false, samples = [], events = [], offs = null, rAs, rL = 0, rSeat = null, rLastT = -1, rWrap = 0, rSpeed = 0, rPrevPos = null, rAir = false, rW = 0;
 
@@ -99,7 +100,7 @@ export function createController({
   }
 
   // ------------------------------------------------------------ input
-  const KEYMAP = { KeyQ: 'dash', Space: 'jump', KeyC: 'roll', KeyF: 'punch', KeyX: 'sit', KeyZ: 'prone', KeyV: 'wave', Digit1: 'dance', Digit2: 'cheer', Digit3: 'nod' };
+  const KEYMAP = { KeyQ: 'dash', Space: 'jump', KeyC: 'roll', KeyF: 'punch', KeyX: 'sit', KeyZ: 'prone', KeyV: 'wave', Digit7: 'dance', Digit8: 'cheer', Digit9: 'nod' };   // 1~4 are the weapon slots (the page); the emotes moved to 7 8 9
   const MOVE = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight']);
   const typing = (e) => { const t = e.target; return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
   function onKeyDown(e) {
@@ -282,11 +283,12 @@ export function createController({
     const m = Math.min(d, (speeding ? accel : decel) * h);
     s.vx += dx / d * m; s.vz += dz / d * m;
   }
-  function turnTo(target, rate, h) { const d = wrapPi(target - s.ry); const m = rate * h; s.ry = wrapPi(s.ry + (Math.abs(d) <= m ? d : Math.sign(d) * m)); }
+  function turnTo(target, rate, h) { if (aimYaw !== null && s.act !== 'dash' && s.act !== 'roll') { s.ry = aimYaw; return; } const d = wrapPi(target - s.ry); const m = rate * h; s.ry = wrapPi(s.ry + (Math.abs(d) <= m ? d : Math.sign(d) * m)); }
 
   function step(h, mv) {
     s.time += h;
     lastMove = mv;
+    if (aimYaw !== null && s.act !== 'dash' && s.act !== 'roll' && s.act !== 'sit' && s.act !== 'prone' && s.act !== 'proneIn' && s.act !== 'proneOut') s.ry = aimYaw;   // gun up: stand squared to the camera even when not moving
     if (s.act) s.actT += h;
     const moving = mv.mag > 0;
     if (!s.struck && punching() && s.actT >= P.punchHit) { s.struck = true; onStrike && onStrike(s.act); }
@@ -329,7 +331,7 @@ export function createController({
       approach(mv.x * t, mv.z * t, P.swimAccel, P.swimDecel, h);
       if (moving) turnTo(Math.atan2(-mv.x, -mv.z), P.swimTurn, h);
     } else if (s.grounded) {
-      const t = (mv.run ? P.run : P.walk) * mv.mag * wadeK() * (punching() ? P.punchMove : 1);
+      const t = (mv.run ? P.run : P.walk) * mv.mag * wadeK() * (punching() ? P.punchMove : 1) * moveScale;
       approach(mv.x * t, mv.z * t, P.accel, P.decel, h);
       if (moving && !punching()) turnTo(Math.atan2(-mv.x, -mv.z), P.turn, h);
     } else {
@@ -593,6 +595,8 @@ export function createController({
       if (!sw) { s.vy = P.knockHop * power; s.grounded = false; s.jumpedAt = s.time; }
       return true;
     },
+    setAim(yaw) { aimYaw = typeof yaw === 'number' && Number.isFinite(yaw) ? wrapPi(yaw) : null; },   // face this yaw (the camera's) while a gun is up; null releases
+    setMoveScale(k) { moveScale = typeof k === 'number' && k > 0 ? Math.min(1, k) : 1; },
     setStick(x, y) { stick = { x: x || 0, y: y || 0, on: !!(x || y) }; },   // joystick: x right, y down (screen); |v| ≥ 0.92 runs
     teleport(x, z, ry) { s.x = prev.x = x; s.z = prev.z = z; s.swim = 0; s.dive = s.diveV = s.plungeV = 0; s.y = 99; s.y = prev.y = floorAt(x, z); updateWater(); if (ry !== undefined) s.ry = vis.yaw = ry; s.vx = s.vz = s.vy = 0; },   // y = 99 first: probe from above, so a deck counts
     // seated pose override (e.g. 'fishSit' / 'fishCast'); a new key restarts a one-shot

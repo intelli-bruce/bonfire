@@ -8,7 +8,10 @@
 //
 //   const sp = createSpiderBoss({ THREE, scene, baseUrl, heightAt, canStand, players, myId, me, onHitMe, fx })
 //   sp.spawn(x, z, ry) · sp.despawn() · sp.update(dt, t) · sp.snapshot() · sp.applySnapshot(d, senderId)
-//   sp.hitTest(cx, cz, radius, y) → [{ kind, id }] · sp.damage(kind, id, amount, fromId) · sp.slowAt(x, z) · sp.view
+//   sp.hitTest(cx, cz, radius, y) → [{ kind, id }] · sp.hitRay(ox,oy,oz, dx,dy,dz, maxD, radius) → { kind, id, d, part } | null (총알·광선)
+//   sp.damage(kind, id, amount, fromId, cdMs) · sp.slowAt(x, z) · sp.view
+
+import { raySphere, rayCapsule, rayCylY } from './weapons-core.js';
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -47,6 +50,7 @@ export function createSpiderBoss(ctx) {
   const webVis = new Map();                          // id -> { m, age }
   const minVis = new Map();                          // id -> visual record
   const ghosts = [];                                 // dying minions (visual only)
+const bodyS = [];                                   // world spheres of the body / head / abdomen (rays: bullets), refreshed with the feet
 const feet = [];                                   // per leg { k: tibia start, a: ankle, e: foot tip } world positions, refreshed every frame (hit tests and push-out)
   const listeners = {};
   const emit = (k, v) => { for (const f of listeners[k] || []) { try { f(v); } catch (e) { /* listener */ } } };
@@ -146,7 +150,7 @@ const feet = [];                                   // per leg { k: tibia start, 
       for (const m of rig.mats) {
         if (!m.emissive) continue;
         const b = rig.base.get(m);
-        if (on) { m.emissive.setRGB(1, 0.05, 0.03); m.emissiveIntensity = 1.2; } else { m.emissive.copy(b.e); m.emissiveIntensity = b.i; }
+        if (on) { m.emissive.setRGB(1, 0.05, 0.03); m.emissiveIntensity = 1.2 * (rig.flashK === undefined ? 1 : rig.flashK); } else { m.emissive.copy(b.e); m.emissiveIntensity = b.i; }
       }
     }
   }
@@ -162,7 +166,7 @@ const feet = [];                                   // per leg { k: tibia start, 
     O.act = null; O.cd = { sw: 0, sp: 2.2, wb: 6, sm: 8 }; O.gap = 0.8; O.hitAt.clear();
     timers.length = 0;
     if (boss) { disposeRig(boss); boss = null; }
-    feet.length = 0;
+    feet.length = 0; bodyS.length = 0;
     for (const p of proj) scene.remove(p.g); proj.length = 0;
     for (const a of arcs) scene.remove(a.m); arcs.length = 0;
     for (const [, v] of webVis) { scene.remove(v.m); v.m.material.dispose(); } webVis.clear();
@@ -380,6 +384,12 @@ const feet = [];                                   // per leg { k: tibia start, 
       q.t.getWorldPosition(f.k); q.m.getWorldPosition(f.a); q.e.getWorldPosition(f.e);
     });
     feet.length = boss.legs.length;
+    // body / head / abdomen: centres in the model's own frame (three: x, z, -y of the Blender rig, metres at K), moved by the root's transform
+    [['body', 0, 2.3 * K, -0.2 * K, 0.95 * K], ['head', 0, 2.45 * K, -1.45 * K, 0.85 * K], ['abdomen', 0, 2.6 * K, 1.65 * K, 1.25 * K]].forEach(([n, x, y, z, r], i) => {
+      const o = bodyS[i] || (bodyS[i] = { n, x: 0, y: 0, z: 0, r });
+      tmpV.set(x, y, z); boss.root.localToWorld(tmpV); o.x = tmpV.x; o.y = tmpV.y; o.z = tmpV.z; o.r = r * boss.root.scale.x;
+    });
+    bodyS.length = 3;
   }
   function segDist(px, py, pz, a, b) {   // distance from a point to the segment a-b
     const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z, l2 = abx * abx + aby * aby + abz * abz || 1;
@@ -487,15 +497,34 @@ const feet = [];                                   // per leg { k: tibia start, 
     for (const m of B.minions) { const v = minVis.get(m.id), px = v ? v.x : m.x, pz = v ? v.z : m.z; if (Math.hypot(cx - px, cz - pz) < 0.45 + radius) out.push({ kind: 'minion', id: m.id }); }
     return out;
   }
-  function damage(kind, id, amount, fromId) {
+  // a bullet / beam: the nearest thing the ray o + t·d (|d| = 1, t <= maxD) touches, `radius` thickens the targets. The giant's body, head and abdomen
+  // are spheres, its lower legs capsules, a minion a sphere (no model yet: one upright cylinder).
+  function hitRay(ox, oy, oz, dx, dy, dz, maxD, radius = 0) {
+    if (!B.active) return null;
+    let best = null;
+    const take = (kind, id, t, part) => { if (t >= 0 && (!best || t < best.d)) best = { kind, id, d: t, part }; };
+    if (B.spawnT <= 0 && B.a !== 'd' && B.dieT <= 0) {
+      if (feet.length && bodyS.length) {
+        for (const f of feet) {
+          take('boss', 0, rayCapsule(ox, oy, oz, dx, dy, dz, f.k.x, f.k.y, f.k.z, f.a.x, f.a.y, f.a.z, BOSS.legR + radius, maxD), 'leg');
+          take('boss', 0, rayCapsule(ox, oy, oz, dx, dy, dz, f.a.x, f.a.y, f.a.z, f.e.x, f.e.y, f.e.z, BOSS.legR + radius, maxD), 'leg');
+        }
+        for (const q of bodyS) take('boss', 0, raySphere(ox, oy, oz, dx, dy, dz, q.x, q.y, q.z, q.r + radius, maxD), q.n);
+      } else { const g = ctx.heightAt(B.x, B.z); take('boss', 0, rayCylY(ox, oy, oz, dx, dy, dz, B.x, B.z, BOSS.bodyR + 0.6 + radius, g - 0.5, g + 3.4 * K, maxD), 'body'); }
+    }
+    for (const m of B.minions) { const v = minVis.get(m.id), px = v ? v.x : m.x, pz = v ? v.z : m.z; take('minion', m.id, raySphere(ox, oy, oz, dx, dy, dz, px, ctx.heightAt(px, pz) + 0.55, pz, 0.65 + radius, maxD), 'minion'); }
+    return best;
+  }
+  function damage(kind, id, amount, fromId, cdMs) {   // cdMs: that attacker's minimum gap (a rifle fires faster than a fist lands)
     if (!B.owner || !B.active) return false;
     if (kind === 'boss') {
       if (B.spawnT > 0 || B.dieT > 0 || B.hp <= 0) return false;
       const now = performance.now(), last = O.hitAt.get(fromId) || -1e9;
-      if (now - last < BOSS.dmgCooldown * 1000) return false;
+      if (now - last < (typeof cdMs === 'number' ? cdMs : BOSS.dmgCooldown * 1000)) return false;
+      if (O.hitAt.size > 400) O.hitAt.clear();
       O.hitAt.set(fromId, now);
-      B.hp = Math.max(0, B.hp - clamp(amount, 1, 25));
-      if (boss) boss.flash = 0.12;
+      B.hp = Math.max(0, B.hp - clamp(amount, 1, 40));
+      if (boss) { const fast = typeof cdMs === 'number' && cdMs < 150; boss.flash = fast ? Math.max(boss.flash, 0.05) : 0.12; boss.flashK = fast ? 0.3 : 1; }   // a rifle's stream of hits blinks softly instead of holding the boss solid red
       const ft = feet[O.lastFoot] || null;   // the leg the last punch touched (this screen's hit test); otherwise near the body
       if (ft) ctx.fx.spark(ft.a.x + (Math.random() - 0.5), ft.a.y + 0.3, ft.a.z + (Math.random() - 0.5));
       else ctx.fx.spark(B.x + (Math.random() - 0.5) * 2, ctx.heightAt(B.x, B.z) + 1.6, B.z + (Math.random() - 0.5) * 2);
@@ -505,7 +534,7 @@ const feet = [];                                   // per leg { k: tibia start, 
     }
     if (kind === 'minion') {
       const m = B.minions.find((q) => q.id === id); if (!m) return false;
-      m.hp -= clamp(amount, 1, 25); return true;
+      m.hp -= clamp(amount, 1, 40); return true;
     }
     return false;
   }
@@ -538,7 +567,7 @@ const feet = [];                                   // per leg { k: tibia start, 
     if (fresh) { resetState(); B.active = true; B.x = x; B.z = z; B.ry = ry; B.spawnT = d.a === 's' ? BOSS.spawnT : 0; R.lastAc = ac; load().then(() => ensureBoss()).catch(() => despawn()); emit('spawn', { owner: false }); }
     B.owner = false; B.ownerId = senderId; B.ep = ep; B.born = born; B.maxHp = mh;
     R.tx = x; R.tz = z; R.try_ = ry; R.lastSnap = performance.now();
-    if (hp < B.hp && boss) boss.flash = 0.12;
+    if (hp < B.hp && boss) { boss.flash = 0.12; boss.flashK = B.hp - hp >= 12 ? 1 : 0.3; }
     if (hp !== B.hp) { B.hp = hp; emit('hp', { hp, maxHp: mh }); }
     if (d.a === 'd' && B.a !== 'd') { B.dieT = 0; emit('die', {}); }
     const wasA = B.a; B.a = d.a;
@@ -574,7 +603,7 @@ const feet = [];                                   // per leg { k: tibia start, 
   }
 
   return {
-    load, spawn, despawn, update, snapshot, applySnapshot, hitTest, damage, slowAt,
+    load, spawn, despawn, update, snapshot, applySnapshot, hitTest, hitRay, damage, slowAt,
     on(k, f) { (listeners[k] = listeners[k] || []).push(f); },
     act(name) { if (B.owner && B.active && !O.act && B.spawnT <= 0 && B.dieT <= 0 && ['sw', 'sp', 'wb', 'sm'].includes(name)) { ownerBegin(name, nearest(B.x, B.z)); return true; } return false; },   // test hook
     get active() { return B.active; }, get owner() { return B.owner; }, get ownerId() { return B.ownerId; },
