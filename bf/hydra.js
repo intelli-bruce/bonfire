@@ -1,3 +1,4 @@
+import { applyLook, spring, breath as breathe } from './bosslook.js';
 // bf/hydra.js — 보스: 뼈 가면 히드라(머리 셋 달린 용). bf/bosses.js 의 허브(createBossHub)에 'hydra' 로 붙는다.
 // 모델: tools/bosses/build_hydra.py (Blender) → bf/hydra.glb (Draco, LOD0/LOD1, 뼈대만 · 클립 없음). 움직임은 아래 animate() 가 뼈 이름으로 만든다.
 //
@@ -35,6 +36,21 @@ const NECKS = {
   L: [[-1.9, 5.0, 8.7], [-3.9, 7.0, 10.3], [-5.7, 8.7, 11.6], [-6.7, 10.1, 12.2], [-7.8, 13.1, 11.7]],
   C: [[0, 5.4, 9.2], [0, 7.6, 11.6], [0, 9.6, 13.4], [0, 11.1, 14.4], [0, 14.3, 14.0]],
   R: [[1.9, 5.0, 8.7], [3.9, 7.0, 10.3], [5.7, 8.7, 11.6], [6.7, 10.1, 12.2], [7.8, 13.1, 11.7]],
+};
+// 재질별 전용 조명(bf/bosslook.js) — [key, wrap, rim, spec, 발광색, 발광세기, 발광에 색맵]
+export const LOOK = {
+  exact: {
+    hydra_scale:    [1.0, [0.28, 0.07, 0.04], 0.55, 0.9, '#000000', 0, false],  // 젖은 비늘: 키 하이라이트가 비늘 결을 따라 반짝
+    hydra_bone:     [1.1, [0.22, 0.16, 0.1], 0.45, 0.6, '#000000', 0, false],   // 뼈 가면
+    hydra_spike:    [1.0, [0.12, 0.06, 0.04], 0.45, 1.0, '#000000', 0, false],
+    hydra_membrane: [0.85, [0.55, 0.1, 0.05], 0.7, 0.3, '#3a0804', 0.12, true], // 날개막: 빛이 비쳐 붉게 번짐
+    hydra_claw:     [0.8, [0.05, 0.03, 0.02], 0.4, 1.4, '#000000', 0, false],
+    hydra_teeth:    [0.9, [0.2, 0.15, 0.08], 0.3, 0.9, '#000000', 0, false],
+    hydra_gum:      [0.9, [0.45, 0.08, 0.05], 0.3, 1.0, '#000000', 0, false],
+    hydra_mouth:    [0.7, [0.5, 0.1, 0.04], 0.2, 0.6, '#3a0a02', 0.3, false],
+    hydra_tongue:   [0.8, [0.45, 0.08, 0.06], 0.2, 1.1, '#000000', 0, false],
+  },
+  glow: /hydra_(eye|pupil)/,
 };
 export const HEADS = ['L', 'C', 'R'];
 const headTip = (k, len) => { const p = NECKS[k]; return addS(p[3], nrm(sub(p[4], p[3])), len); };
@@ -131,7 +147,6 @@ export function createHydraBoss(ctx) {
       if (!m.isMeshStandardMaterial) continue;
       m.metalness = Math.min(m.metalness, 0.5);
       if (/eye/.test(m.name)) eyeMat = m;
-      if (m.emissive.getHex() === 0) m.emissive.copy(m.color).multiplyScalar(/membrane/.test(m.name) ? 0.22 : 0.14);
     }
     const base = new Map(); for (const m of mats) base.set(m, { e: m.emissive.clone(), i: m.emissiveIntensity });
     root.updateMatrixWorld(true);
@@ -147,7 +162,9 @@ export function createHydraBoss(ctx) {
     const light = new THREE.PointLight('#ff5a1e', 0, 46, 1.6); root.add(light); light.position.set(0, 13, -9);
     scene.add(root);
     const qs = { q: new THREE.Quaternion(), qa: new THREE.Quaternion() };
-    return { root, bones, lods, mats, base, rest, hull, mouths, light, eyeMat, flash: 0, flashK: 1, qs, lod: -1 };
+    const R = { root, bones, lods, mats, base, rest, hull, mouths, light, eyeMat, flash: 0, flashK: 1, qs, lod: -1, sp: {} };
+    applyLook(THREE, R, LOOK, 'hydraLook');
+    return R;
   }
   function pose(name, ax, ay, az) {
     const b = rig && rig.bones[name]; if (!b) return;
@@ -450,14 +467,21 @@ export function createHydraBoss(ctx) {
     for (const k of ['FL', 'FR', 'BL', 'BR']) pose('shin' + k, (flying ? -0.8 : -0.3 * Math.max(0, (k === 'FL' || k === 'BR' ? -s : s)) * lg), 0, 0);
     // 꼬리: 느린 물결, 휩쓸기 때는 크게 휜다
     const sw = code === 'hsweep' ? Math.sin(clamp((at - 0.4) / 1.4, 0, 1) * Math.PI) * (B.rage ? -1 : 1) : 0;
-    for (let i = 1; i <= 4; i++) pose('t' + i, 0.04 * Math.sin(t * 0.9 + i), 0.12 * Math.sin(t * 0.8 - i * 0.7) * (1 + walk) - sw * 0.35, 0);
-    // 날개: 평소엔 반쯤 접어 들고, 날 때는 크게 친다
-    const flapA = flying ? Math.sin(t * 7.5) : 0, fold = flying ? 0 : 1;
+    for (let i = 1; i <= 4; i++) pose('t' + i, 0.04 * Math.sin(t * 0.9 + i), spring(rig.sp, 't' + i, 0.12 * Math.sin(t * 0.8 - i * 0.7) * (1 + walk) - sw * 0.35, dt, 30 - i * 4, 6 - i * 0.6), 0);   // 마디마다 늦게 따라오는 꼬리
+    // 날개: 평소엔 반쯤 접어 들고(숨에 맞춰 살짝 들썩), 날 때는 크게 친다. 접기·펴기·날갯짓 세기는 스프링으로 부드럽게 넘어가고,
+    // 내려치기는 빠르고 올리기는 느리며(비대칭), 팔꿈치·손목 마디가 어깨보다 늦게 따라와 날개 끝이 채찍처럼 휜다.
+    const SP = rig.sp, brt = breathe(t, 0.16);
+    const fold = clamp(spring(SP, 'fold', flying ? 0 : 1, dt, 10, 5.5), 0, 1.1), amp = Math.max(0, spring(SP, 'amp', flying ? 1 : 0, dt, 8, 5));
+    rig.wph = (rig.wph || 0) + dt * 7.0;
+    const wp = rig.wph, stroke = (q) => { const u = ((q / (2 * Math.PI)) % 1 + 1) % 1; return u < 0.42 ? Math.cos(u / 0.42 * Math.PI) : -Math.cos((u - 0.42) / 0.58 * Math.PI); };
+    const f1 = stroke(wp) * amp, f2 = stroke(wp - 0.6) * amp, f3 = stroke(wp - 1.1) * amp;
     const breath = code === 'hbreath' ? ease(clamp(at / 0.6, 0, 1)) * clamp((a ? a.dur : 1) - at, 0, 1) : 0;
-    pose('wingL1', 0, 0.35 * fold, -0.65 * flapA + 0.45 * fold - 0.25 * breath); pose('wingL2', 0, -0.7 * fold, -0.4 * flapA);
-    pose('wingR1', 0, -0.35 * fold, 0.65 * flapA - 0.45 * fold + 0.25 * breath); pose('wingR2', 0, 0.7 * fold, 0.4 * flapA);
-    pose('wingL3', 0, -0.25 * fold, 0); pose('wingR3', 0, 0.25 * fold, 0);
-    pose('chest', -0.05 * breath + 0.03 * Math.sin(t * 1.1), 0, 0);
+    const idleW = 0.05 * brt * fold + 0.03 * Math.sin(t * 0.5) * fold;
+    pose('wingL1', 0.1 * f1, 0.35 * fold, -0.65 * f1 + 0.45 * fold - 0.25 * breath + idleW); pose('wingL2', 0, -0.7 * fold, -0.45 * f2 - 0.04 * brt * fold); pose('wingL3', 0, -0.25 * fold, -0.3 * f3);
+    pose('wingR1', 0.1 * f1, -0.35 * fold, 0.65 * f1 - 0.45 * fold + 0.25 * breath - idleW); pose('wingR2', 0, 0.7 * fold, 0.45 * f2 + 0.04 * brt * fold); pose('wingR3', 0, 0.25 * fold, 0.3 * f3);
+    if (amp > 0.05) y += 0.6 * amp * Math.sin(wp + 0.4);   // 날갯짓마다 몸이 들썩
+    pose('chest', -0.05 * breath + 0.035 * brt - 0.04 * f1, 0, 0);
+    pose('hips', -0.015 * brt, 0, 0);
     // 목 · 머리: 머리마다 따로 일렁이고, 브레스 때는 자기 목표를 본다. 깨진 머리는 축 늘어진다
     for (let i = 0; i < 3; i++) {
       const k = HEADS[i], up = headUp(i), off = i * 2.1;
@@ -472,6 +496,7 @@ export function createHydraBoss(ctx) {
       if (code === 'spawn' || code === 'hdive' && at < 1.4) { pit = 0.3; jaw = 0.6 + 0.2 * Math.sin(t * 11 + off); }
       if (!up) { pit = -0.55 + 0.05 * Math.sin(t * 0.6 + off); yaw *= 0.3; jaw = 0.35; }
       if (dying) { const dd = clamp(dieU * 1.6 - i * 0.25, 0, 1); pit = lerp(pit, -0.9, ease(dd)); jaw = lerp(jaw, 0.5, dd); }
+      { const hk = code === 'hsnap' ? 3 : 1; pit = spring(rig.sp, 'p' + k, pit, dt, 45 * hk * hk, 11 * hk); yaw = spring(rig.sp, 'y' + k, yaw, dt, 40, 10); }   // 목: 관성 있게
       pose(`n${k}1`, pit * 0.35, yaw, 0); pose(`n${k}2`, pit * 0.35, yaw, 0); pose(`n${k}3`, pit * 0.3, yaw, 0);
       pose(`head${k}`, up ? pit * 0.2 : -0.3, yaw * 0.5, up ? 0 : 0.4);
       pose(`jaw${k}`, -0.75 * jaw, 0, 0);

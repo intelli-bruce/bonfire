@@ -1,3 +1,4 @@
+import { applyLook, spring, breath } from './bosslook.js';
 // bf/demon.js — 대악마(Great Demon): bf/bosses.js 의 거대 보스 틀에 꽂히는 확장(ext). 모델은 tools/bosses/build_demon.py → bf/demon.glb.
 //
 // 패턴(모두 같은 시간표로 재생, 내가 맞았는지는 내 화면에서 판정):
@@ -100,40 +101,16 @@ export const SKIN_LOOK = {
   demon_tooth:    [0.9, [0.2, 0.1, 0.06], 0.3, 0.8, '#ffffff', 0.02, false],
   demon_claw:     [0.7, [0.05, 0.02, 0.02], 0.4, 1.4, '#ffffff', 0.0, false],
 };
-const KEY_DIR = [-0.45, 0.62, 0.64];   // 보기 공간(카메라 기준) 방향: 왼쪽 위 앞
 export function skinLook(THREE, rig) {
   for (const m of rig.mats) {
-    if (m.name === 'demon_eye') { m.emissiveIntensity = 1.4; const b = rig.base.get(m); if (b) b.i = 1.4; continue; }
-    const L = SKIN_LOOK[m.name]; if (!L || !m.emissive) continue;
-    const [key, wrap, rim, spec, ec, ei, emap] = L;
-    m.emissive.set(ec); m.emissiveIntensity = ei; if (emap && m.map) m.emissiveMap = m.map;
+    if (m.name === 'demon_eye') { m.emissiveIntensity = 1.4; const b = rig.base.get(m); if (b) b.i = 1.4; }
     if (m.name === 'demon_skin' && m.normalScale) m.normalScale.setScalar(1.6);
-    const b = rig.base.get(m); if (b) { b.e.copy(m.emissive); b.i = ei; }
-    if (!THREE.Vector3 || typeof m.onBeforeCompile !== 'function') continue;
-    const U = { dKey: { value: key }, dWrap: { value: new THREE.Vector3(...wrap) }, dRim: { value: rim }, dSpec: { value: spec }, dDir: { value: new THREE.Vector3(...KEY_DIR).normalize() } };
-    m.userData.demonLook = U;
-    m.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, U);
-      sh.fragmentShader = 'uniform float dKey, dRim, dSpec; uniform vec3 dWrap, dDir;\n' + sh.fragmentShader.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-      {
-        float dn = dot(normal, dDir);
-        vec3 dv = normalize(vViewPosition);
-        float kd = max(dn, 0.0);
-        float wr = clamp((dn + 0.6) / 1.6, 0.0, 1.0) * (1.0 - kd);
-        float fr = pow(1.0 - clamp(dot(normal, dv), 0.0, 1.0), 3.0);
-        vec3 hv = normalize(dDir + dv);
-        float sp = pow(max(dot(normal, hv), 0.0), mix(8.0, 90.0, 1.0 - roughnessFactor)) * (1.0 - roughnessFactor);
-        reflectedLight.directDiffuse += diffuseColor.rgb * (vec3(0.62, 0.66, 0.8) * dKey * kd + dWrap * wr);
-        reflectedLight.directSpecular += vec3(0.8, 0.82, 0.95) * dSpec * sp * kd;
-        reflectedLight.directDiffuse += vec3(0.75, 0.6, 0.85) * dRim * fr * (0.35 + 0.65 * diffuseColor.r);
-      }`);
-    };
-    m.customProgramCacheKey = () => 'demonLook';
-    m.needsUpdate = true;
   }
+  applyLook(THREE, rig, { exact: SKIN_LOOK, glow: /demon_(eye|crack|core|pupil)/ }, 'demonLook');
 }
 
 const ext = {
+  look(THREE, rig) { rig.eyeFix = true; skinLook(THREE, rig); },
   light(THREE, root) { const l = new THREE.PointLight('#ff2a14', 0, 46, 1.5); root.add(l); l.position.set(0, 9.0, -9.0); return l; },
 
   reset(X) { for (const f of X.S.fx || []) drop(X, f); X.S.fx = []; X.S.lean = 0; X.S.charge = 0; },
@@ -281,6 +258,14 @@ const ext = {
       spine = (-0.25 * up * (1 - dn) + 0.55 * dn) * (1 - rec) + 0.08; head = 0.25 * dn * (1 - rec); jaw = 0.3 + 0.6 * up;
     }
     if (B.spawnT > 0) { o.y = B.y - 17 * (1 - se); armL = armR = -2.2 * (1 - se); spine = -0.35 * (1 - se); jaw = 0.9; head = -0.4 * (1 - se); }
+    { // 숨: 들숨에 가슴이 들리고 어깨가 오르며, 날숨은 길게. 큰 동작은 스프링으로 관절에 무게감을 준다
+      const br = breath(t, B.rage ? 0.3 : 0.2), SP = rig ? (rig.sp || (rig.sp = {})) : {};
+      spine += 0.04 * br; head -= 0.03 * br; azL += 0.035 * br; azR -= 0.035 * br; jaw += 0.05 * br;
+      const k = a ? 70 : 40, c = a ? 15 : 11;
+      armL = spring(SP, 'aL', armL, dt, k, c); armR = spring(SP, 'aR', armR, dt, k, c); foreL = spring(SP, 'fL', foreL, dt, k * 0.8, c * 0.9); foreR = spring(SP, 'fR', foreR, dt, k * 0.8, c * 0.9);
+      handL = spring(SP, 'hL', handL, dt, k * 0.6, c * 0.8); handR = spring(SP, 'hR', handR, dt, k * 0.6, c * 0.8);
+      head = spring(SP, 'hd', head, dt, 30, 9); headY = spring(SP, 'hy', headY, dt, 30, 9);
+    }
     X.S.lean = spine;
     pose('hips', 0, 0, 0); pose('spine', spine, spineY, 0); pose('head', head, headY, 0); pose('jaw', -0.55 * jaw, 0, 0);
     pose('armL', armL, ayL, azL); pose('armR', armR, ayR, azR); pose('foreL', foreL, 0, 0); pose('foreR', foreR, 0, 0); pose('handL', handL, 0, 0); pose('handR', handR, 0, 0);

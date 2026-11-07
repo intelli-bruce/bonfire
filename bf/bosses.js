@@ -140,6 +140,7 @@ export function createGiantBoss(ctx, kind) {
     for (const m of mats) {
       if (!m.isMeshStandardMaterial) continue;
       m.metalness = Math.min(m.metalness, 0.55);   // 환경맵 없는 밤: 금속이 검게 죽지 않게
+      if (D.ext && D.ext.look) continue;            // 전용 조명(bf/bosslook.js)을 쓰는 보스: 회색 자가발광 없음
       if (m.emissive.getHex() === 0) { m.emissive.copy(m.color).multiplyScalar(kind === 'golem' ? 0.12 : 0.16); }
     }
     const base = new Map(); for (const m of mats) base.set(m, { e: m.emissive.clone(), i: m.emissiveIntensity });
@@ -162,7 +163,9 @@ export function createGiantBoss(ctx, kind) {
     if (D.ext && D.ext.light) light = D.ext.light(THREE, root);
     scene.add(root);
     const qs = { q: new THREE.Quaternion(), e: new THREE.Euler(), qa: new THREE.Quaternion() };
-    return { root, bones, lods, mats, base, rest, hull, light, flash: 0, flashK: 1, qs, lod: -1, glow: 0 };
+    const R = { root, bones, lods, mats, base, rest, hull, light, flash: 0, flashK: 1, qs, lod: -1, glow: 0 };
+    if (D.ext && D.ext.look) D.ext.look(THREE, R);
+    return R;
   }
   // 뼈를 쉬는 자세에서 세계축 기준 (오른쪽 x, 위 y, 앞 z) 각도만큼 돌린다
   function pose(name, ax, ay, az) {

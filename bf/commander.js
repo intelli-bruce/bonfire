@@ -1,3 +1,4 @@
+import { applyLook, spring, breath } from './bosslook.js';
 // bf/commander.js — 보스 「대검 지휘관」: 검정·금 판금 갑옷, 찢어진 금문양 망토, 금테 대검, 열린 투구 속 썩은 얼굴(키 약 14 m).
 // 모델: tools/bosses/build_commander.py (Blender) → bf/commander.glb (Draco, Commander_LOD0/LOD1, 뼈대만 · 클립 없음).
 //
@@ -23,6 +24,22 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const faceTo = (dx, dz) => Math.atan2(-dx, -dz);
 const bl = (p) => [p[0], p[2], -p[1]];   // Blender(x, y 앞, z 위) → three(x, z, -y)
 
+// 재질별 전용 조명(bf/bosslook.js) — [key, wrap, rim, spec, 발광색, 발광세기, 발광에 색맵]
+export const LOOK = {
+  exact: {
+    cmd_armor: [1.05, [0.06, 0.05, 0.05], 0.55, 1.3, '#000000', 0, false],   // 검은 판금: 키 하이라이트·테두리로 형태가 선다
+    cmd_plate: [1.0, [0.06, 0.05, 0.05], 0.5, 1.2, '#000000', 0, false],
+    cmd_gold:  [1.15, [0.3, 0.18, 0.05], 0.5, 1.6, '#3a2006', 0.25, false],
+    cmd_blade: [1.1, [0.05, 0.05, 0.06], 0.5, 1.8, '#000000', 0, false],
+    cmd_grip:  [0.9, [0.1, 0.05, 0.03], 0.3, 0.2, '#000000', 0, false],
+    cmd_cape:  [0.95, [0.32, 0.05, 0.03], 0.55, 0.15, '#000000', 0, false],
+    cmd_skin:  [0.95, [0.42, 0.14, 0.08], 0.45, 0.6, '#ff6a3a', 0.03, true], // 썩은 얼굴: 붉은 산란·젖은 윤기
+    cmd_gum:   [0.9, [0.4, 0.08, 0.06], 0.3, 0.9, '#000000', 0, false],
+    cmd_tooth: [0.9, [0.2, 0.15, 0.08], 0.3, 0.9, '#000000', 0, false],
+    cmd_eyeball: [0.9, [0.3, 0.2, 0.15], 0.3, 1.2, '#000000', 0, false],
+  },
+  glow: /cmd_(iris|pupil)/,
+};
 export const KIND = 'commander';
 export const DEF = {
   name: '대검 지휘관', title: '몰락한 왕의 칼 · 대검 지휘관', file: 'commander.glb', hp: 6800, hpPerExtra: 2200, hitReach: 30, camR: 1.0, camLift: 1.4, lodD: 75,
@@ -94,10 +111,6 @@ export function createCommanderBoss(ctx) {
     for (const m of mats) {
       if (!m.isMeshStandardMaterial) continue;
       m.metalness = Math.min(m.metalness, 0.6);   // 환경맵 없는 밤: 금속이 검게 죽지 않게
-      if (/gold/.test(m.name)) { m.emissive.setRGB(0.35, 0.2, 0.04); m.emissiveIntensity = 0.55; }
-      else if (/skin|tooth|eyeball/.test(m.name)) { m.emissive.setRGB(0.3, 0.27, 0.24); m.emissiveIntensity = 0.35; }
-      else if (/cape/.test(m.name)) { m.emissive.setRGB(0.12, 0.03, 0.02); m.emissiveIntensity = 0.6; }
-      else if (m.emissive.getHex() === 0) { m.emissive.setRGB(0.05, 0.05, 0.06); }   // 검은 판금: 꼭짓점 색(금 띠)이 살게 아주 약하게
     }
     const base = new Map(); for (const m of mats) base.set(m, { e: m.emissive.clone(), i: m.emissiveIntensity });
     root.updateMatrixWorld(true);
@@ -115,7 +128,9 @@ export function createCommanderBoss(ctx) {
     const glow = new THREE.PointLight('#ffb050', 0, 26, 1.6); root.add(glow); glow.position.set(0, 9, -3.5);
     scene.add(root);
     const qs = { q: new THREE.Quaternion(), qa: new THREE.Quaternion() };
-    return { root, bones, lods, mats, base, rest, hull, sword, light, glow, flash: 0, flashK: 1, qs, lod: -1 };
+    const R = { root, bones, lods, mats, base, rest, hull, sword, light, glow, flash: 0, flashK: 1, qs, lod: -1, sp: {} };
+    applyLook(THREE, R, LOOK, 'commanderLook');
+    return R;
   }
   function pose(name, ax, ay, az) {
     const b = rig && rig.bones[name]; if (!b) return;
@@ -421,6 +436,7 @@ export function createCommanderBoss(ctx) {
     let spX = 0.04 * Math.sin(t * 0.9), spY = 0, hdX = 0.05 * Math.sin(t * 0.6), hdY = 0.12 * Math.sin(t * 0.37);
     let aRx = 0.06 * Math.sin(t * 0.8), aRy = 0, aRz = 0, fRx = 0, aLx = 0.08 * s * walk, aLz = 0.05, fLx = -0.2, jaw = 0.12 + 0.06 * Math.sin(t * 1.7);
     let hipY = 0, crouch = 0;
+    const br = breath(t, 0.2); spX += 0.035 * br; hdX -= 0.025 * br; aLz += 0.03 * br; aRz -= 0.03 * br;   // 숨: 가슴이 들리고 어깨가 오르내림
     if (code === 'sweep') {
       const w = ease(clamp(at / 0.8, 0, 1)), sw = clamp((at - 0.8) / 0.3, 0, 1), rec = clamp((at - 1.4) / 0.8, 0, 1);
       const e = sw < 1 ? ease(sw) : 1;
@@ -451,7 +467,14 @@ export function createCommanderBoss(ctx) {
     const kneel = dying ? ease(clamp(dieU * 1.5, 0, 1)) : 0;
     pose('thighL', 0.4 * s * walk - 0.35 * crouch - 1.3 * kneel, 0, 0); pose('thighR', -0.4 * s * walk - 0.25 * crouch - 0.2 * kneel, 0, 0);
     pose('shinL', -0.4 * Math.max(0, -s) * walk + 0.6 * crouch + 1.9 * kneel, 0, 0); pose('shinR', -0.4 * Math.max(0, s) * walk + 0.45 * crouch + 0.4 * kneel, 0, 0);
-    pose('cape1', 0.12 + 0.35 * walk + 0.06 * Math.sin(t * 1.3), 0, 0.05 * Math.sin(t * 0.9)); pose('cape2', 0.1 + 0.25 * walk + 0.1 * Math.sin(t * 1.7 + 1), 0, 0.08 * Math.sin(t * 1.1));
+    // 망토: 마디 셋을 스프링으로 늦게 따라가게(걸음·몸 돌림·베기에 출렁이고 바람에 천천히 너울댄다)
+    const SP = rig.sp, dry = rig.prevRy === undefined ? 0 : (((B.ry - rig.prevRy) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI; rig.prevRy = B.ry;
+    const turn = clamp(-dry / Math.max(dt, 1e-3) * 0.12, -0.5, 0.5), wind = 0.05 * Math.sin(t * 0.7) + 0.03 * Math.sin(t * 1.9 + 2);
+    const t1 = 0.12 + 0.4 * walk + wind + 0.25 * crouch + 0.2 * Math.abs(spY), t1z = turn + 0.05 * Math.sin(t * 0.9) - 0.2 * spY;
+    const c1 = spring(SP, 'c1', t1, dt, 22, 6), c1z = spring(SP, 'c1z', t1z, dt, 16, 4.5);
+    const c2 = spring(SP, 'c2', 0.08 + 0.25 * walk + 1.1 * (t1 - c1) + 0.04 * Math.sin(t * 1.3 + 1), dt, 18, 4.5), c2z = spring(SP, 'c2z', 1.2 * (t1z - c1z) + 0.06 * Math.sin(t * 1.1), dt, 14, 3.8);
+    const c3 = spring(SP, 'c3', 0.06 + 0.2 * walk + 1.2 * (t1 - c1) + 0.06 * Math.sin(t * 1.7 + 2), dt, 14, 3.5), c3z = spring(SP, 'c3z', 1.3 * (t1z - c1z) + 0.08 * Math.sin(t * 1.4 + 1), dt, 12, 3.2);
+    pose('cape1', c1, 0, c1z); pose('cape2', c2, 0, c2z); pose('cape3', c3, 0, c3z);
     y -= crouch * 0.9 + Math.abs(c) * 0.25 * walk;
     if (walk && Math.sign(s) !== rig.lastStep) { rig.lastStep = Math.sign(s); ctx.shake(0.15, 0.22); if (B.a === 'move') snd('step', B.x, B.z); }
     if (dying) {   // 무릎을 꿇고(칼을 짚음) → 앞으로 무너지며 가라앉는다

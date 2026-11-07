@@ -18,6 +18,7 @@ from build_bosses import (V, lerp, smooth, basis_from, ell, tube, cone, obj_from
                           verts_np, normals_np, displace, shade_smooth, box_uv, set_colors, fill_colors, set_material,
                           tex_fbm, tex_cells, height_to_normal, make_image, material, make_armature, skin, finish_lods,
                           finalize, reset_scene, seg_d, tri_count)
+from hq import bake_ao, rough_image, add_rough, cloth_drape
 
 def parse_args():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
@@ -42,7 +43,7 @@ BONES = [
     ('handR', tuple(GRIP), tuple(GRIP + SD * 1.2), 'foreR'),
     ('thighL', (-1.1, 0, 7.0), (-1.3, 0.4, 3.8), 'hips'), ('shinL', (-1.3, 0.4, 3.8), (-1.35, -0.1, 0.7), 'thighL'),
     ('thighR', (1.1, 0, 7.0), (1.3, 0.4, 3.8), 'hips'), ('shinR', (1.3, 0.4, 3.8), (1.35, -0.1, 0.7), 'thighR'),
-    ('cape1', (0, -1.5, 11.2), (0, -2.0, 6.4), 'spine'), ('cape2', (0, -2.0, 6.4), (0, -2.5, 0.8), 'cape1'),
+    ('cape1', (0, -1.5, 11.2), (0, -1.9, 7.6), 'spine'), ('cape2', (0, -1.9, 7.6), (0, -2.3, 4.2), 'cape1'), ('cape3', (0, -2.3, 4.2), (0, -2.6, 0.8), 'cape2'),
 ]
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -64,6 +65,7 @@ def textures():
         scr = np.maximum(scr, np.clip(1 - d * n / 1.4, 0, 1) * rng.uniform(0.3, 1))
     h = ham * 0.5 + fine * 0.15 - scr * 0.35
     alb = (0.78 + 0.12 * fine + 0.35 * scr - 0.1 * ham)[..., None] * np.array([1, 1, 1])
+    T['armorR'] = rough_image('cmd_armor_rough', h, 0.22, 0.62)
     T['armorA'] = make_image('cmd_armor_albedo', alb); T['armorN'] = make_image('cmd_armor_normal', height_to_normal(h, 7.0), True)
     # 금 상감: 덩굴 무늬 (sin 왜곡 선)
     w1 = tex_fbm(n, 1.4, 33)
@@ -349,9 +351,11 @@ def cape(li, m_cape):
             co = l.vert.co; u = clamp01(co.x / (2 * lerp(2.5, 3.6, (11.55 - co.z) / 11.0)) + 0.5); v = clamp01((11.55 - co.z) / 11.0)
             l[uvl].uv = (u, v)
     o = obj_from_bm(f'cmd_cape_{li}', bm)
+    # 천 시뮬레이션: 어깨 띠를 고정하고 중력 · 뒤바람 · 난류로 주름을 굳힌다(게임에선 뼈 3마디 + 스프링으로 흔들림)
+    cloth_drape(o, lambda c: 1.0 if c.z > 10.7 else max(0.0, (c.z - 9.4) / 1.3) ** 2, frames=22, wind=(0, -1, -0.15), wind_k=45.0, turb=20.0)
     m = o.modifiers.new('so', 'SOLIDIFY'); m.thickness = 0.05; apply_mods(o)
     shade_smooth(o.data); fill_colors(o.data, (1, 1, 1)); set_material(o, m_cape)
-    return [(o, ('spine', 'cape1', 'cape2'))]
+    return [(o, ('spine', 'cape1', 'cape2', 'cape3'))]
 
 def clamp01(x): return max(0.0, min(1.0, x))
 
@@ -471,8 +475,8 @@ def eyes(li, m_eyeball, m_iris, m_pupil):
 def build(out, prev):
     reset_scene()
     T = textures()
-    m_armor = material('cmd_armor', rough=0.4, metal=0.7, albedo=T['armorA'], normal=T['armorN'], nstrength=0.8)
-    m_black = material('cmd_plate', base=(0.07, 0.07, 0.078), rough=0.36, metal=0.7, albedo=T['armorA'], normal=T['armorN'], nstrength=0.8)
+    m_armor = material('cmd_armor', rough=0.4, metal=0.7, albedo=T['armorA'], normal=T['armorN'], nstrength=0.8); add_rough(m_armor, T['armorR'])
+    m_black = material('cmd_plate', base=(0.07, 0.07, 0.078), rough=0.36, metal=0.7, albedo=T['armorA'], normal=T['armorN'], nstrength=0.8); add_rough(m_black, T['armorR'])
     m_gold = material('cmd_gold', base=(1.0, 0.7, 0.22), rough=0.32, metal=0.75, albedo=T['goldA'], normal=T['goldN'], nstrength=1.0)
     m_blade = material('cmd_blade', rough=0.28, metal=0.95, albedo=T['armorA'], normal=T['armorN'], nstrength=0.6)
     m_grip = material('cmd_grip', base=(0.12, 0.06, 0.04), rough=0.85, albedo=T['capeA'], normal=T['capeN'])
@@ -508,6 +512,7 @@ def build(out, prev):
     if prev:   # 미리보기 전용 얼굴 조명(내보내기에는 안 들어감)
         lo = bpy.data.objects.new('facefill', bpy.data.lights.new('facefill', 'POINT')); lo.data.energy = 900; lo.data.color = (1.0, 0.75, 0.6); lo.location = H + V((1.2, 3.5, 0.6)); bpy.context.scene.collection.objects.link(lo)
     lods = finish_lods('Commander', body, extras, arm, BONES, [42000, 8000], 0.45, body_color, m_armor)
+    bake_ao(lods, samples=16, dist=1.2)
     finalize(arm, lods, out, 'commander.glb', prev, 'commander',
              [((8, 30, 9), (0, 0, 8.0)), ((1.3, 4.6, 13.0), (0, 0.6, 12.9)), ((-14, -18, 10), (0, 0, 7.5))])
 

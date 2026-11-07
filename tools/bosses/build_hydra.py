@@ -14,6 +14,7 @@ import bpy, bmesh, math, sys, os, random
 import numpy as np
 from mathutils import Vector, Matrix, noise
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from hq import bake_ao, rough_image, add_rough
 from build_bosses import (reset_scene, lerp, smooth, basis_from, ell, tube, cone, obj_from_bm, remesh, decimate, solid, copy_obj,
                           verts_np, displace, shade_smooth, box_uv, set_colors, fill_colors, set_material, tex_fbm, height_to_normal,
                           make_image, material, make_armature, finish_lods, finalize, seg_d)
@@ -135,7 +136,9 @@ def build(out, prev):
     KA = make_image('hydra_skin_albedo', (0.8 + 0.2 * hK)[..., None] * np.array([1, 1, 1])); KN = make_image('hydra_skin_normal', height_to_normal(hK, 6.0), True)
 
     m_scale = material('hydra_scale', rough=0.42, metal=0.35, albedo=SA, normal=SN, nstrength=1.4)
+    add_rough(m_scale, rough_image('hydra_scale_r', tex_fbm(1024, 1.4, 404, lo=6) * 0.6 + tex_fbm(1024, 0.6, 405, lo=80) * 0.4, 0.25, 0.75))   # 비늘 가운데 매끈·사이 거칢
     m_bone = material('hydra_bone', rough=0.62, albedo=BA, normal=BN, nstrength=1.3, double=True)
+    add_rough(m_bone, rough_image('hydra_bone_r', tex_fbm(1024, 1.0, 406, lo=4), 0.45, 0.9))
     m_spike = material('hydra_spike', base=(0.62, 0.56, 0.52), rough=0.5, albedo=BA, normal=BN, nstrength=1.0)
     m_mem = material('hydra_membrane', base=(0.62, 0.07, 0.05), rough=0.55, albedo=MA, normal=MN, nstrength=1.1, emit=(0.4, 0.02, 0.0), emit_k=0.18, double=True)
     m_claw = material('hydra_claw', base=(0.62, 0.05, 0.03), rough=0.28, albedo=BA, normal=BN, nstrength=0.6)
@@ -435,6 +438,7 @@ def build(out, prev):
     _skin = BB.skin
     BB.skin = lambda o, a, b, fixed=None, sharp=4.0, only=None: _skin(o, a, b, fixed=fixed, sharp=sharp, only=only if (fixed or only) else body_only)
     lods = finish_lods('Hydra', body, extras, arm, BONES, [58000, 9000], 0.55, body_color, m_scale)
+    bake_ao(lods, samples=16, dist=2.0)
     C = NECKS['C']
     hc = HF['C'] @ V((0, 1.6, 0.0))
     finalize(arm, lods, out, 'hydra.glb', prev, 'hydra', [((0, 42, 12), (0, 4, 9)), ((-26, 24, 14), (0, 0, 9)), ((2.2, 19.5, 14.6), tuple(hc)), ((-4.5, 18, 13), tuple(HF['L'] @ V((0, 1.6, 0))))])
