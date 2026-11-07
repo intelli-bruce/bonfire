@@ -792,14 +792,15 @@ export function createGiantBoss(ctx, kind) {
 // 허브: 거미 + 세 보스를 하나처럼 (한 번에 하나만 살아 있다)
 // ---------------------------------------------------------------------------------------------------------------------
 export function createBossHub(map) {
-  const all = KIND_LIST.filter((k) => map[k]).map((k) => map[k]);
-  const kindOf = (b) => KIND_LIST.find((k) => map[k] === b);
+  const KL = [...KIND_LIST, ...Object.keys(map).filter((k) => !KIND_LIST.includes(k))];   // 따로 만든 보스 모듈(예: bf/hydra.js)도 map 에 넣으면 붙는다
+  const all = KL.filter((k) => map[k]).map((k) => map[k]);
+  const kindOf = (b) => KL.find((k) => map[k] === b);
   const cur = () => all.find((b) => b.active) || null;
   const listeners = {};
-  for (const b of all) for (const ev of ['spawn', 'despawn', 'gone', 'die', 'rage', 'takeover', 'request-despawn', 'hp']) b.on(ev, (v) => { for (const f of listeners[ev] || []) { try { f({ ...(v || {}), kind: kindOf(b) }); } catch (e) { /* listener */ } } });
+  for (const b of all) for (const ev of ['spawn', 'despawn', 'gone', 'die', 'rage', 'takeover', 'request-despawn', 'hp', 'headbreak']) b.on(ev, (v) => { for (const f of listeners[ev] || []) { try { f({ ...(v || {}), kind: kindOf(b) }); } catch (e) { /* listener */ } } });
   const spiderView = (v) => ({ ...v, kind: 'spider', name: '인면 거미', title: '인면 거미 · 직녀', camR: 1, camLift: 1, act: '' });
   const hub = {
-    kinds: KIND_LIST.filter((k) => map[k]),
+    kinds: KL.filter((k) => map[k]),
     get active() { return !!cur(); }, get owner() { const c = cur(); return !!(c && c.owner); }, get ownerId() { const c = cur(); return c ? c.ownerId : ''; },
     get kind() { const c = cur(); return c ? kindOf(c) : ''; },
     get view() { const c = cur(); if (!c) return { active: false, kind: '', born: 0, hp: 0, maxHp: 0, minions: 0, spawnT: 0, dying: false, rage: false, x: 0, z: 0, ry: 0, camR: 1, camLift: 1 }; return kindOf(c) === 'spider' ? spiderView(c.view) : c.view; },
