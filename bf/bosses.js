@@ -32,8 +32,9 @@ const bl = (p) => [p[0], p[2], -p[1]];
 // ---------------------------------------------------------------------------------------------------------------------
 export const KINDS = {
   shark: {
-    name: '메갈로돈', title: '심연의 이빨 · 메갈로돈', file: 'shark.glb', hp: 5200, hpPerExtra: 1700, hitReach: 30, camR: 0.65, camLift: 1.0, lodD: 70,
-    speed: 7.5, turn: 1.4, spawnT: 2.4, dieT: 5.5, fly: false, water: true,
+    name: '메갈로돈', title: '심연의 이빨 · 메갈로돈', file: 'shark.glb', hp: 5200, hpPerExtra: 1700, hitReach: 120, camR: 1.6, camLift: 2.2, lodD: 260,
+    // sc: 모델·몸 캡슐·패턴 거리 배율(길이 약 100 m — 옛 20 m 의 5배). 모델은 20 m 로 만들고 화면에서 키운다.
+    speed: 11, turn: 0.9, spawnT: 2.8, dieT: 6.0, fly: false, water: true, sc: 5,
     // 몸 캡슐: [뼈, a(Blender), b(Blender), 반지름, col]
     hull: [['head', [0, 9.6, 0.3], [0, 6.0, 0.3], 1.6], ['head', [0, 6.0, 0.2], [0, 3.0, 0.05], 2.45], ['body', [0, 3.0, 0], [0, -0.5, 0.05], 2.55],
       ['t1', [0, -0.5, 0.05], [0, -3.5, 0.1], 2.05], ['t2', [0, -3.5, 0.1], [0, -6.8, 0.15], 1.25], ['t3', [0, -6.8, 0.15], [0, -9.5, 0.25], 0.75],
@@ -41,10 +42,11 @@ export const KINDS = {
       ['jaw', [-1.6, 5.0, -1.6], [1.6, 5.0, -1.6], 0.9], ['jaw', [0, 5.0, -1.7], [0, 8.2, -1.1], 1.0],
       ['pecL', [-1.9, 3.8, -1.3], [-5.6, 1.0, -2.6], 0.55], ['pecR', [1.9, 3.8, -1.3], [5.6, 1.0, -2.6], 0.55]],
     patterns: [
-      { code: 'bite', w: 5, cd: 3.4, minD: 0, maxD: 15, dur: 1.5 },
-      { code: 'lunge', w: 4, cd: 7.5, minD: 9, maxD: 34, dur: 4.4 },
-      { code: 'tail', w: 3, cd: 5.5, minD: 0, maxD: 17, dur: 1.8 },
-      { code: 'rush', w: 3, cd: 9, minD: 14, maxD: 45, dur: 2.6, water: true },
+      { code: 'bite', w: 5, cd: 3.4, minD: 0, maxD: 75, dur: 1.5 },
+      { code: 'swallow', w: 4, cd: 8.5, minD: 0, maxD: 90, dur: 4.2 },
+      { code: 'lunge', w: 3, cd: 9, minD: 40, maxD: 95, dur: 4.4 },
+      { code: 'tail', w: 2, cd: 5.5, minD: 0, maxD: 60, dur: 1.8 },
+      { code: 'rush', w: 3, cd: 9, minD: 50, maxD: 140, dur: 2.6, water: true },
     ],
   },
   golem: {
@@ -84,7 +86,7 @@ export const KINDS = {
 export const KIND_LIST = ['spider', 'shark', 'golem', 'seraph', 'demon', 'commander'];
 // 패턴 피해(내 HP 100 기준) · 넉백 세기
 export const HITS = {
-  bite: [32, 2.4], lunge: [34, 2.8], tail: [22, 2.6], rush: [26, 2.2],
+  bite: [32, 2.4], swallow: [55, 3.6], lunge: [34, 2.8], tail: [22, 2.6], rush: [26, 2.2],
   slam: [34, 2.6], wave: [18, 1.6], hurl: [26, 2.0], charge: [30, 3.0],
   pillar: [30, 1.4], hellfire: [16, 1.2], burn: [7, 0.2], dive: [34, 3.0], ring: [16, 1.8],
   ...DEMON.hits,
@@ -96,6 +98,7 @@ for (const k in KINDS) ACTS[k] = new Set([...A_BASE, ...KINDS[k].patterns.map((p
 // ---------------------------------------------------------------------------------------------------------------------
 export function createGiantBoss(ctx, kind) {
   const D = KINDS[kind]; if (!D) throw new Error('unknown boss ' + kind);
+  const SC = D.sc || 1;   // 크기 배율(메갈로돈 5)
   const { THREE, scene } = ctx;
   const B = { kind, active: false, owner: false, ownerId: '', ep: 0, born: 0, x: 0, z: 0, y: 0, ry: 0, hp: 0, maxHp: 0, a: 'idle', ac: 0, sa: 0, tx: 0, tz: 0, pt: [], seq: 0, spawnT: 0, dieT: 0, rage: false, haz: [] };
   const R = { tx: 0, tz: 0, ty: 0, try_: 0, lastAc: 0, lastSnap: 0 };
@@ -140,8 +143,9 @@ export function createGiantBoss(ctx, kind) {
     for (const m of mats) {
       if (!m.isMeshStandardMaterial) continue;
       m.metalness = Math.min(m.metalness, 0.55);   // 환경맵 없는 밤: 금속이 검게 죽지 않게
+      if (kind === 'shark' && m.name === 'shark_skin') m.color.setRGB(0.42, 0.47, 0.52);   // 어두운 청회색 가죽(밤바다에서 하얗게 뜨지 않게)
       if (D.ext && D.ext.look) continue;            // 전용 조명(bf/bosslook.js)을 쓰는 보스: 회색 자가발광 없음
-      if (m.emissive.getHex() === 0) { m.emissive.copy(m.color).multiplyScalar(kind === 'golem' ? 0.12 : 0.16); }
+      if (m.emissive.getHex() === 0) { m.emissive.copy(m.color).multiplyScalar(kind === 'golem' ? 0.12 : kind === 'shark' ? 0.07 : 0.16); if (m.map) m.emissiveMap = m.map; }   // 밤 장면 보조광: 텍스처 무늬를 따라(평평한 회색 막 방지)
     }
     const base = new Map(); for (const m of mats) base.set(m, { e: m.emissive.clone(), i: m.emissiveIntensity });
     root.updateMatrixWorld(true);
@@ -195,7 +199,7 @@ export function createGiantBoss(ctx, kind) {
     if (D.ext && D.ext.reset) D.ext.reset(X);
   }
   function baseY(x, z) {   // 몸 뿌리의 높이(땅·물·공중)
-    if (D.water) return ctx.waterLevel() - 1.5;
+    if (D.water) return ctx.waterLevel() + (SC > 1 ? 1.9 * SC : -1.5);   // 5배 메갈로돈: 등이 물 위로 크게 드러나고 벌린 입이 수면에 걸린다
     if (D.fly) return ctx.heightAt(x, z) + D.hover;
     return ctx.heightAt(x, z);
   }
@@ -244,7 +248,7 @@ export function createGiantBoss(ctx, kind) {
       let best = null, bd = 1e9;
       for (let i = 0; i < 16; i++) {
         const a = (i / 16) * TAU;
-        for (const r of [9, 14, 20, 28]) {
+        for (const r of SC > 1 ? [42, 52, 64, 78] : [9, 14, 20, 28]) {
           const x = tg.p.x + Math.sin(a) * r, z = tg.p.z + Math.cos(a) * r;
           if (!ctx.canSwim(x, z)) continue;
           const d = r * 2 + Math.hypot(x - B.x, z - B.z) * 0.35; if (d < bd) { bd = d; best = { x, z }; }
@@ -261,7 +265,7 @@ export function createGiantBoss(ctx, kind) {
     for (const p of D.patterns) {
       if (O.cd[p.code] > 0 || tg.d < p.minD || tg.d > p.maxD) continue;
       if (p.water && !ctx.canSwim(tg.p.x, tg.p.z) && !ctx.canSwim((tg.p.x + B.x) / 2, (tg.p.z + B.z) / 2)) continue;
-      if (kind === 'shark' && p.code === 'bite') { const m = mouth(); if (Math.hypot(tg.p.x - m.x, tg.p.z - m.z) > 13) continue; }
+      if (kind === 'shark' && (p.code === 'bite' || p.code === 'swallow')) { const m = mouth(); if (Math.hypot(tg.p.x - m.x, tg.p.z - m.z) > (p.code === 'bite' ? 14 : 26) * Math.sqrt(SC)) continue; }
       ok.push(p);
     }
     if (!ok.length) return null;
@@ -276,7 +280,7 @@ export function createGiantBoss(ctx, kind) {
     B.tx = tg ? r2(tg.p.x) : B.x; B.tz = tg ? r2(tg.p.z) : B.z;
     B.pt = [];
     if (kind === 'shark' && p.code === 'lunge') {   // 물에서 뛰어올라 플레이어 자리까지(최대 30 m)
-      const d = Math.hypot(B.tx - B.x, B.tz - B.z), k = Math.min(1, 30 / (d || 1)); B.tx = r2(B.x + (B.tx - B.x) * k); B.tz = r2(B.z + (B.tz - B.z) * k);
+      const d = Math.hypot(B.tx - B.x, B.tz - B.z), k = Math.min(1, 30 * Math.sqrt(SC) / (d || 1)); B.tx = r2(B.x + (B.tx - B.x) * k); B.tz = r2(B.z + (B.tz - B.z) * k);
     }
     if (kind === 'seraph' && p.code === 'pillar') {
       for (const q of ctx.players()) if (Math.hypot(q.x - B.x, q.z - B.z) < 70 && B.pt.length < 4) B.pt.push([r2(q.x), r2(q.z)]);
@@ -326,7 +330,7 @@ export function createGiantBoss(ctx, kind) {
 
   // ---------- 패턴 시간표 (모두 같은 것을 돈다) ----------
   const fwd = (ry) => [-Math.sin(ry), -Math.cos(ry)];
-  function mouth() { const [fx, fz] = fwd(B.ry); return { x: B.x + fx * 9.0, z: B.z + fz * 9.0 }; }
+  function mouth() { const [fx, fz] = fwd(B.ry); return { x: B.x + fx * 8.6 * SC, z: B.z + fz * 8.6 * SC }; }
   function once(a, key, at) { if (a.t >= at && !a.ev.has(key)) { a.ev.add(key); return true; } return false; }
   function runPattern(dt) {
     const a = act.cur; if (!a) return;
@@ -338,36 +342,45 @@ export function createGiantBoss(ctx, kind) {
     if (kind === 'shark') {
       if (a.code === 'bite') {   // 짧게 앞으로 튀며 물기
         turnTo(tgA, 2.2);
-        if (a.t > 0.35 && a.t < 0.75) { const m0 = mouth(); if (Math.hypot(T.x - m0.x, T.z - m0.z) > 3) moveBy(7.5 * dt / 0.4); }
-        if (once(a, 'snap', 0.7)) { const m = mouth(); hitCone(m.x, m.z, B.ry, 7.5, 0.9, 'bite', 3.5); ctx.sfx(kind, 'snap', m.x, m.z); ctx.fx.crown(m.x, ctx.waterLevel(), m.z, 18); VX.burst('splash', m.x, ctx.waterLevel(), m.z, { n: 30, dir: [-Math.sin(B.ry) * 0.4, 0.8, -Math.cos(B.ry) * 0.4] }); VX.burst('mist', m.x, ctx.waterLevel(), m.z, { n: 6 }); }
+        if (a.t > 0.35 && a.t < 0.75) { const m0 = mouth(); if (Math.hypot(T.x - m0.x, T.z - m0.z) > 3) moveBy(7.5 * Math.sqrt(SC) * dt / 0.4); }
+        if (once(a, 'snap', 0.7)) { const m = mouth(); hitCone(m.x, m.z, B.ry, 7.5 * Math.sqrt(SC), 0.9, 'bite', 3.5 * SC); ctx.sfx(kind, 'snap', m.x, m.z); ctx.fx.crown(m.x, ctx.waterLevel(), m.z, 18); VX.burst('splash', m.x, ctx.waterLevel(), m.z, { n: 30, dir: [-Math.sin(B.ry) * 0.4, 0.8, -Math.cos(B.ry) * 0.4] }); VX.burst('mist', m.x, ctx.waterLevel(), m.z, { n: 6 }); }
+      } else if (a.code === 'swallow') {   // 삼키기: 입을 끝까지 벌려(1.0 s) 물째 빨아들이고(1.0~2.7 s) 덥석 닫는다 → 삼켰다 뱉음
+        turnTo(tgA, 1.6);
+        const m = mouth(), R = 20 * Math.sqrt(SC);
+        if (a.t > 1.0 && a.t < 2.7) {
+          if (Math.random() < dt * 14) ctx.fx.crown(m.x + (Math.random() - 0.5) * R * 0.8, ctx.waterLevel(), m.z + (Math.random() - 0.5) * R * 0.8, 8);
+          if (ctx.pullMe) ctx.pullMe(m.x, m.z, R * 2.2, 9 * dt);   // 입 쪽으로 끌려간다(내 화면)
+        }
+        if (once(a, 'suck', 1.0)) ctx.sfx(kind, 'suck', m.x, m.z);
+        if (once(a, 'gulp', 2.7)) { hitCircle(m.x, m.z, R * 0.6, 'swallow', 4 * SC); ctx.sfx(kind, 'snap', m.x, m.z); ctx.shake(0.9, 0.9); ctx.fx.crown(m.x, ctx.waterLevel(), m.z, 34); VX.burst('splash', m.x, ctx.waterLevel(), m.z, { n: 70, speed: 1.4, up: 1.5 }); VX.ring('mist', m.x, ctx.waterLevel(), m.z, R * 0.5, { n: 16 }); }
       } else if (a.code === 'lunge') {   // 물 밖 돌진: 뛰어올라(1.2 s) 덮치고, 모래 위에서 몸부림친 뒤(1.4 s) 물로 미끄러져 돌아간다
         const up = 0.55, fl = 1.25, back = 2.6;
         if (a.t < up) { turnTo(tgA, 3); B.y = F.y - 0.6 * ease(a.t / up); }
         else if (a.t < up + fl) {
           const s = ease((a.t - up) / fl); B.x = F.x + (T.x - F.x) * s; B.z = F.z + (T.z - F.z) * s;
           const ground = Math.max(ctx.waterLevel(), g(B.x, B.z) + 2.2);
-          B.y = lerp(F.y, ground, s) + Math.sin(s * Math.PI) * 7.5; B.pitch = (0.5 - s) * 1.1;
+          B.y = lerp(F.y, ground, s) + Math.sin(s * Math.PI) * 7.5 * Math.sqrt(SC); B.pitch = (0.5 - s) * 1.1;
           if (once(a, 'jump', up)) { ctx.fx.crown(F.x, ctx.waterLevel(), F.z, 30); VX.burst('splash', F.x, ctx.waterLevel(), F.z, { n: 60, speed: 1.3, up: 1.4 }); VX.ring('mist', F.x, ctx.waterLevel(), F.z, 3, { n: 16 }); ctx.sfx(kind, 'splash', F.x, F.z); ctx.shake(0.4, 0.6); }
         } else if (a.t < up + fl + back) {
           const s = (a.t - up - fl) / back;
-          if (once(a, 'land', up + fl)) { hitCircle(T.x, T.z, 7.5, 'lunge', 3); ctx.sfx(kind, 'snap', T.x, T.z); ctx.shake(0.8, 0.8); VX.impact(T.x, g(T.x, T.z), T.z, { color: '#e8e2d0', smokeKind: 'dust', smokeN: 14, sparks: 10 }); VX.burst('debris', T.x, g(T.x, T.z), T.z, { n: 18 }); for (let i = 0; i < 5; i++) ctx.fx.poof(T.x + (Math.random() - 0.5) * 8, g(T.x, T.z) + 0.2, T.z + (Math.random() - 0.5) * 8, 5); addFx({ type: 'ring', x: T.x, z: T.z, r0: 3, r1: 14, t: 0, life: 0.8, hit: true, dmg: 'ring', color: '#e8e2d0' }); }
+          if (once(a, 'land', up + fl)) { hitCircle(T.x, T.z, 7.5 * Math.sqrt(SC), 'lunge', 3 * SC); ctx.sfx(kind, 'snap', T.x, T.z); ctx.shake(0.8, 0.8); VX.impact(T.x, g(T.x, T.z), T.z, { color: '#e8e2d0', smokeKind: 'dust', smokeN: 14, sparks: 10 }); VX.burst('debris', T.x, g(T.x, T.z), T.z, { n: 18 }); for (let i = 0; i < 5; i++) ctx.fx.poof(T.x + (Math.random() - 0.5) * 8, g(T.x, T.z) + 0.2, T.z + (Math.random() - 0.5) * 8, 5); addFx({ type: 'ring', x: T.x, z: T.z, r0: 3, r1: 14, t: 0, life: 0.8, hit: true, dmg: 'ring', color: '#e8e2d0' }); }
           const ss = ease(clamp((s - 0.35) / 0.65, 0, 1));
           B.x = T.x + (F.x - T.x) * ss; B.z = T.z + (F.z - T.z) * ss;
           B.y = lerp(Math.max(ctx.waterLevel(), g(T.x, T.z) + 2.2), F.y, ss); B.pitch = 0; B.roll = Math.sin(a.t * 9) * 0.25 * (1 - ss);
         } else { B.roll = 0; }
       } else if (a.code === 'tail') {   // 몸을 비틀어 꼬리치기: 뒤쪽 부채꼴 + 물결 충격파
         if (once(a, 'whip', 0.8)) {
-          const [fx, fz] = fwd(B.ry), tx = B.x - fx * 11, tz = B.z - fz * 11;
-          hitCone(B.x, B.z, B.ry + Math.PI, 17, 1.25, 'tail', 4);
-          addFx({ type: 'ring', x: tx, z: tz, r0: 2, r1: 20, t: 0, life: 1.2, hit: true, dmg: 'ring', color: '#d8f4ff', water: true });
+          const [fx, fz] = fwd(B.ry), tx = B.x - fx * 11 * SC, tz = B.z - fz * 11 * SC;
+          hitCone(B.x, B.z, B.ry + Math.PI, 17 * SC * 0.8, 1.25, 'tail', 4 * SC);
+          addFx({ type: 'ring', x: tx, z: tz, r0: 2, r1: 20 * Math.sqrt(SC), t: 0, life: 1.2, hit: true, dmg: 'ring', color: '#d8f4ff', water: true });
           ctx.fx.crown(tx, ctx.waterLevel(), tz, 30); VX.burst('splash', tx, ctx.waterLevel(), tz, { n: 50, speed: 1.2 }); VX.burst('mist', tx, ctx.waterLevel(), tz, { n: 10 }); ctx.sfx(kind, 'splash', tx, tz); ctx.shake(0.5, 0.6);
         }
       } else if (a.code === 'rush') {   // 수면 돌진: 입을 벌리고 일직선
         if (a.t < 0.6) turnTo(tgA, 2.4);
         else if (a.t < 2.1) {
-          const moved = moveBy(24 * dt); if (Math.random() < dt * 20) { const m = mouth(); ctx.fx.crown(m.x, ctx.waterLevel(), m.z, 6); }
+          const moved = moveBy(24 * Math.sqrt(SC) * dt); if (Math.random() < dt * 20) { const m = mouth(); ctx.fx.crown(m.x, ctx.waterLevel(), m.z, 6); }
           { const m = mouth(), [fx, fz] = fwd(B.ry), wl = ctx.waterLevel(); VX.burst('splash', m.x, wl, m.z, { n: 3, dir: [-fz * (Math.random() < 0.5 ? 1 : -1) * 0.5, 0.7, fx * 0.5], speed: 1.2 }); if (Math.random() < 0.3) VX.burst('mist', m.x - fx * 4, wl, m.z - fz * 4, { n: 1 }); }   // 돌진 물보라 갈래
-          const m = mouth(); if (!a.ev.has('hit') && hitCircle(m.x, m.z, 5, 'rush', 0)) a.ev.add('hit');
+          const m = mouth(); if (!a.ev.has('hit') && hitCircle(m.x, m.z, 5 * Math.sqrt(SC), 'rush', SC > 1 ? 3 * SC : 0)) a.ev.add('hit');
           if (!moved) a.t = Math.max(a.t, 2.1);
         }
       }
@@ -587,11 +600,17 @@ export function createGiantBoss(ctx, kind) {
       const tailWhip = code === 'tail' ? Math.sin(clamp((at - 0.35) / 0.7, 0, 1) * Math.PI * 2) * 0.9 : 0;
       pose('head', 0, Math.sin(sw) * amp * 0.25, 0);
       pose('t1', 0, Math.sin(sw - 0.8) * amp * 0.6 + tailWhip * 0.4, 0); pose('t2', 0, Math.sin(sw - 1.6) * amp + tailWhip * 0.6, 0); pose('t3', 0, Math.sin(sw - 2.4) * amp * 1.3 + tailWhip * 0.7, 0);
-      const jaw = code === 'bite' ? (at < 0.6 ? ease(at / 0.6) : clamp(1 - (at - 0.7) / 0.15, 0, 1)) : code === 'lunge' ? (at > 0.4 && at < 1.85 ? 1 : at < 3 ? 0.35 + 0.3 * Math.sin(at * 14) : 0) : code === 'rush' ? 0.85 : code === 'spawn' ? 0.9 : 0.12 + 0.06 * Math.sin(t * 0.9);
-      pose('jaw', -0.62 * jaw, 0, 0);
+      // 늘 입을 크게 벌린 채(0.62 ≈ 34°) — 물기·삼키기 때 끝까지(약 52°) 벌렸다가 덥석 닫는다
+      const gape = 0.62 + 0.05 * Math.sin(t * 0.9);
+      const jaw = code === 'bite' ? (at < 0.6 ? lerp(gape, 1, ease(at / 0.6)) : at < 0.85 ? clamp(1 - (at - 0.7) / 0.15, 0, 1) : lerp(0, gape, clamp((at - 0.85) / 0.5, 0, 1)))
+        : code === 'swallow' ? (at < 1.0 ? lerp(gape, 1.08, ease(at)) : at < 2.7 ? 1.08 : at < 2.85 ? clamp(1 - (at - 2.7) / 0.15, 0, 1) : at < 3.4 ? 0.04 * Math.sin(at * 30) + 0.04 : lerp(0, gape, clamp((at - 3.4) / 0.6, 0, 1)))
+        : code === 'lunge' ? (at > 0.4 && at < 1.85 ? 1 : at < 3 ? 0.35 + 0.3 * Math.sin(at * 14) : gape) : code === 'rush' ? 1 : code === 'spawn' ? 1 : dying ? 0.5 : gape;
+      pose('jaw', -0.84 * jaw, 0, 0);
+      if (SC > 1 && !dying && B.spawnT <= 0) pitch -= 0.2;   // 머리를 들어 벌린 입이 수면 위로 보이게
+      if (code === 'bite' || code === 'swallow') { const k = code === 'bite' ? Math.sin(clamp(at / 1.5, 0, 1) * Math.PI) : Math.sin(clamp(at / 3.6, 0, 1) * Math.PI); y += 2.2 * SC * k; pitch -= 0.14 * k; }
       pose('pecL', 0, 0, 0.12 * Math.sin(sw * 0.5)); pose('pecR', 0, 0, -0.12 * Math.sin(sw * 0.5));
-      if (B.spawnT > 0) { y = B.y - 10 * (1 - se) + Math.sin(se * Math.PI) * 9; pitch = (0.6 - se) * 1.2; }   // 물 밖으로 솟구쳤다 떨어진다
-      if (dying) { roll = Math.PI * ease(dieU); y = B.y + 1.2 - 8 * clamp((dk - 0.3) / 0.7, 0, 1); }
+      if (B.spawnT > 0) { y = B.y - 10 * SC * (1 - se) + Math.sin(se * Math.PI) * 9 * SC * 0.6; pitch = (0.6 - se) * 1.2; }   // 물 밖으로 솟구쳤다 떨어진다
+      if (dying) { roll = Math.PI * ease(dieU); y = B.y + 1.2 * SC - 8 * SC * clamp((dk - 0.3) / 0.7, 0, 1); }
       if (code === 'tail') roll = Math.sin(clamp((at - 0.3) / 0.8, 0, 1) * Math.PI) * 0.5;
     } else if (kind === 'golem') {
       const walk = B.a === 'move' || code === 'charge' ? 1 : 0, s = Math.sin(ph), c = Math.cos(ph);
@@ -629,7 +648,7 @@ export function createGiantBoss(ctx, kind) {
     }
     rig.root.position.set(B.x, y, B.z);
     rig.root.rotation.order = 'YXZ'; rig.root.rotation.set(-pitch, yaw, roll);
-    rig.root.scale.setScalar(kind === 'golem' && B.spawnT > 0 ? 0.6 + 0.4 * se : 1);
+    rig.root.scale.setScalar((kind === 'golem' && B.spawnT > 0 ? 0.6 + 0.4 * se : 1) * SC);
     // LOD: 카메라 거리
     const cp = ctx.camPos ? ctx.camPos() : null;
     const want = cp && Math.hypot(cp.x - B.x, cp.z - B.z) > D.lodD ? 1 : 0;
@@ -649,13 +668,13 @@ export function createGiantBoss(ctx, kind) {
       for (const h of rig.hull) {
         va.copy(h.a); vb.copy(h.b);
         if (h.bone) { va.applyMatrix4(h.bone.matrixWorld); vb.applyMatrix4(h.bone.matrixWorld); } else { va.applyMatrix4(rig.root.matrixWorld); vb.applyMatrix4(rig.root.matrixWorld); }
-        capsW.push({ ax: va.x, ay: va.y, az: va.z, bx: vb.x, by: vb.y, bz: vb.z, r: h.r, col: h.col });
+        capsW.push({ ax: va.x, ay: va.y, az: va.z, bx: vb.x, by: vb.y, bz: vb.z, r: h.r * SC, col: h.col });
       }
       return;
     }
     const c = Math.cos(B.ry), s = Math.sin(B.ry);
-    const tw = (p) => { const [x, y, z] = bl(p); tmpA.x = B.x + x * c + z * s; tmpA.y = B.y + y; tmpA.z = B.z - x * s + z * c; return tmpA; };
-    for (const [, a, b, r, col] of D.hull) { const A = tw(a), ax = A.x, ay = A.y, az = A.z, Bp = tw(b); capsW.push({ ax, ay, az, bx: Bp.x, by: Bp.y, bz: Bp.z, r, col: !!col }); }
+    const tw = (p) => { const [x0, y0, z0] = bl(p), x = x0 * SC, y = y0 * SC, z = z0 * SC; tmpA.x = B.x + x * c + z * s; tmpA.y = B.y + y; tmpA.z = B.z - x * s + z * c; return tmpA; };
+    for (const [, a, b, r, col] of D.hull) { const A = tw(a), ax = A.x, ay = A.y, az = A.z, Bp = tw(b); capsW.push({ ax, ay, az, bx: Bp.x, by: Bp.y, bz: Bp.z, r: r * SC, col: !!col }); }
   }
 
   // ---------- 프레임 ----------
@@ -668,7 +687,7 @@ export function createGiantBoss(ctx, kind) {
     if (B.owner) ownerUpdate(dt);
     else {
       const k = Math.min(1, dt * 8);
-      if (!act.cur || !['lunge', 'rush', 'dive', 'charge', 'bite'].includes(act.cur.code)) { B.x += (R.tx - B.x) * k; B.z += (R.tz - B.z) * k; B.y += (R.ty - B.y) * k; B.ry = wrapA(B.ry + wrapA(R.try_ - B.ry) * k); }
+      if (!act.cur || !['lunge', 'rush', 'dive', 'charge', 'bite', 'swallow'].includes(act.cur.code)) { B.x += (R.tx - B.x) * k; B.z += (R.tz - B.z) * k; B.y += (R.ty - B.y) * k; B.ry = wrapA(B.ry + wrapA(R.try_ - B.ry) * k); }
       if (B.spawnT > 0) B.spawnT -= dt;
       if (B.a === 'die' && B.dieT > 0) B.dieT -= dt;
       for (const h of B.haz) h.age += dt;
