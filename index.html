@@ -899,8 +899,12 @@ window.addEventListener('pointerup', (e) => { if (e.button === 0 && e.pointerTyp
 canvas.addEventListener('pointercancel', endPointer);
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 // right button (held): aim with a gun (the sniper's scope), the sword's ultimate. mouse events fire per button (pointer events chord a second button into a move)
-window.addEventListener('mousedown', (e) => { if (e.button === 2 && entered && (e.target === canvas || lockedNow())) { e.preventDefault(); rightDown(); } });
-window.addEventListener('mouseup', (e) => { if (e.button === 2) rightUp(); });
+window.addEventListener('mousedown', (e) => {
+  if (!entered || !(e.target === canvas || lockedNow())) return;
+  if (e.button === 2) { e.preventDefault(); rightDown(); }
+  else if (e.button === 0 && (e.buttons & 2)) leftDown();   // left while the right is held (aiming): pointer events fold this press into a move, so take it here
+});
+window.addEventListener('mouseup', (e) => { if (e.button === 2) rightUp(); else if (e.button === 0 && (e.buttons & 2)) leftUp(); });
 window.addEventListener('blur', () => { rightUp(); });
 let wheelAcc = 0, wheelAt = 0;
 canvas.addEventListener('wheel', (e) => {
@@ -2373,7 +2377,7 @@ $('entryForm').addEventListener('submit', async (e) => {
   for (const id of ['badge', 'hint', 'log', 'bar', 'tools', 'wslots']) $(id).hidden = false;
   $('acts').hidden = false;   // the action buttons are for the desktop too (keys and mouse still work)
   updateFireHud();
-  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무·낚시 의자 가까이에서 「앉기」 · 바다에서 수영, 「잠수」 꾹 누르면 가라앉음 · 부두 끝에서 점프하면 다이빙 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(물속에선 꾹 눌러 잠수) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1~4 무기(휠로도) · R 장전/낚싯대 · 7·8·9 감정 · E 통나무/장작/낚시 의자/사다리 · 부두 끝에서 점프하면 다이빙 · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
+  $('hint').textContent = coarse ? '왼쪽 엄지로 걷기(끝까지 밀면 달리기) · 오른쪽 끌어 시점 · 통나무·낚시 의자 가까이에서 「앉기」 · 바다에서 수영, 「잠수」 꾹 누르면 가라앉음 · 부두 끝에서 점프하면 다이빙 · 「사진」' : 'WASD 걷기 · 마우스 왼쪽 클릭/F 내려찍기 · Shift 달리기 · Q 대시 · Space 점프(공중에서 한 번 더) · C 구르기(물속에선 꾹 눌러 잠수) · X 앉기 · Z 엎드리기 · V 손 흔들기 · 1~7 무기(휠로도) · 우클릭 조준·검 궁극기 · R 장전/낚싯대 · 8·9·0 감정 · E 통나무/장작/낚시 의자/사다리 · 부두 끝에서 점프하면 다이빙 · P 사진 · Enter 대화 · Esc 마우스 풀기 · M 시점 방식';
   setTimeout(() => $('hint').classList.add('fade'), 9000);
   canvas.focus({ preventScroll: true });
   tryLock(); refreshLook();

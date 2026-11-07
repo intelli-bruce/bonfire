@@ -264,6 +264,8 @@ export function createWeapons(ctx) {
     const ag = new T.BufferGeometry(); fxs.arcPos = new T.Float32BufferAttribute(new Float32Array(96 * 3), 3); ag.setAttribute('position', fxs.arcPos);
     fxs.arc = new T.Line(ag, new T.LineDashedMaterial({ color: '#fff3c4', dashSize: 0.28, gapSize: 0.16, transparent: true, opacity: 0.9, depthTest: false, fog: false }));
     fxs.arc.frustumCulled = false; fxs.arc.renderOrder = 8; fxs.arc.visible = false; scene.add(fxs.arc);
+    fxs.arcDots = new T.Points(ag, new T.PointsMaterial({ color: '#ffd27a', size: 0.2, transparent: true, opacity: 0.95, depthTest: false, fog: false }));   // 굵은 점: 밤 화면에서도 궤적이 보이게
+    fxs.arcDots.frustumCulled = false; fxs.arcDots.renderOrder = 8; fxs.arcDots.visible = false; scene.add(fxs.arcDots);
     fxs.land = new T.Mesh(new T.RingGeometry(0.5, 0.7, 32).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: '#ff8a4a', transparent: true, opacity: 0.85, depthTest: false, side: T.DoubleSide, fog: false }));
     fxs.land.renderOrder = 8; fxs.land.visible = false; scene.add(fxs.land);
     // 궁극기 「死」 검기: 붉게 타오르는 글자 + 흰 심(캔버스 텍스처)
@@ -586,12 +588,12 @@ export function createWeapons(ctx) {
   // ---- 궤적 미리보기(수류탄을 들고 있을 때): 손 → 첫 착지 + 튕김, 착지 원
   function updateArc(show) {
     if (!fxs) return;
-    if (!show) { fxs.arc.visible = false; fxs.land.visible = false; return; }
+    if (!show) { fxs.arc.visible = false; fxs.arcDots.visible = false; fxs.land.visible = false; return; }
     const cs = ctx.camState(), rec = ctx.me().rec, o = handWorld(rec, v1).toArray();
     const r = C.grenadeArc(o, C.throwVel(cs.yaw, cs.pitch), (x, z, y) => ctx.groundY(x, z, y));
     const P = fxs.arcPos, n = Math.min(r.pts.length, P.count);
     for (let i = 0; i < P.count; i++) { const q = r.pts[Math.min(i, n - 1)]; P.setXYZ(i, q[0], q[1], q[2]); }
-    P.needsUpdate = true; fxs.arc.geometry.setDrawRange(0, n); fxs.arc.computeLineDistances(); fxs.arc.visible = true;
+    P.needsUpdate = true; fxs.arc.geometry.setDrawRange(0, n); fxs.arc.computeLineDistances(); fxs.arc.visible = true; fxs.arcDots.visible = true;
     fxs.land.position.set(r.land[0], r.land[1] - C.GREN.radius + 0.06, r.land[2]); fxs.land.visible = true;
     view.arcLand = r.land;
   }
