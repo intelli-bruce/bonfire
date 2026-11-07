@@ -7,6 +7,7 @@
 //   W.setRemoteSlot(rec, slot) · W.view  (HUD 값) · W.dispose()
 
 import * as C from './weapons-core.js';
+import { createWeaponVfx } from './weapon-vfx.js';
 const { WEAPONS, COMBO, SLASH } = C;
 
 const TAU = Math.PI * 2, DEG = Math.PI / 180;
@@ -285,24 +286,26 @@ export function createWeapons(ctx) {
       const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
     })();
     const flashMat = new T.SpriteMaterial({ map: flashTex, transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false });
+    const vfx = createWeaponVfx(T, scene, { coarse: !!ctx.coarse });
     fxs = {
-      flashMat,
+      vfx, flashMat,
       // 날아가는 탄: 탄두(둥근 끝의 작은 탄환 모양) + 뒤로 옅어지는 짧은 궤적(십자로 교차한 두 판, 꼬리 쪽 알파 0)
       bulletGeo: new T.LatheGeometry([[0, 0], [0.05, 0], [0.056, 0.1], [0.046, 0.19], [0.022, 0.25], [0, 0.285]].map(([r, y]) => new T.Vector2(r, y)), 10).rotateX(Math.PI / 2).scale(BULLET_SCALE, BULLET_SCALE, BULLET_SCALE),
       glowGeo: new T.SphereGeometry(0.17, 8, 6), glowMat: new T.MeshBasicMaterial({ color: '#ffa63a', transparent: true, opacity: 0.55, depthWrite: false, blending: T.AdditiveBlending, fog: false }),
       bulletMat: new T.MeshBasicMaterial({ color: '#fff1bd', side: T.DoubleSide, fog: false }),
       trailGeo: (() => {
-        const w = 0.05, pos = [], col = [], idx = [];
+        const w = 0.09, pos = [], col = [], uv = [], idx = [];   // 셰이더 궤적: 흰 심 + 주황 번짐(uv.x 가로 · uv.y 꼬리→머리)
         for (const [ax, ay] of [[1, 0], [0, 1]]) {
           const b = pos.length / 3;
           pos.push(-w * ax, -w * ay, 0, w * ax, w * ay, 0, w * ax, w * ay, 1, -w * ax, -w * ay, 1);
           col.push(1, 0.62, 0.2, 0, 1, 0.62, 0.2, 0, 1, 0.9, 0.55, 0.9, 1, 0.9, 0.55, 0.9);
+          uv.push(0, 0, 1, 0, 1, 1, 0, 1);
           idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
         }
-        const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new T.Float32BufferAttribute(col, 4)); g.setIndex(idx);
+        const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new T.Float32BufferAttribute(col, 4)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
         return g;
       })(),
-      trailMat: new T.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false }),
+      trailMat: vfx.tracerMat,
       casingGeo: new T.BoxGeometry(0.014, 0.014, 0.05), shellGeo: new T.CylinderGeometry(0.014, 0.014, 0.065, 8).rotateX(Math.PI / 2),
       brass: new T.MeshBasicMaterial({ color: '#e3b04a' }), red: new T.MeshBasicMaterial({ color: '#c8402e' }),
       light: new T.PointLight('#ffb866', 0, 14, 1.6),
@@ -310,14 +313,14 @@ export function createWeapons(ctx) {
     scene.add(fxs.light);
     // 검기 초승달: 얇은 판(XY 평면, 뒤에서 본 정면). 바깥 호(볼록 +X) → 안쪽 호로 갈수록 투명. 정점 색에 알파. 아래에서 회전으로 기울여 쓴다
     fxs.crescent = (w, so, thick, big) => {
-      const Ro = (w * w + so * so) / (2 * so), si = so - thick, Ri = (w * w + si * si) / (2 * si), N = 32, pos = [], col = [], idx = [], sh = so * 0.5;
+      const Ro = (w * w + so * so) / (2 * so), si = so - thick, Ri = (w * w + si * si) / (2 * si), N = 32, pos = [], col = [], uv = [], idx = [], sh = so * 0.5;
       for (let i = 0; i <= N; i++) {
         const y = -w + 2 * w * i / N, xo = Math.sqrt(Math.max(0, Ro * Ro - y * y)) - Ro + sh, xi = Math.sqrt(Math.max(0, Ri * Ri - y * y)) - Ri - thick + sh, xm = xo * 0.62 + xi * 0.38;
-        pos.push(xo, y, 0, xm, y, 0, xi, y, 0);
+        pos.push(xo, y, 0, xm, y, 0, xi, y, 0); uv.push(i / N, 1, i / N, 0.5, i / N, 0);   // uv.x 호를 따라 · uv.y 바깥 1 → 안쪽 0
         col.push(1, 1, 0.92, 1, big ? 0.62 : 0.55, 0.92, 1, 0.82, 0.2, 0.7, 1, 0.0);   // 가장자리 흰색 → 몸통 하늘색(불투명) → 안쪽 투명
         if (i < N) { const a = i * 3; idx.push(a, a + 1, a + 3, a + 1, a + 4, a + 3, a + 1, a + 2, a + 4, a + 2, a + 5, a + 4); }
       }
-      const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new T.Float32BufferAttribute(col, 4)); g.setIndex(idx);
+      const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new T.Float32BufferAttribute(col, 4)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
       return g;
     };
     fxs.crGeo = fxs.crescent(1.5, 1.05, 0.62, false); fxs.crGeoBig = fxs.crescent(1.5, 1.05, 0.62, true);
@@ -368,9 +371,17 @@ export function createWeapons(ctx) {
     })();
     fxs.deathMat = new T.MeshBasicMaterial({ map: fxs.deathTex, transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false });
     fxs.deathGeo = new T.PlaneGeometry(1, 1);
+    // 칼날 잔상: 검 모델 좌표에서 날 끝(-Z 가장 먼 곳)과 날 시작점
+    if (tpl && tpl[2]) {
+      const bb = new T.Box3(), root = tpl[2]; root.updateMatrixWorld(true); const inv = root.matrixWorld.clone().invert();
+      root.traverse((o) => { if (o.isMesh) { o.geometry.computeBoundingBox(); bb.union(o.geometry.boundingBox.clone().applyMatrix4(new T.Matrix4().multiplyMatrices(inv, o.matrixWorld))); } });
+      fxs.bladeTip = new T.Vector3((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, bb.min.z);
+      fxs.bladeBase = new T.Vector3((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, bb.min.z * 0.25);
+    }
   }
-  function flashAt(p, size, lightOn, follow) {
+  function flashAt(p, size, lightOn, follow, dir) {
     const f = fxs['fl' + (fxs.flN = (fxs.flN + 1) % 3)];
+    if (dir && follow) { fxs.vfx.muzzle(p, dir, follow.slot); size *= 0.55; }   // 셰이더 화염 원뿔·꽃잎·스파크·연기 + 작은 별 섬광
     f.s.position.copy(p); f.s.scale.setScalar(size); f.s.material.rotation = rnd() * TAU; f.s.material.opacity = 1; f.s.visible = true; f.t = 0.06; f.follow = follow || null;
     if (lightOn) { fxs.light.position.copy(p); fxs.light.intensity = 3.2; fxs.light.distance = 14; fxs.lightT = 0.05; }
   }
@@ -402,7 +413,8 @@ export function createWeapons(ctx) {
   }
   function spawnSlash(o, yaw, c, mine, ownerRec, mini, elev = 0) {
     const sc = COMBO[c].scale, rollZ = [-0.62, 1.5708, 0.18][c];   // 1타 비스듬히 · 2타 가로로 휘어 오른 호 · 3타 크고 곧게
-    const g = new T.Group(), core = new T.Mesh(c === 2 ? fxs.crGeoBig : fxs.crGeo, fxs.crMat), glow = new T.Mesh(fxs.crGeo, fxs.crGlow);
+    const cm = fxs.vfx.slashMat([0.75, 1.05, 1.35]), gm = fxs.vfx.slashMat([0.35, 0.85, 1.4], true);   // 흐르는 노이즈 + 나이 디졸브(검기마다 한 벌)
+    const g = new T.Group(), core = new T.Mesh(c === 2 ? fxs.crGeoBig : fxs.crGeo, cm), glow = new T.Mesh(fxs.crGeo, gm);
     core.scale.setScalar(sc); glow.scale.setScalar(1.22 * sc); glow.position.x = -0.06;
     g.add(core, glow); g.rotation.set(0, 0, rollZ);
     const holder = new T.Group(); holder.add(g);
@@ -410,22 +422,25 @@ export function createWeapons(ctx) {
     g.rotation.order = 'ZYX'; g.rotation.set(0, 0, rollZ);
     holder.position.copy(o); holder.rotation.order = 'YXZ'; holder.rotation.set(elev, yaw, 0); scene.add(holder);   // 위아래로 겨눈 만큼 판도 기운다
     const ce = Math.cos(elev), dx = -Math.sin(yaw) * ce, dz = -Math.cos(yaw) * ce, dy = Math.sin(elev);
-    slashes.push({ holder, g, o: o.clone(), dx, dy, dz, x: o.x, y: o.y, z: o.z, t: 0, c, sc, mine, rec: ownerRec, hit: new Set(), mini: !!mini });
+    slashes.push({ mats: [cm, gm], holder, g, o: o.clone(), dx, dy, dz, x: o.x, y: o.y, z: o.z, t: 0, c, sc, mine, rec: ownerRec, hit: new Set(), mini: !!mini });
     if (mini) { holder.scale.setScalar(0.7); return; }
     my.stat.slashes = (my.stat.slashes || 0) + (mine ? 1 : 0);
     sfx('slash', mine ? 1 : lvlAt(o.x, o.y, o.z));
   }
 
   const deaths = [];
+  const dx0 = (yaw) => -Math.sin(yaw), dz0 = (yaw) => -Math.cos(yaw);
   function spawnDeath(o, yaw, mine, elev = 0) {   // 「死」 글자 거대 검기: 앞으로 쭉 날아가며 닿는 것마다 한 번씩
     const g = new T.Group(), S = C.ULT.size;
-    const core = new T.Mesh(fxs.deathGeo, fxs.deathMat); core.scale.set(S, S, 1);
-    const glow = new T.Mesh(fxs.deathGeo, fxs.deathMat); glow.scale.set(S * 1.25, S * 1.25, 1); glow.position.z = 0.3;
-    const cr = new T.Mesh(fxs.crGeoBig, fxs.crMat); cr.scale.setScalar(S * 0.62); cr.rotation.z = Math.PI / 2; cr.position.z = -0.4;
+    const dm = fxs.vfx.deathMat(fxs.deathTex, false), dg = fxs.vfx.deathMat(fxs.deathTex, true), dc = fxs.vfx.slashMat([1.5, 0.22, 0.12]);
+    const core = new T.Mesh(fxs.deathGeo, dm); core.scale.set(S, S, 1);
+    const glow = new T.Mesh(fxs.deathGeo, dg); glow.scale.set(S * 1.35, S * 1.35, 1); glow.position.z = 0.3;
+    const cr = new T.Mesh(fxs.crGeoBig, dc); cr.scale.setScalar(S * 0.62); cr.rotation.z = Math.PI / 2; cr.position.z = -0.4;
     g.add(cr, glow, core); g.position.copy(o); g.rotation.order = 'YXZ'; g.rotation.set(elev, yaw, 0); scene.add(g);
     const ce = Math.cos(elev);
-    deaths.push({ g, o: o.clone(), x: o.x, y: o.y, z: o.z, dx: -Math.sin(yaw) * ce, dy: Math.sin(elev), dz: -Math.cos(yaw) * ce, t: 0, mine, hit: new Set() });
+    deaths.push({ mats: [dm, dg, dc], g, o: o.clone(), x: o.x, y: o.y, z: o.z, dx: -Math.sin(yaw) * ce, dy: Math.sin(elev), dz: -Math.cos(yaw) * ce, t: 0, mine, hit: new Set() });
     flashAt(o, 6, true); kickAdd(mine ? 0.6 : 0.2);
+    { const V = fxs.vfx; V.emit(0, o.x, o.y, o.z, 0, 0, 0, 1.6, 0.2, 0.1, 1, 0.35, 2, 9); for (let i = 0; i < 40; i++) { const v = V.coneVel([dx0(yaw), 0, dz0(yaw)], 1.1, 8 + rnd() * 16); V.emit(1, o.x, o.y, o.z, v[0], v[1], v[2], 1.6, 0.3, 0.15, 1, 0.3 + rnd() * 0.3, 0.12, 0.03, 2.5, 3); } }
     sfx('death', mine ? 1 : lvlAt(o.x, o.y, o.z, 60));
     my.stat.deaths = (my.stat.deaths || 0) + 1;
   }
@@ -560,11 +575,11 @@ export function createWeapons(ctx) {
     const origin = new T.Vector3(m.x + dx * 0.6 * ce, m.y + 1.0 + Math.sin(elev) * 0.6, m.z + dz * 0.6 * ce);
     if (sp && sp.active) {
       const rr = P.reach * 0.55, cx = m.x + dx * rr * ce, cz = m.z + dz * rr * ce, cy = m.y + Math.sin(elev) * rr;
-      for (const h of sp.hitTest(cx, cz, 1.3 * P.reach / 2.6 + 0.6, cy)) { reportHit(2, c, false, h.kind, h.id, 1); ctx.fx.spark(cx, cy + 1.2, cz); sfx('slashHit', 0.8); }
+      for (const h of sp.hitTest(cx, cz, 1.3 * P.reach / 2.6 + 0.6, cy)) { reportHit(2, c, false, h.kind, h.id, 1); fxs.vfx.hit(cx, cy + 1.2, cz, 'slash'); sfx('slashHit', 0.8); }
     }
     {   // 접속자: 눈앞 베기 구역(칼날 중심 ~ 몸 표면)
       const rr = P.reach * 0.55, px = m.x + dx * rr * ce, py = m.y + 1.0 + Math.sin(elev) * rr, pz = m.z + dz * rr * ce;
-      for (const q of playersNear(px, py, pz, P.reach / 2.6 + 0.55)) { reportPlayer(q.id, 2, c, false, 1); ctx.fx.spark(px, py, pz); sfx('slashHit', 0.8); }
+      for (const q of playersNear(px, py, pz, P.reach / 2.6 + 0.55)) { reportPlayer(q.id, 2, c, false, 1); fxs.vfx.hit(px, py, pz, 'slash'); sfx('slashHit', 0.8); }
     }
     spawnSlash(origin, yaw, c, true, m.rec, false, elev);
   }
@@ -578,8 +593,8 @@ export function createWeapons(ctx) {
     for (let i = 0; i < C.ULT.rushHits; i++) my.timeline.push({ at: now + C.ultHitT(i), fn: () => {
       const mm = ctx.me(); if (!mm.rec) return;
       const dx = -Math.sin(yaw), dz = -Math.cos(yaw), cx = mm.x + dx * 1.6, cz = mm.z + dz * 1.6;
-      if (sp && sp.active) for (const h of sp.hitTest(cx, cz, C.ULT.rushReach, mm.y)) { reportHit(2, 0, false, h.kind, h.id, 1, 'r'); ctx.fx.spark(cx + (rnd() - 0.5) * 2, mm.y + 0.8 + rnd() * 1.4, cz + (rnd() - 0.5) * 2); }
-      for (const q of playersNear(cx, mm.y + 1.0, cz, C.ULT.rushReach * 0.7)) { reportPlayer(q.id, 2, 0, false, 1, 'r'); ctx.fx.spark(cx + (rnd() - 0.5) * 2, mm.y + 0.8 + rnd() * 1.4, cz + (rnd() - 0.5) * 2); }
+      if (sp && sp.active) for (const h of sp.hitTest(cx, cz, C.ULT.rushReach, mm.y)) { reportHit(2, 0, false, h.kind, h.id, 1, 'r'); fxs.vfx.hit(cx + (rnd() - 0.5) * 2, mm.y + 0.8 + rnd() * 1.4, cz + (rnd() - 0.5) * 2, 'death', 0.8); }
+      for (const q of playersNear(cx, mm.y + 1.0, cz, C.ULT.rushReach * 0.7)) { reportPlayer(q.id, 2, 0, false, 1, 'r'); fxs.vfx.hit(cx + (rnd() - 0.5) * 2, mm.y + 0.8 + rnd() * 1.4, cz + (rnd() - 0.5) * 2, 'death', 0.8); }
     } });
     my.timeline.push({ at: now + C.ULT.rushT, fn: () => { const mm = ctx.me(); if (mm.rec) spawnDeath(new T.Vector3(mm.x - Math.sin(yaw) * 1.2, mm.y + 1.6, mm.z - Math.cos(yaw) * 1.2), yaw, true, elev); } });
     return true;
@@ -623,7 +638,7 @@ export function createWeapons(ctx) {
       const rd = C.spreadDir(dir.x, dir.y, dir.z, C.spreadFor(slot, view.ads, moving), rr(), rr());
       spawnRocket([o.x, o.y, o.z], rd, true, rec);
       ctx.net.send(C.wpnMsg.rocket([o.x, o.y, o.z], rd));
-      sfx('rpg', 1); flashAt(o, FLASH[8], true, { rec, slot });
+      sfx('rpg', 1); flashAt(o, FLASH[8], true, { rec, slot }, rd);
       wp.kick = Math.min(1.6, wp.kick + KICK[8][0]); wp.elevT = Math.asin(clamp(dir.y, -0.9, 0.9)); wp.elev = wp.elevT;
       kickAdd(KICK[8][1]); ctx.me().ctrl.setAim(ctx.camState().yaw); my.aimUntil = now + 2.2;
       my.stat.fired++; refreshHud(); return true;
@@ -669,7 +684,8 @@ export function createWeapons(ctx) {
       const o = new T.Vector3(); if (!muzzleWorld(rec, s.slot, o) || o.distanceTo(s.sent) > 3) o.copy(s.sent);
       for (const it of s.ends) { tracer(o, it.e); later(C.impactDelay(o.distanceTo(it.e)), () => impact(it.e, it.hit, it.ground)); }
       const lv = s.mine ? 1 : lvlAt(o.x, o.y, o.z, 60);
-      flashAt(o, FLASH[s.slot], s.mine || (lv > 0.1 && rnd() < 0.7), { rec, slot: s.slot });
+      const e0 = s.ends[0] && s.ends[0].e, fd = e0 ? [e0.x - o.x, e0.y - o.y, e0.z - o.z] : null;
+      flashAt(o, FLASH[s.slot], s.mine || (lv > 0.1 && rnd() < 0.7), { rec, slot: s.slot }, fd);
       shotLog.push({ mine: s.mine, slot: s.slot, o: o.toArray(), t: now0() }); if (shotLog.length > 30) shotLog.shift();
     }
     wp.pend.length = 0;
@@ -678,13 +694,13 @@ export function createWeapons(ctx) {
     if (!fxs) return;
     for (let i = 0; i < 3; i++) {
       const f = fxs['fl' + i]; if (!f.s.visible || !f.follow || f.follow.rec !== rec) continue;
-      if (muzzleWorld(rec, f.follow.slot, v2)) { f.s.position.copy(v2); if (fxs.lightT > 0) fxs.light.position.copy(v2); }
+      if (muzzleWorld(rec, f.follow.slot, v2)) { f.s.position.copy(v2); fxs.vfx.moveMuzzle(v2); if (fxs.lightT > 0) fxs.light.position.copy(v2); }
     }
   }
   function rngSeed(seed) { let s = (seed >>> 0) || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
   function impact(e, hit, ground) {
-    if (hit) { ctx.fx.spark(e.x, e.y, e.z); if (hit.kind === 'boss') ctx.fx.spark(e.x, e.y + 0.2, e.z); }
-    else if (ground) { if (ctx.waterY(e.x, e.z) > e.y - 0.1) ctx.fx.crown(e.x, ctx.waterY(e.x, e.z), e.z, 3); else ctx.fx.poof(e.x, e.y, e.z, 2); }
+    if (hit) fxs.vfx.hit(e.x, e.y, e.z, 'hit', hit.kind === 'boss' ? 1.4 : 1);
+    else if (ground) { if (ctx.waterY(e.x, e.z) > e.y - 0.1) ctx.fx.crown(e.x, ctx.waterY(e.x, e.z), e.z, 3); else { ctx.fx.poof(e.x, e.y, e.z, 1); fxs.vfx.hit(e.x, e.y + 0.05, e.z, 'ground', 0.7); } }
   }
   function shotFx(rec, slot, mine) {   // 탄피 배출 · 노리쇠 왕복 (내 것 · 남의 것 공통)
     const wp = wpOf(rec), inst = wp.inst[slot]; if (!inst) return;
@@ -737,7 +753,12 @@ export function createWeapons(ctx) {
       }
       if (!at && r.t > C.ROCKET.life) at = r.p.slice();
       r.g.position.fromArray(r.p); r.g.quaternion.setFromUnitVectors(v2.set(0, 0, -1), v1.fromArray(r.v).normalize());
-      r.smoke -= dt; if (r.smoke <= 0) { r.smoke = 0.035; ctx.fx.poof(r.p[0], r.p[1], r.p[2], 1); }
+      r.smoke -= dt; if (r.smoke <= 0) {   // 꼬리 불꽃 + 연기(셰이더 파티클)
+        r.smoke = 0.016; const V = fxs.vfx, sp = Math.hypot(r.v[0], r.v[1], r.v[2]) || 1, bx = r.p[0] - r.v[0] / sp * 0.5, by = r.p[1] - r.v[1] / sp * 0.5, bz = r.p[2] - r.v[2] / sp * 0.5;
+        V.emit(0, bx, by, bz, 0, 0, 0, 1.6, 0.7, 0.25, 1, 0.12, 0.7, 0.2);
+        V.emit(3, bx, by, bz, (rnd() - 0.5) * 2, (rnd() - 0.5) * 2, (rnd() - 0.5) * 2, 1.5, 0.6, 0.2, 1, 0.3, 0.12, 0.03, 2, 0);
+        V.emit(2, bx, by, bz, (rnd() - 0.5) * 0.6, 0.3, (rnd() - 0.5) * 0.6, 0.32, 0.31, 0.33, 0.45, 1.3 + rnd() * 0.6, 0.4, 1.3, 1.2, -0.3);
+      }
       if (at) { scene.remove(r.g); rockets.splice(i, 1); explode(at, r.mine, 8); }
     }
   }
@@ -771,17 +792,12 @@ export function createWeapons(ctx) {
   }
   function explode(p, mine, w = 6) {
     const [x, y, z] = p, RAD = w === 8 ? C.ROCKET.r : C.GREN.r;
-    const b = { t: 0, x, y, z, R: RAD, party: w === 6 };
-    b.ball = new T.Mesh(fxs.boomGeo, fxs.boomMat.clone()); b.ball.position.set(x, y + 0.3, z); scene.add(b.ball);
-    b.ring = new T.Mesh(fxs.ringGeo, fxs.ringMat.clone()); b.ring.rotation.x = -Math.PI / 2; b.ring.position.set(x, ctx.groundY(x, z, y + 0.5) + 0.08, z); scene.add(b.ring);
-    if (b.party) { b.ball.material.color.set('#fff2c0'); b.ring.material.color.set('#ff8ad8'); confetti(x, y + 0.4, z); }
-    b.flash = new T.Sprite(fxs.flashMat.clone()); b.flash.position.set(x, y + 0.6, z); b.flash.scale.setScalar(7); b.flash.renderOrder = 7; scene.add(b.flash);
-    booms.push(b);
+    const party = w === 6;
+    fxs.vfx.boom(x, y, z, ctx.groundY(x, z, y + 0.5), RAD, party);   // 셰이더 불덩이(노이즈 변위·디졸브) · 충격파 고리 · 스파크·불씨·연기 기둥(파티: 무지개 불덩이·반짝이)
+    if (party) confetti(x, y + 0.4, z);
     fxs.light.position.set(x, y + 1, z); fxs.light.intensity = 30; fxs.light.distance = 30; fxs.lightT = 0.22;
-    if (!b.party) {
-      for (let i = 0; i < 4; i++) ctx.fx.poof(x + (rnd() - 0.5) * 2, y + 0.2, z + (rnd() - 0.5) * 2, 6);
-      for (let i = 0; i < 6; i++) ctx.fx.spark(x + (rnd() - 0.5) * 2.4, y + 0.3 + rnd() * 1.6, z + (rnd() - 0.5) * 2.4);
-    }
+    if (!party) for (let i = 0; i < 3; i++) ctx.fx.poof(x + (rnd() - 0.5) * 2, y + 0.2, z + (rnd() - 0.5) * 2, 4);
+    const b = { party };
     if (ctx.waterY(x, z) > y - 0.3) ctx.fx.crown(x, ctx.waterY(x, z), z, 18);
     const lv = lvlAt(x, y, z, 70); sfx(b.party ? 'party' : 'boom', mine ? Math.max(0.6, lv) : lv);
     kickAdd(0.5 * lvlAt(x, y, z, 22));
@@ -946,6 +962,16 @@ export function createWeapons(ctx) {
     poseUpdate(rec, dt, now);
     flushShots(rec);   // 이번 프레임 자세가 끝난 뒤의 총구에서 탄·섬광을 낸다
     followFlash(rec);
+    bladeTrail(rec);
+  }
+  function bladeTrail(rec) {   // 검을 휘두르는 동안 칼날이 지나간 면에 노이즈 잔상 리본(약 0.16 s)
+    const wp = rec.wp; if (!fxs || !fxs.bladeTip || !wp) return;
+    const inst = wp.inst[2], on = wp.slot === 2 && !!inst && inst.holder.visible && (!!wp.swing || !!wp.ult);
+    if (!on && !wp.rib) return;
+    if (!wp.rib) wp.rib = fxs.vfx.ribbon(18, wp.ult ? [1.5, 0.25, 0.15] : [0.45, 0.85, 1.4]);
+    if (on) { rec.av.root.updateMatrixWorld(true); inst.model.localToWorld(v1.copy(fxs.bladeBase)); inst.model.localToWorld(v2.copy(fxs.bladeTip)); }
+    wp.rib.mesh.material.uniforms.uTint.value.setRGB(...(wp.ult ? [1.5, 0.25, 0.15] : [0.45, 0.85, 1.4]));
+    wp.rib.push(v1, v2, on);
   }
   function poseUpdate(rec, dt, now) {
     const wp = rec.wp; if (!wp) return;
@@ -1070,6 +1096,7 @@ export function createWeapons(ctx) {
   function updateFx(dt) {
     if (fxs) updateParty(dt);
     if (!fxs) return;
+    fxs.vfx.update(dt);
     rocketFrame(dt);
     for (const t of trs) {   // 날아가는 탄: 첫 프레임은 총구에 붙은 채로 보이고, 그 뒤부터 날아간다
       if (!t.on) continue;
@@ -1119,12 +1146,12 @@ export function createWeapons(ctx) {
         d.x += d.dx * sub; d.z += d.dz * sub; d.y = Math.max(ctx.groundY(d.x, d.z, d.y + 0.3) + C.ULT.size * 0.2, d.y + d.dy * sub);   // 겨눈 상하로(땅 밑으로는 안 들어감)
         if (sp && sp.active) for (const h of sp.hitTest(d.x, d.z, C.ULT.r, d.y - 1.6)) {
           const key = h.kind + h.id; if (d.hit.has(key)) continue; d.hit.add(key);
-          for (let q = 0; q < 4; q++) ctx.fx.spark(d.x + (rnd() - 0.5) * 3, d.y - 1 + rnd() * 3, d.z + (rnd() - 0.5) * 3);
+          for (let q = 0; q < 4; q++) fxs.vfx.hit(d.x + (rnd() - 0.5) * 3, d.y - 1 + rnd() * 3, d.z + (rnd() - 0.5) * 3, 'death');
           if (d.mine) reportHit(2, 0, false, h.kind, h.id, 1, 'u');
         }
         if (d.mine) for (const q of playersNear(d.x, d.y, d.z, C.ULT.r)) {
           const key = 'p' + q.id; if (d.hit.has(key)) continue; d.hit.add(key);
-          for (let k2 = 0; k2 < 4; k2++) ctx.fx.spark(d.x + (rnd() - 0.5) * 3, d.y - 1 + rnd() * 3, d.z + (rnd() - 0.5) * 3);
+          for (let k2 = 0; k2 < 4; k2++) fxs.vfx.hit(d.x + (rnd() - 0.5) * 3, d.y - 1 + rnd() * 3, d.z + (rnd() - 0.5) * 3, 'death');
           reportPlayer(q.id, 2, 0, false, 1, 'u');
         }
       }
@@ -1132,14 +1159,18 @@ export function createWeapons(ctx) {
       const grow = 1 + d.t * 0.5, fade = clamp((C.ULT.life - d.t) / 0.35, 0, 1);
       d.g.scale.setScalar(grow); d.g.children.forEach((c) => { c.visible = fade > 0.02; });
       d.g.children[2].rotation.z = Math.sin(d.t * 30) * 0.03;
-      if (d.t > C.ULT.life || Math.hypot(d.x - d.o.x, d.y - d.o.y, d.z - d.o.z) > C.ULT.range) { scene.remove(d.g); deaths.splice(i, 1); }
+      { const a = clamp(d.t / C.ULT.life, 0, 1); for (const m of d.mats) m.uniforms.uAge.value = a;
+        const V = fxs.vfx; for (let q = 0; q < 3; q++) V.emit(3, d.x + (rnd() - 0.5) * 4, d.y + (rnd() - 0.5) * 4, d.z + (rnd() - 0.5) * 4, (rnd() - 0.5) * 2, 1 + rnd() * 2, (rnd() - 0.5) * 2, 1.6, 0.3, 0.12, 1, 0.6 + rnd() * 0.5, 0.18, 0.04, 1.5, -1);
+        if (rnd() < 0.35) V.emit(2, d.x + (rnd() - 0.5) * 3, d.y - 1.5 + rnd() * 2, d.z + (rnd() - 0.5) * 3, 0, 0.6, 0, 0.08, 0.01, 0.012, 0.35, 1.2, 0.6, 2.0, 1, -0.4); }
+      if (d.t > C.ULT.life || Math.hypot(d.x - d.o.x, d.y - d.o.y, d.z - d.o.z) > C.ULT.range) { scene.remove(d.g); for (const m of d.mats) m.dispose(); deaths.splice(i, 1); }
     }
     // 검기
     for (let i = slashes.length - 1; i >= 0; i--) {
       const s = slashes[i]; s.t += dt;
       if (s.mini) {   // 궁극기 난무의 작은 초승달: 0.22 s 동안 번쩍(피해 없음 — 난무 피해는 타격 시간표가 계산)
         s.holder.position.addScaledVector(v2.set(s.dx, 0, s.dz), dt * 8); s.g.scale.setScalar(1 + s.t * 3);
-        if (s.t > 0.22) { scene.remove(s.holder); slashes.splice(i, 1); }
+        for (const m of s.mats) m.uniforms.uAge.value = clamp(s.t / 0.22, 0, 1);
+        if (s.t > 0.22) { scene.remove(s.holder); for (const m of s.mats) m.dispose(); slashes.splice(i, 1); }
         continue;
       }
       const step = SLASH.speed * dt, n = Math.max(1, Math.ceil(step / 0.6)), sub = step / n; let stop = false;
@@ -1148,23 +1179,24 @@ export function createWeapons(ctx) {
         if (s.y < ctx.groundY(s.x, s.z, s.y + 0.3) + 0.15) { stop = true; ctx.fx.poof(s.x, s.y, s.z, 3); break; }
         if (sp && sp.active) for (const h of sp.hitTest(s.x, s.z, SLASH.r * s.sc, s.y - 0.9)) {
           const key = h.kind + h.id; if (s.hit.has(key)) continue; s.hit.add(key);
-          ctx.fx.spark(s.x, s.y, s.z); sfx('slashHit', s.mine ? 0.9 : lvlAt(s.x, s.y, s.z));
+          fxs.vfx.hit(s.x, s.y, s.z, 'slash'); sfx('slashHit', s.mine ? 0.9 : lvlAt(s.x, s.y, s.z));
           if (s.mine) reportHit(2, s.c, true, h.kind, h.id, 1);
           if (h.kind === 'boss') stop = true;
         }
         if (s.mine) for (const q of playersNear(s.x, s.y, s.z, SLASH.r * s.sc * 0.75)) {   // 검기는 사람을 뚫고 지나간다(한 사람에게 한 번)
           const key = 'p' + q.id; if (s.hit.has(key)) continue; s.hit.add(key);
-          ctx.fx.spark(s.x, s.y, s.z); sfx('slashHit', 0.9);
+          fxs.vfx.hit(s.x, s.y, s.z, 'slash'); sfx('slashHit', 0.9);
           reportPlayer(q.id, 2, s.c, true, 1);
         }
         if (s.t > SLASH.life || Math.hypot(s.x - s.o.x, s.y - s.o.y, s.z - s.o.z) > SLASH.range) stop = true;   // an energy crescent passes through props
       }
       s.holder.position.set(s.x, s.y, s.z);
       const grow = 1 + s.t * 0.45, fade = clamp((SLASH.life - s.t) / 0.25, 0, 1) * (stop ? 0 : 1);
-      s.g.scale.setScalar(grow); fxs.crMat.opacity = 1; s.g.children.forEach((c) => c.scale.setScalar(c.scale.x));
+      s.g.scale.setScalar(grow); for (const m of s.mats) m.uniforms.uAge.value = clamp(s.t / SLASH.life, 0, 1);
+      { const V = fxs.vfx, R0 = 1.4 * s.sc * grow; for (let q = 0; q < 2; q++) { v2.set(0.4, (rnd() * 2 - 1) * R0, 0); s.g.localToWorld(v2); V.emit(rnd() < 0.5 ? 3 : 1, v2.x, v2.y, v2.z, -s.dx * 3 + (rnd() - 0.5), (rnd() - 0.5), -s.dz * 3 + (rnd() - 0.5), 0.6, 1.1, 1.6, 1, 0.3 + rnd() * 0.3, 0.07, 0.02, 2, 0); } }
       if (stop || s.t > SLASH.life) {
-        scene.remove(s.holder); s.holder.traverse((o) => { if (o.isMesh) { /* 지오메트리·재질은 공유 */ } });
-        if (stop) { ctx.fx.spark(s.x, s.y, s.z); }
+        scene.remove(s.holder); for (const m of s.mats) m.dispose();   // 지오메트리는 공유, 재질(나이 uniform)만 검기마다
+        if (stop) { fxs.vfx.hit(s.x, s.y, s.z, 'slash'); }
         slashes.splice(i, 1);
       }
     }
@@ -1220,7 +1252,7 @@ export function createWeapons(ctx) {
     } else if (m.k === 'k') {   // 남의 RPG: 같은 로켓이 이 화면에서도 날아가 터진다(피해는 쏜 사람 화면이 계산)
       const wp = wpOf(rec); if (wp.slot !== 8) setRemoteSlot(rec, 8);
       spawnRocket(m.o, m.d, false, rec); sfx('rpg', lvlAt(m.o[0], m.o[1], m.o[2], 70));
-      flashAt(new T.Vector3(m.o[0], m.o[1], m.o[2]), FLASH[8], true, { rec, slot: 8 });
+      flashAt(new T.Vector3(m.o[0], m.o[1], m.o[2]), FLASH[8], true, { rec, slot: 8 }, m.d);
       wp.kick = Math.min(1.6, wp.kick + KICK[8][0]); wp.elevT = Math.asin(clamp(m.d[1], -0.9, 0.9)); wp.elev = wp.elevT;
     } else if (m.k === 'g') {
       const wp = wpOf(rec); if (wp.slot !== 6) setRemoteSlot(rec, 6);
