@@ -42,7 +42,7 @@ console.warn = () => {};
   const none = C.newGun(3); none.mag = 0; none.reserve = 0;
   ok(!C.startReload(none, 0), 'no reload without reserve');
   const full = C.newGun(3); ok(!C.startReload(full, 0), 'no reload on a full magazine');
-  ok(C.ammoText(g) === `${g.mag} / ${g.reserve}`, 'HUD ammo text');
+  ok(C.ammoText(g) === `${g.mag} / ∞`, 'HUD ammo text: the reserve is unlimited (30 / ∞)');
 }
 
 // 3) 산탄총: 한 발씩 장전, 장전 중 쏘면 끊김
@@ -163,6 +163,55 @@ console.warn = () => {};
   dbg.B.hp = 3; dbg.O.hitAt.clear();
   ok(sp.damage('boss', 0, 6, 's|rifle', 70) === true && sp.view.dying && sp.view.hp === 0, 'a rifle round can finish it');
   ok(sp.hitRay(0, 1.5, 0, 0, 0, -1, 200, 0.05) === null, 'a dying boss cannot be hit');
+}
+
+// 10) 예비탄 무제한 · 탄창 단위 장전 · 자동 장전
+{
+  ok(C.WEAPONS[3].reserve === Infinity && C.WEAPONS[4].reserve === Infinity, 'reserve is unlimited for the rifle and the shotgun');
+  ok(C.WEAPONS[3].mag === 30 && C.WEAPONS[4].mag === 6, 'magazine units: rifle 30, shotgun keeps its 6');
+  const g = C.newGun(3); let t = 0;
+  for (let cycle = 0; cycle < 6; cycle++) {   // 30 shots, then a reload, six times over: the reserve never runs out
+    let shots = 0; while (C.fireOnce(g, t)) { shots++; t += C.WEAPONS[3].interval; }
+    ok(shots === 30 && g.mag === 0, `cycle ${cycle}: 30 shots empty the magazine`);
+    ok(C.needsAutoReload(g, t + 0.01), `cycle ${cycle}: an empty magazine asks for an automatic reload`);
+    C.startReload(g, t); t += C.WEAPONS[3].reloadEmptyT + 0.01; C.tickReload(g, t);
+    ok(g.mag === 30 && g.reserve === Infinity, `cycle ${cycle}: refilled to 30, reserve still unlimited`);
+  }
+  ok(C.ammoText(g) === '30 / ∞' && C.ammoText(C.newGun(4)) === '6 / ∞', 'HUD text is 30 / ∞ (rifle) and 6 / ∞ (shotgun)');
+  const e = C.newGun(3); e.mag = 0; e.nextAt = 5;
+  ok(!C.needsAutoReload(e, 4.9) && C.needsAutoReload(e, 5), 'auto reload waits for the fire interval');
+  e.reload = { t0: 0, until: 9, need: 30 }; ok(!C.needsAutoReload(e, 6), 'no second reload while one is running');
+  const f = C.newGun(3); f.mag = 3; ok(!C.needsAutoReload(f, 9), 'no auto reload while rounds are left (R reloads by hand)');
+  const z = C.newGun(3); z.mag = 0; z.reserve = 0; ok(!C.needsAutoReload(z, 9) && !C.needsAutoReload(null, 9), 'nothing to load, no gun');
+  const sg = C.newGun(4); for (let i = 0; i < 6; i++) C.fireOnce(sg, i);
+  ok(sg.mag === 0 && C.needsAutoReload(sg, 9), 'an empty shotgun also reloads by itself');
+  C.startReload(sg, 9); C.tickReload(sg, 9 + C.WEAPONS[4].reloadT + C.WEAPONS[4].shellT * 7);
+  ok(sg.mag === 6 && sg.reserve === Infinity, 'the shotgun refills to its 6-shell magazine');
+}
+
+// 11) 날아가는 탄: 총구에서 출발 · 탄두+짧은 궤적 · 닿으면 끝
+{
+  const L = 40, a0 = C.bulletPos(0, L);
+  ok(a0.tail === 0 && a0.head > 0 && a0.head < 1 && !a0.arrived && !a0.done, 'the bullet starts at the muzzle (trail anchored at 0, head just ahead)');
+  const a1 = C.bulletPos(0.02, L), a2 = C.bulletPos(0.1, L);
+  ok(a1.head > a0.head && a2.head > a1.head && a2.tail > 0, 'it flies forward and the trail lets go of the muzzle');
+  ok(a2.head - a2.tail <= C.BULLET.trail + 1e-9, 'the trail stays short');
+  const flight = C.impactDelay(L); ok(flight > 0.2 && flight < 0.4, `a 40 m shot lands in ${flight.toFixed(2)} s`);
+  const b = C.bulletPos(flight + 0.001, L); ok(b.arrived && b.head === L && !b.done, 'at the target the head is gone and the trail catches up');
+  ok(C.bulletPos(flight + C.BULLET.trail / C.BULLET.speed + 0.01, L).done, 'then it ends');
+  ok(C.bulletPos(0, 0.2).head === 0.2 && C.bulletPos(0, 0.2).arrived, 'a point-blank hit never draws past the target');
+  ok(C.impactDelay(0) === 0 && C.SWITCH_T > 0.1 && C.SWITCH_T <= 0.2, 'a weapon switch takes about 0.15 s');
+}
+
+// 12) 키 처리: 무기 키는 capture 단계에서 삼키고, 1~4·R 모두 한 곳(onGameKey)에서 처리한다
+{
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  ok(/window\.addEventListener\('keydown', onGameKey, true\)/.test(html), 'the game key handler runs in the capture phase');
+  const fn = html.match(/function onGameKey\(e\) \{([\s\S]*?)\n\}\nwindow\.addEventListener\('keydown', onGameKey, true\)/);
+  ok(!!fn && /weaponKey\(e\)\) \{ e\.preventDefault\(\); e\.stopImmediatePropagation\(\);/.test(fn[1]), 'weapon keys get preventDefault + stopImmediatePropagation');
+  ok(/const weaponKey = \(e\) => \(SLOT_KEYS\[e\.code\] \|\| e\.code === 'KeyR'\) && !e\.ctrlKey && !e\.metaKey && !e\.altKey/.test(html), 'weapon keys = 1~4 and R without Ctrl/Meta/Alt (Ctrl+R still reloads the browser)');
+  ok(/if \(!text \|\| !netLive\(\)\) \{ chatInput\.blur\(\);/.test(html), 'an empty chat Enter gives the keyboard back to the game');
+  ok(/textContent = Number\.isFinite\(g\.reserve\) \? g\.reserve : '∞'/.test(html), 'HUD shows ∞ for the reserve');
 }
 
 console.log(`${n - fails}/${n} weapon checks passed`);

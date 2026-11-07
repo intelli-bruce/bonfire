@@ -11,10 +11,11 @@ export const SLOT_KEYS = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4 };   // �
 export const WEAPONS = {
   1: { id: 1, key: 'fist', name: '맨손', hint: '내려찍기', gun: false },
   2: { id: 2, key: 'sword', name: '검', hint: '3연 베기 + 검기', gun: false },
-  3: { id: 3, key: 'rifle', name: 'M4A1', hint: '연사', gun: true, mag: 30, reserve: 90, interval: 0.095, auto: true, dmg: 6, pellets: 1, spread: 0.010, range: 160, reloadT: 1.9, reloadEmptyT: 2.5, kick: 0.012 },
-  4: { id: 4, key: 'shotgun', name: '산탄총', hint: '산탄 7발', gun: true, mag: 6, reserve: 24, interval: 0.85, auto: false, dmg: 4, pellets: 7, spread: 0.060, range: 55, shellT: 0.42, reloadT: 0.6, kick: 0.05 },
+  3: { id: 3, key: 'rifle', name: 'M4A1', hint: '연사', gun: true, mag: 30, reserve: Infinity, interval: 0.095, auto: true, dmg: 6, pellets: 1, spread: 0.010, range: 160, reloadT: 1.9, reloadEmptyT: 2.5, kick: 0.012 },
+  4: { id: 4, key: 'shotgun', name: '산탄총', hint: '산탄 7발', gun: true, mag: 6, reserve: Infinity, interval: 0.85, auto: false, dmg: 4, pellets: 7, spread: 0.060, range: 55, shellT: 0.42, reloadT: 0.6, kick: 0.05 },
 };
 export const SLOT_COUNT = 4;
+export const SWITCH_T = 0.15;   // 무기를 바꿀 때 팔이 올라오는 시간(s). 바꾸자마자 쏠 수 있다(애니메이션을 기다리지 않는다)
 export const wrapSlot = (s, dir) => ((s - 1 + (dir > 0 ? 1 : -1) + SLOT_COUNT) % SLOT_COUNT) + 1;
 
 // ---------- 검 콤보: 3연 베기. 마지막 한 방이 크고 검기도 커진다 ----------
@@ -80,7 +81,20 @@ export function tickReload(g, now) {   // 완료되면 true
   return false;
 }
 export const reloadT01 = (g, now) => { const r = g && g.reload; if (!r) return 0; return clamp((now - r.t0) / Math.max(0.01, r.until - r.t0), 0, 1); };
-export const ammoText = (g) => (g ? `${g.mag} / ${g.reserve}` : '');
+export const reserveText = (g) => (Number.isFinite(g.reserve) ? String(g.reserve) : '∞');   // 예비탄은 무제한(Infinity): 탄창 단위로만 장전한다
+export const ammoText = (g) => (g ? `${g.mag} / ${reserveText(g)}` : '');
+// 탄창이 비었고 예비탄이 있으면 자동 장전(쏜 뒤 연사 간격이 지나면). 장전 중이거나 총이 아니면 false
+export const needsAutoReload = (g, now) => !!g && !g.reload && g.mag <= 0 && g.reserve > 0 && now >= g.nextAt;
+
+// ---------- 날아가는 탄(눈에 보이는 탄두 + 짧은 궤적) ----------
+// 총구에서 출발해 speed 로 날아간다. head: 탄두 끝까지의 거리, tail: 궤적 꼬리까지의 거리(0 = 총구에 붙어 있음). 맞는 지점(L)에 닿으면 탄두는 사라지고 꼬리가 따라잡아 끝난다.
+export const BULLET = { speed: 150, trail: 4.5, start: 0.45 };
+export function bulletPos(age, L, speed = BULLET.speed) {
+  const raw = BULLET.start + Math.max(0, age) * speed;
+  const head = Math.min(L, raw), tail = clamp(raw - BULLET.trail, 0, L);
+  return { head, tail, arrived: raw >= L, done: raw - BULLET.trail >= L };
+}
+export const impactDelay = (L, speed = BULLET.speed) => Math.max(0, (L - BULLET.start) / speed);   // 맞는 효과(불꽃·먼지)는 탄이 닿을 때 보인다
 
 // ---------- 소총 장전 애니메이션 단계(0..1 위에서): 탄창 빼기 → 새 탄창 끼우기 → 장전 손잡이 당기기(빈 탄창일 때만) ----------
 // 반환: { magOut: 0..1 (탄창이 빠진 정도), magIn: 0..1, handle: 0..1 (손잡이 당긴 정도), tilt: 총 기울기 0..1 }

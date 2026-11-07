@@ -27,6 +27,7 @@ const POSE = {
 const GRIP = { 2: { node: 'grip', off: [0, 0, 0] }, 3: { node: 'grip_r', off: [0, 0, 0] }, 4: { node: 'grip_r', off: [0, 0, 0] } };
 // 검: 날이 위로 서도록 쥐는 방향. 날 방향(-Z)이 팔 방향(-X) 대신 위(+Z 뼈 축)쪽으로, 앞으로 tilt 도 기울임
 const SWORD_TILT = 24;
+const BULLET_SCALE = 2.0, HEAD_LEN = 0.285 * BULLET_SCALE;   // 탄두 모델 배율과 길이(m)
 const SHOULDER = 0.85;   // m: a gun up slides the view over the right shoulder
 
 export function createWeapons(ctx) {
@@ -132,7 +133,7 @@ export function createWeapons(ctx) {
     const rec = ctx.me().rec; if (!rec) return false;
     if (slot === my.slot) return true;
     my.slot = slot; my.trig = false;
-    wpOf(rec).slot = slot; if (slot >= 2) instOf(rec, slot);
+    const wp = wpOf(rec); wp.slot = slot; wp.draw = slot >= 2 ? 1 : 0; if (slot >= 2) instOf(rec, slot);
     if (slot === 3 || slot === 4) { const g = my.guns[slot]; if (g && g.reload) g.reload.t0 = now0(); }
     refreshHud();
     if (!quiet) sfx('equip', 1);
@@ -191,7 +192,22 @@ export function createWeapons(ctx) {
     const flashMat = new T.SpriteMaterial({ map: flashTex, transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false });
     fxs = {
       flashMat,
-      tracerGeo: new T.BoxGeometry(0.035, 0.035, 1), tracerMat: new T.MeshBasicMaterial({ color: '#ffe7a6', transparent: true, opacity: 0.95, depthWrite: false, blending: T.AdditiveBlending, fog: false }),
+      // 날아가는 탄: 탄두(둥근 끝의 작은 탄환 모양) + 뒤로 옅어지는 짧은 궤적(십자로 교차한 두 판, 꼬리 쪽 알파 0)
+      bulletGeo: new T.LatheGeometry([[0, 0], [0.05, 0], [0.056, 0.1], [0.046, 0.19], [0.022, 0.25], [0, 0.285]].map(([r, y]) => new T.Vector2(r, y)), 10).rotateX(Math.PI / 2).scale(BULLET_SCALE, BULLET_SCALE, BULLET_SCALE),
+      glowGeo: new T.SphereGeometry(0.17, 8, 6), glowMat: new T.MeshBasicMaterial({ color: '#ffa63a', transparent: true, opacity: 0.55, depthWrite: false, blending: T.AdditiveBlending, fog: false }),
+      bulletMat: new T.MeshBasicMaterial({ color: '#fff1bd', side: T.DoubleSide, fog: false }),
+      trailGeo: (() => {
+        const w = 0.05, pos = [], col = [], idx = [];
+        for (const [ax, ay] of [[1, 0], [0, 1]]) {
+          const b = pos.length / 3;
+          pos.push(-w * ax, -w * ay, 0, w * ax, w * ay, 0, w * ax, w * ay, 1, -w * ax, -w * ay, 1);
+          col.push(1, 0.62, 0.2, 0, 1, 0.62, 0.2, 0, 1, 0.9, 0.55, 0.9, 1, 0.9, 0.55, 0.9);
+          idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+        }
+        const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new T.Float32BufferAttribute(col, 4)); g.setIndex(idx);
+        return g;
+      })(),
+      trailMat: new T.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false }),
       casingGeo: new T.BoxGeometry(0.014, 0.014, 0.05), shellGeo: new T.CylinderGeometry(0.014, 0.014, 0.065, 8).rotateX(Math.PI / 2),
       brass: new T.MeshBasicMaterial({ color: '#e3b04a' }), red: new T.MeshBasicMaterial({ color: '#c8402e' }),
       light: new T.PointLight('#ffb866', 0, 14, 1.6),
@@ -212,7 +228,12 @@ export function createWeapons(ctx) {
     fxs.crGeo = fxs.crescent(1.5, 1.05, 0.62, false); fxs.crGeoBig = fxs.crescent(1.5, 1.05, 0.62, true);
     fxs.crMat = new T.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false });
     fxs.crGlow = new T.MeshBasicMaterial({ color: '#7ee3ff', transparent: true, opacity: 0.32, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false });
-    for (let i = 0; i < 20; i++) { const m = new T.Mesh(fxs.tracerGeo, fxs.tracerMat); m.visible = false; m.frustumCulled = false; scene.add(m); trs.push({ m, t: 0, life: 0, o: new T.Vector3(), d: new T.Vector3(), L: 0 }); }
+    for (let i = 0; i < 40; i++) {
+      const g = new T.Group(), head = new T.Mesh(fxs.bulletGeo, fxs.bulletMat), trail = new T.Mesh(fxs.trailGeo, fxs.trailMat), glow = new T.Mesh(fxs.glowGeo, fxs.glowMat);
+      glow.position.z = HEAD_LEN * 0.55; glow.scale.z = 1.8; glow.frustumCulled = false; head.add(glow);
+      head.frustumCulled = trail.frustumCulled = false; trail.renderOrder = 5; g.add(trail, head); g.visible = false; scene.add(g);
+      trs.push({ g, head, trail, on: false, fresh: false, age: 0, o: new T.Vector3(), d: new T.Vector3(), L: 0 });
+    }
     for (let i = 0; i < 24; i++) { const m = new T.Mesh(fxs.casingGeo, fxs.brass); m.visible = false; scene.add(m); cas.push({ m, v: new T.Vector3(), life: 0, rot: new T.Vector3(), rest: false }); }
     for (let i = 0; i < 3; i++) { const s = new T.Sprite(fxs.flashMat.clone()); s.visible = false; s.renderOrder = 6; scene.add(s); fxs['fl' + i] = { s, t: 0 }; }
     fxs.flN = 0;
@@ -223,11 +244,19 @@ export function createWeapons(ctx) {
     if (lightOn) { fxs.light.position.copy(p); fxs.light.intensity = 3.2; fxs.lightT = 0.05; }
   }
   let trN = 0, caN = 0;
-  function tracer(o, e) {
+  function tracer(o, e) {   // 총구 o 에서 e 까지 날아가는 탄 하나. 처음 보이는 프레임에서는 총구에 붙어 있다
     const t = trs[trN = (trN + 1) % trs.length], L = o.distanceTo(e);
-    t.o.copy(o); t.d.copy(e).sub(o).normalize(); t.L = L; t.t = 0; t.life = Math.min(0.55, L / 260 + 0.12); t.m.visible = true; t.m.scale.set(1, 1, 0.01);
-    t.m.quaternion.setFromUnitVectors(v2.set(0, 0, 1), t.d);
+    t.o.copy(o); t.d.copy(e).sub(o); if (t.d.lengthSq() < 1e-6) t.d.set(0, 0, -1); t.d.normalize(); t.L = L; t.age = 0; t.on = true; t.fresh = true;
+    t.g.position.copy(o); t.g.quaternion.setFromUnitVectors(v2.set(0, 0, 1), t.d); t.g.visible = true; placeBullet(t);
   }
+  function placeBullet(t) {
+    const p = C.bulletPos(t.age, t.L);
+    t.head.visible = !p.arrived; t.head.position.z = p.head - HEAD_LEN;
+    t.trail.position.z = p.tail; t.trail.scale.z = Math.max(0.001, p.head - p.tail - 0.02);
+    return p;
+  }
+  const fxq = [];   // 시간표: 탄이 닿는 순간에 맞는 효과를 보인다
+  const later = (sec, fn) => { if (sec <= 0.001) fn(); else fxq.push({ at: now0() + sec, fn }); };
   function casing(p, vx, vy, vz, shell) {
     const c = cas[caN = (caN + 1) % cas.length];
     c.m.geometry = shell ? fxs.shellGeo : fxs.casingGeo; c.m.material = shell ? fxs.red : fxs.brass; c.m.scale.setScalar(shell ? 1.3 : 1.6);
@@ -344,7 +373,7 @@ export function createWeapons(ctx) {
     const st = C.fireState(g, now);
     if (st === 'cooldown' || st === 'reloading') return false;
     if (st === 'empty') {
-      if (now - my.noAmmoAt > 0.35) { my.noAmmoAt = now; sfx('click', 1); if (g.reserve > 0) reload(); else ctx.log('탄이 없습니다. 잠시 뒤 보급됩니다.'); }
+      if (now - my.noAmmoAt > 0.35) { my.noAmmoAt = now; sfx('click', 1); if (g.reserve > 0) reload(); }
       return false;
     }
     if (!C.fireOnce(g, now)) return false;
@@ -364,7 +393,7 @@ export function createWeapons(ctx) {
       if (sp && sp.active) hit = sp.hitRay(o.x, o.y, o.z, sd[0], sd[1], sd[2], Math.min(W_.range, tW), 0.05);
       const L = hit ? hit.d : Math.min(tW, W_.range);
       const e = new T.Vector3(o.x + sd[0] * L, o.y + sd[1] * L, o.z + sd[2] * L);
-      tracer(o, e); impact(e, hit, tW <= W_.range && !hit);
+      tracer(o, e); const ground = tW <= W_.range && !hit; later(C.impactDelay(L), () => impact(e, hit, ground));
       if (p === 0) { firstEnd = e; firstDir = sd; firstLen = L; }
       if (hit) { if (!firstHit) { firstHit = hit; hitN = 1; } else if (hit.kind === firstHit.kind && hit.id === firstHit.id) hitN++; }
     }
@@ -417,11 +446,9 @@ export function createWeapons(ctx) {
     ctx.me().ctrl.setAim(aimOn ? ctx.camState().yaw : null);
     view.shoulder += ((gun && canAct() ? SHOULDER : 0) - view.shoulder) * (1 - Math.exp(-dt * 6));
     ctx.me().ctrl.setMoveScale(swinging ? 0.45 : gun && aimOn ? 0.8 : 1);
-    // 보급: 예비탄까지 다 쓰면 8 s 뒤 한 탄창분
-    const g3 = my.guns[3], g4 = my.guns[4];
-    for (const g of [g3, g4]) {
-      if (g.mag === 0 && g.reserve === 0) { g.supplyAt = g.supplyAt || t + 8; if (t >= g.supplyAt) { g.reserve = WEAPONS[g.slot].mag; g.supplyAt = 0; ctx.log(`${WEAPONS[g.slot].name} 보급을 받았습니다.`); refreshHud(); } } else g.supplyAt = 0;
-    }
+    // 예비탄은 무제한(탄창 단위로만 장전). 탄창이 비면 쏜 뒤 연사 간격이 지나는 대로 자동 장전한다
+    if (gun && canAct() && C.needsAutoReload(my.guns[my.slot], t)) reload();
+    if (!my.warm) { my.warm = true; for (const s of [2, 3, 4]) instOf(rec, s); }   // 세 무기를 미리 만들어 둔다: 처음 바꿀 때 끊기지 않게
     // 조준점 색 (화면 가운데에 보스·새끼 거미가 걸리는가): 6 프레임마다
     my.aimTick = (my.aimTick || 0) + 1;
     if (gun && my.aimTick % 6 === 0) { const a = computeAim(); view.aim = a.kind; ctx.hud.aim(a.kind); }
@@ -456,7 +483,8 @@ export function createWeapons(ctx) {
     // 착지('land') 때 총이 깜빡이지 않게 이어 가고, 앉기·엎드리기·감정·대시·구르기·수영은 총을 내린다
     const wantSoft = slot >= 2 && ready && st.swim !== 2 && !['dash', 'roll', 'leap', 'sit', 'prone', 'proneIn', 'proneOut', 'dance', 'cheer', 'nod', 'wave'].includes(st.act);
     const target = wantSoft ? 1 : 0;
-    wp.w += (target - wp.w) * (1 - Math.exp(-dt * 14)); if (Math.abs(target - wp.w) < 0.003) wp.w = target;
+    const stepW = dt / C.SWITCH_T; wp.w += clamp(target - wp.w, -stepW, stepW);   // 0.15 s 에 일정한 속도로 올라오고 내려간다
+    wp.draw = Math.max(0, (wp.draw || 0) - stepW);
     // 모델 보이기
     for (const s of [2, 3, 4]) { const inst = wp.inst[s]; if (inst) inst.holder.visible = s === slot && wp.w > 0.04; }
     if (slot >= 2 && !wp.inst[slot] && ready) instOf(rec, slot);
@@ -521,19 +549,19 @@ export function createWeapons(ctx) {
       inst.model.position.z = wp.kick * 0.045 / inst.sc * 0.5;
       if (inst.flashT > 0) inst.flashT -= dt;
     }
+    if (wp.draw > 0) { const dr = smooth(clamp(wp.draw, 0, 1)); r[0] += 34 * dr; l[0] += 26 * dr; }   // 꺼내는 동작: 팔이 아래에서 올라온다(0.15 s)
     setEuler(bR, r, wp.w); setEuler(bL, l, wp.w); setEuler(bT, tor, wp.w);
   }
 
   // ===================================================================== 효과 갱신
   function updateFx(dt) {
     if (!fxs) return;
-    for (const t of trs) {
-      if (!t.m.visible) continue;
-      t.t += dt; const head = Math.min(t.L, t.t * 320), tail = Math.max(0, head - 7), len = Math.max(0.02, head - tail);
-      if (t.t > t.life || tail >= t.L) { t.m.visible = false; continue; }
-      t.m.position.copy(t.o).addScaledVector(t.d, tail + len / 2); t.m.scale.set(1, 1, len);
-      t.m.material === fxs.tracerMat && (t.m.material.opacity = 0.95);
+    for (const t of trs) {   // 날아가는 탄: 첫 프레임은 총구에 붙은 채로 보이고, 그 뒤부터 날아간다
+      if (!t.on) continue;
+      if (t.fresh) t.fresh = false; else t.age += dt;
+      if (placeBullet(t).done) { t.on = false; t.g.visible = false; }
     }
+    if (fxq.length) { const tn = now0(); for (let i = fxq.length - 1; i >= 0; i--) if (tn >= fxq[i].at) { const f = fxq[i].fn; fxq.splice(i, 1); try { f(); } catch (e) { console.warn('[bonfire] weapon fx', e && e.message); } } }
     for (const c of cas) {
       if (!c.m.visible) continue;
       c.life -= dt; if (c.life <= 0) { c.m.visible = false; continue; }
@@ -582,7 +610,7 @@ export function createWeapons(ctx) {
   // ===================================================================== 남의 무기 (네트워크)
   function setRemoteSlot(rec, slot) {
     const wp = wpOf(rec); if (wp.slot === slot) return;
-    wp.slot = slot; if (slot >= 2) instOf(rec, slot);
+    wp.slot = slot; wp.draw = slot >= 2 ? 1 : 0; if (slot >= 2) instOf(rec, slot);
     if (slot >= 2) sfx('equip', lvlAt(rec.av.root.position.x, 1, rec.av.root.position.z));
   }
   function onNet(rec, senderId, d) {
@@ -590,13 +618,14 @@ export function createWeapons(ctx) {
     const sp = ctx.spider(), s = rec.ctrl.state;
     if (m.k === 'f') {
       const wp = wpOf(rec); if (wp.slot !== m.w) setRemoteSlot(rec, m.w);
-      const W_ = WEAPONS[m.w], o = new T.Vector3(m.o[0], m.o[1], m.o[2]);
-      const mz = new T.Vector3(); if (muzzleWorld(rec, m.w, mz) && mz.distanceTo(o) < 2.2) o.copy(mz);
-      const rr = rngSeed(m.seed), first = new T.Vector3(o.x + m.d[0] * m.l, o.y + m.d[1] * m.l, o.z + m.d[2] * m.l);
-      tracer(o, first); impact(first, m.h ? { kind: m.h.kind } : null, !m.h);
+      const W_ = WEAPONS[m.w], sent = new T.Vector3(m.o[0], m.o[1], m.o[2]), o = sent.clone();
+      const mz = new T.Vector3(); if (muzzleWorld(rec, m.w, mz) && mz.distanceTo(sent) < 2.2) o.copy(mz);
+      // 탄은 이 화면에서 보이는 총구(mz)에서 출발한다. 보낸 쪽 총구(sent)에서 겨눈 끝점은 그대로 둔다
+      const rr = rngSeed(m.seed), first = new T.Vector3(sent.x + m.d[0] * m.l, sent.y + m.d[1] * m.l, sent.z + m.d[2] * m.l);
+      tracer(o, first); const hitM = m.h ? { kind: m.h.kind } : null, groundM = !m.h; later(C.impactDelay(o.distanceTo(first)), () => impact(first, hitM, groundM));
       for (let p = 1; p < W_.pellets; p++) {
         const sd = C.spreadDir(m.d[0], m.d[1], m.d[2], W_.spread, rr(), rr()), L = Math.min(W_.range, m.l * (0.7 + rr() * 0.5));
-        tracer(o, new T.Vector3(o.x + sd[0] * L, o.y + sd[1] * L, o.z + sd[2] * L));
+        tracer(o, new T.Vector3(sent.x + sd[0] * L, sent.y + sd[1] * L, sent.z + sd[2] * L));
       }
       const lv = lvlAt(o.x, o.y, o.z, 60);
       sfx(m.w === 3 ? 'rifle' : 'shotgun', lv);
@@ -629,6 +658,7 @@ export function createWeapons(ctx) {
   }
 
   function dispose() {
+    fxq.length = 0;
     for (const s of slashes) scene.remove(s.holder); slashes.length = 0;
     for (const d of drops) scene.remove(d.m); drops.length = 0;
   }
