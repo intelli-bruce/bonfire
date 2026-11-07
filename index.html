@@ -123,6 +123,19 @@ body.coarse #log { width: min(380px, calc(100vw - 110px)); }
   background: radial-gradient(ellipse at 50% -10%, rgba(130, 255, 225, 0.26), transparent 58%), radial-gradient(ellipse at 50% 55%, transparent 38%, rgba(2, 38, 58, 0.55) 100%), rgba(8, 112, 120, 0.3); }
 body.under #uw { opacity: 1; }
 #acts .cast { grid-column: 1 / span 2; width: 100%; height: 46px; border-radius: 999px; font-size: 14px; border-color: rgba(150, 230, 255, 0.85); }
+/* boss: toggle button + the HP bar at the top centre */
+#bossBtn { border-color: rgba(255, 90, 70, 0.6); }
+#bossBtn[aria-pressed="true"] { background: rgba(120, 28, 36, 0.9); }
+#bossHp { left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 12px); width: min(520px, calc(100vw - 24px)); pointer-events: none; display: grid; gap: 5px; z-index: 11; }
+#bossHp .name { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--f-display); font-size: 15px; color: #ffe2bd; text-shadow: 0 1px 3px #000, 0 0 8px rgba(0,0,0,.7); }
+#bossHp .name small { font-family: var(--f-ui); font-size: 12px; color: var(--mist); }
+#bossHp .track { position: relative; height: 16px; border-radius: 999px; background: rgba(20, 14, 40, 0.78); border: 1px solid rgba(255, 236, 210, 0.3); box-shadow: var(--shadow); overflow: hidden; }
+#bossHp .ghost, #bossHp .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; transform-origin: left center; border-radius: 999px; }
+#bossHp .ghost { background: rgba(255, 220, 160, 0.55); transition: transform 0.9s ease-out 0.25s; }
+#bossHp .fill { background: linear-gradient(180deg, #ff6a4a, #c4201e); transition: transform 0.18s ease-out; }
+#bossHp.rage .fill { background: linear-gradient(180deg, #ff9a3c, #e0301a); box-shadow: 0 0 10px rgba(255, 120, 40, 0.8); }
+#bossHp .state { font-size: 12px; color: var(--sand); text-align: center; min-height: 1.1em; text-shadow: 0 1px 3px #000; }
+@media (max-width: 1000px) { #bossHp { top: calc(env(safe-area-inset-top, 0px) + 76px); } }
 @media (max-width: 560px) { #hint { top: calc(env(safe-area-inset-top, 0px) + 104px); max-width: calc(100vw - 24px); } #sendBtn { display: none; } .btn { padding: 9px 12px; font-size: 14.5px; } }
 @media (prefers-reduced-motion: reduce) { #hint, #log div { transition: none; } #flash.on { animation-duration: 0.12s; } }
 </style>
@@ -144,6 +157,12 @@ body.under #uw { opacity: 1; }
   <button id="shotBtn" class="btn" type="button" aria-label="사진 찍기 (P)" title="사진 찍기 (P)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>사진</button>
   <button id="lanternBtn" class="btn" type="button">풍등 날리기</button>
   <button id="fwBtn" class="btn" type="button">폭죽</button>
+  <button id="bossBtn" class="btn" type="button" aria-pressed="false" title="인면 거미 보스를 불러오거나 지웁니다" disabled>보스 생성</button>
+</div>
+<div id="bossHp" class="hud" role="status" aria-live="off" hidden>
+  <div class="name"><span>인면 거미 · 직녀</span><small id="bossHpTxt"></small></div>
+  <div class="track"><div class="ghost" id="bossHpGhost"></div><div class="fill" id="bossHpFill"></div></div>
+  <div class="state" id="bossState"></div>
 </div>
 <div id="bar" class="hud" hidden>
   <form id="chatForm" autocomplete="off">
@@ -1451,6 +1470,7 @@ function strikeNow() {
     hitFlash(rec);
     if (netLive()) mqPub('hit', { id: myId, mid: newMid(), to: rec.rid, dx: r2(dx), dz: r2(dz) });
   }
+  if (SPIDER && SPIDER.active) bossStrike(cx, cz, st.y);
 }
 function hitFlash(rec) {
   rec.hitT = HIT_FLASH;
@@ -1636,6 +1656,7 @@ const mqRate = new Map();
 let mqAll = { t: 0, n: 0 };   // inbound budget over all senders combined (after de-duplication)
 const mqLastT = new Map();    // presence de-dup: sender id -> newest presence timestamp already handled
 const mqMids = new Map();     // event de-dup: small LRU of sender+mid
+const bossSeq = new Map();    // boss snapshot de-dup: sender id -> newest sequence number
 const MQ_GLOBAL_BUDGET = 400, MQ_SENDER_BUDGET = 30, MQ_LRU = 200;
 const EVENT_SUBS = new Set(['chat', 'wave', 'wood', 'lantern', 'firework', 'hit']);
 const dec = new TextDecoder();
@@ -1678,7 +1699,7 @@ async function connectMqtt() {
       client.on('error', () => {});
       client.on('connect', () => {
         c.live = true; c.everUp = true;
-        client.subscribe([MQ_P + 'p/+', MQ_P + 'bye/+', MQ_P + 'chat', MQ_P + 'wave', MQ_P + 'wood', MQ_P + 'fire', MQ_P + 'lantern', MQ_P + 'firework', MQ_P + 'hit'], { qos: 0 });
+        client.subscribe([MQ_P + 'p/+', MQ_P + 'bye/+', MQ_P + 'chat', MQ_P + 'wave', MQ_P + 'wood', MQ_P + 'fire', MQ_P + 'lantern', MQ_P + 'firework', MQ_P + 'hit', MQ_P + 'boss'], { qos: 0 });
         if (namesTopics.size) client.subscribe([...namesTopics], { qos: 0 });
         if (!mq) { mq = st; startNames(); if (!connecting) logLine(null, '공개 연결이 되었습니다. 이제 함께 볼 수 있습니다.', true); if (entered && nickState === 'pending') scheduleClaimRetry(); }   // first broker up: public mode; the others join as they connect
         refreshControls(); sendPresence(performance.now(), true);
@@ -1766,6 +1787,16 @@ function onMqMessage(topic, payload) {
   } else if (EVENT_SUBS.has(sub)) {
     const mid = typeof d.mid === 'string' ? d.mid.replace(/[^a-z0-9]/gi, '').slice(0, 16) : '';
     if (mid && mqSeenMid(id + ':' + mid)) return;
+  } else if (sub === 'boss') {   // boss stream: snapshots carry a sequence number (each broker delivers a copy), the rest a mid
+    if (typeof d.n === 'number') {
+      const last = bossSeq.get(id);
+      if (last !== undefined && d.n <= last && last - d.n < 200) return;
+      if (bossSeq.size > 200) bossSeq.clear();
+      bossSeq.set(id, d.n);
+    } else {
+      const mid = typeof d.mid === 'string' ? d.mid.replace(/[^a-z0-9]/gi, '').slice(0, 16) : '';
+      if (mid && mqSeenMid(id + ':' + mid)) return;
+    }
   }
   const now = performance.now();
   if (now - mqAll.t > 1000) mqAll = { t: now, n: 0 };
@@ -1844,6 +1875,8 @@ function onMqMessage(topic, payload) {
         hitFlash(vr);
       }
       hitStats.recv++;
+    } else if (sub === 'boss') {
+      onBossMessage(key, rec, id, d);
     } else if (sub === 'lantern' || sub === 'firework') {
       const lx = num(d.x, P_BOUNDS.x0, P_BOUNDS.x1), lz = num(d.z, P_BOUNDS.z0, P_BOUNDS.z1);
       const seed = typeof d.seed === 'number' && Number.isInteger(d.seed) && d.seed >= 0 && d.seed <= 0xffffffff ? d.seed : null;
@@ -2143,6 +2176,128 @@ $('entryForm').addEventListener('submit', async (e) => {
   logLine(null, '크리스마스 모닥불 곁으로 왔습니다. 통나무 가까이에서 E(또는 「앉기」)로 앉고, 불 옆에서 장작을 넣을 수 있습니다.', true);
 });
 
+// ---------- spider boss (bf/spider.js; model bf/spider.glb, minions bf/spider_mini.glb) ----------
+// One client (the owner) runs the AI and streams ~8 snapshots/s on `boss`; everyone renders the same fight. Hits on ME are judged on my screen.
+let SPIDER = null;
+const BOSS_UI = { btn: $('bossBtn'), bar: $('bossHp'), fill: $('bossHpFill'), ghost: $('bossHpGhost'), txt: $('bossHpTxt'), state: $('bossState'), last: '', sentAt: 0 };
+const bossGone = new Set();       // born ids of bosses deleted on purpose: a late snapshot must not bring them back
+const SLOW = { web: 1, poison: 0, until: 0, base: { walk: KIT_TUNING.walk, run: KIT_TUNING.run, crawl: KIT_TUNING.crawl, swim: KIT_TUNING.swim, swimFast: KIT_TUNING.swimFast }, cur: 1, webLog: 0 };
+function bossPlayers() {
+  const out = [];
+  if (entered && meRec) out.push({ id: myId, x: me.x, z: me.z, y: me.y });
+  for (const rec of others.values()) { if (!rec.mq || !rec.rid) continue; const s = rec.ctrl.state; out.push({ id: rec.rid, x: s.x, z: s.z, y: s.y }); }
+  return out;
+}
+function bossLandOk(x, z) { return x > -58 && x < 58 && z > -11 && z < 58 && heightAt(x, z) > 0.3; }
+function initSpider(mod) {
+  SPIDER = mod.createSpiderBoss({
+    THREE, scene, baseUrl: new URL('./bf/', location.href).href, myId, heightAt, canStand: bossLandOk,
+    players: bossPlayers,
+    me: () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2, x: me.x, y: me.y, z: me.z }),
+    pushMe: (x, z) => { if (meRec && !mySeat && bossLandOk(x, z)) meRec.ctrl.teleport(x, z); },
+    onHitMe: (h) => {
+      if (!entered || !meRec) return;
+      const now = performance.now();
+      hitFlash(meRec); meRec.ctrl.knock(h.dx, h.dz, h.power);
+      if (mq) mq.boostUntil = now + 700;
+      sendPresence(now, true);
+      if (h.poison) { SLOW.poison = 0.55; SLOW.until = now + 2600; }
+      if (evtOk('*', 'bosshitlog', 1500)) netLog(null, h.src === 'swipe' ? '거미의 앞다리에 맞았습니다.' : h.src === 'spit' ? '독침에 맞았습니다. 잠시 느려집니다.' : '새끼 거미에게 물렸습니다.', true);
+    },
+    fx: {
+      poof: (x, y, z, n) => PUFF.poof(x, y, z, n),
+      spark: (x, y, z) => PUFF.spark(x, y, z),
+      thump: (v) => thumpSound(clamp(v, 0, 1)),
+    },
+  });
+  SPIDER.on('spawn', () => { refreshBossUi(true); logLine(null, '모닥불 밖 어둠에서 인면 거미가 올라옵니다!', true); });
+  SPIDER.on('despawn', () => refreshBossUi(true));
+  SPIDER.on('gone', (e) => { refreshBossUi(true); logLine(null, e && e.dead ? '인면 거미가 쓰러졌습니다.' : '인면 거미가 사라졌습니다.', true); });
+  SPIDER.on('die', () => logLine(null, '인면 거미를 쓰러뜨렸습니다!', true));
+  SPIDER.on('rage', () => logLine(null, '거미가 분노했습니다! 더 빠르고 더 자주 공격합니다.', true));
+  SPIDER.on('takeover', () => logLine(null, '보스를 이어 받아 진행합니다.', true));
+  SPIDER.on('request-despawn', () => bossDelete(true));
+  BOSS_UI.btn.disabled = false;
+  BOSS_UI.btn.addEventListener('click', () => { initAudio(); SPIDER.active ? bossDelete(false) : bossCreate(); canvas.focus({ preventScroll: true }); });
+}
+function bossCreate() {
+  if (!SPIDER || SPIDER.active || !entered || !meRec) return;
+  let spot = null;
+  for (const da of [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, Math.PI]) {
+    const a = me.ry + da, x = me.x - Math.sin(a) * 15, z = me.z - Math.cos(a) * 15;
+    if (bossLandOk(x, z)) { spot = { x, z }; break; }
+  }
+  if (!spot) spot = { x: 0, z: 22 };
+  SPIDER.spawn(spot.x, spot.z, Math.atan2(-(me.x - spot.x), -(me.z - spot.z)));
+  bossSendNow();
+}
+function bossDelete(dead) {
+  if (!SPIDER || !SPIDER.active) return;
+  const born = SPIDER.view.born;
+  if (born) bossGone.add(born);
+  if (netLive()) mqPub('boss', { k: 'x', id: myId, mid: newMid(), b: born });
+  SPIDER.despawn();
+}
+function bossSendNow() {
+  if (!SPIDER || !SPIDER.owner || !netLive()) return;
+  const snap = SPIDER.snapshot(); if (snap) mqPub('boss', snap);
+  BOSS_UI.sentAt = performance.now();
+}
+function onBossMessage(key, rec, id, d) {   // sub === 'boss' from a known peer
+  if (!SPIDER) return;
+  if (d.k === 'hit') {   // a peer's punch landed on the boss or a minion: only the owner books it
+    if (!SPIDER.owner) return;
+    const kind = d.t === 'minion' ? 'minion' : d.t === 'boss' ? 'boss' : null, i = num(d.i, 0, 1e9);
+    if (!kind || i === null) return;
+    const v = SPIDER.view, s = rec.ctrl.state;
+    if (Math.hypot(s.x - v.x, s.z - v.z) > 11) return;   // reach (boss radius + punch reach + lag slack)
+    SPIDER.damage(kind, Math.round(i), 10, id);
+    return;
+  }
+  if (d.k === 'x') {
+    const b = num(d.b, 0, 1e15);
+    if (b !== null) { bossGone.add(b); if (SPIDER.active && SPIDER.view.born === b) SPIDER.despawn(); }
+    return;
+  }
+  if (typeof d.b === 'number' && bossGone.has(d.b)) return;
+  SPIDER.applySnapshot(d, id);
+}
+function bossStrike(cx, cz, y) {   // my punch's contact frame: tell the owner (or book it myself) what it touched
+  for (const h of SPIDER.hitTest(cx, cz, HIT.radius, y)) {
+    PUFF.spark(cx, y + 1.2, cz); thumpSound(0.7);
+    if (SPIDER.owner) SPIDER.damage(h.kind, h.id, 10, myId);
+    else if (netLive()) mqPub('boss', { k: 'hit', id: myId, mid: newMid(), t: h.kind, i: h.id });
+  }
+}
+function refreshBossUi(force) {
+  if (!SPIDER) return;
+  const v = SPIDER.view, key = v.active ? `${Math.ceil(v.hp)}/${v.maxHp}/${v.rage ? 1 : 0}/${v.dying ? 1 : 0}/${v.minions}/${v.spawnT > 0 ? 1 : 0}` : 'off';
+  if (!force && key === BOSS_UI.last) return;
+  BOSS_UI.last = key;
+  BOSS_UI.bar.hidden = !v.active;
+  BOSS_UI.btn.textContent = v.active ? '보스 삭제' : '보스 생성'; BOSS_UI.btn.setAttribute('aria-pressed', v.active ? 'true' : 'false');
+  if (!v.active) return;
+  const k = v.maxHp > 0 ? clamp(v.hp / v.maxHp, 0, 1) : 0;
+  BOSS_UI.fill.style.transform = `scaleX(${k})`; BOSS_UI.ghost.style.transform = `scaleX(${k})`;
+  BOSS_UI.txt.textContent = `${Math.ceil(v.hp)} / ${v.maxHp}`;
+  BOSS_UI.bar.classList.toggle('rage', v.rage);
+  BOSS_UI.state.textContent = v.dying ? '쓰러졌습니다' : v.spawnT > 0 ? '올라오는 중…' : v.rage ? '분노' : (v.minions ? `새끼 거미 ${v.minions}마리` : '');
+}
+function bossFrame(dt, t, now) {
+  if (!SPIDER) return;
+  try {
+    SPIDER.update(dt, t);
+    if (SPIDER.owner && netLive() && now - BOSS_UI.sentAt >= 125) bossSendNow();
+    refreshBossUi(false);
+  } catch (e) { console.warn('[bonfire] spider failed, removed:', e && e.message); try { SPIDER.despawn(); } catch (e2) { /* ignore */ } SPIDER = null; BOSS_UI.bar.hidden = true; BOSS_UI.btn.disabled = true; }
+  // webs and poison slow only me: the kit's speed knobs scale for as long as I stand in them
+  let f = 1;
+  if (SPIDER && entered && meRec && !mySeat) { const w = SPIDER.slowAt(me.x, me.z); if (w < 1) { f = w; if (now - SLOW.webLog > 6000) { SLOW.webLog = now; netLog(null, '거미줄에 걸렸습니다! 이동이 느려집니다.', true); } } }
+  if (now < SLOW.until) f = Math.min(f, 1 - SLOW.poison); else SLOW.poison = 0;
+  if (Math.abs(f - SLOW.cur) > 0.01) { SLOW.cur = f; for (const k in SLOW.base) KIT_TUNING[k] = SLOW.base[k] * f; }
+}
+import('./bf/spider.js').then(initSpider).catch((e) => { console.warn('[bonfire] could not load bf/spider.js', e && e.message); if (LOCAL) window.__bossLoadErr = String((e && e.stack) || e); });
+
 // ---------- loop ----------
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -2169,11 +2324,15 @@ if (location.hostname === '127.0.0.1') {   // local test read-out only
     setCam(yaw, pitch, dist) { cam.yaw = yaw; cam.pitch = pitch; cam.dist = dist; cam.cur = dist; },
     shot: () => takeShot(), get lastShot() { return lastShot && { size: lastShot.blob.size, type: lastShot.blob.type, filename: lastShot.filename, w: lastShot.w, h: lastShot.h, saved: lastShot.saved }; },
     async lastShotData() { if (!lastShot) return null; const b = new Uint8Array(await lastShot.blob.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 32768) s += String.fromCharCode.apply(null, b.subarray(i, i + 32768)); return btoa(s); },
+    get info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures }; },
+    setCamHook(f) { camHook = f; }, get camera() { return camera; }, hideMe(v) { if (meRec) meRec.av.root.visible = !v; },
+    get spider() { return SPIDER; }, bossCreate, bossDelete, bossStrike, get slow() { return { ...SLOW }; }, get webSlow() { return SPIDER ? SPIDER.slowAt(me.x, me.z) : 1; },
     get diag() { return { mqIn, mqPresIn, brokers: mqLiveCount(), others: [...others.keys()], lastSent: mq ? Math.round(performance.now() - mq.lastSent) : null }; },
   };
 }
 
 const clock = new THREE.Clock();
+let camHook = null;   // local test: a function(camera) run after the follow camera (close-up shots)
 let lastPrune = 0;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime, now = performance.now();
@@ -2191,10 +2350,12 @@ function frame() {
     cam.yaw = Math.sin(t * 0.1) * 0.35; cam.pitch = 0.1 + Math.sin(t * 0.07) * 0.05;
   }
   updateCamera(dt);
+  if (camHook) camHook(camera);
   if (meRec) { animTags(meRec, now); swimFx(meRec, dt, true); moveFx(meRec, dt); hitFx(meRec, dt); }
   for (const rec of others.values()) { rec.ctrl.update(dt); animTags(rec, now); swimFx(rec, dt, false); moveFx(rec, dt); hitFx(rec, dt); }   // kit: 100 ms buffered interpolation + counter-driven actions
   SWF.update(dt); PUFF.update(dt);
   if (PR.mod) PR.mod.update(dt, t);
+  bossFrame(dt, t, now);
   for (const rec of [meRec, ...others.values()]) {
     if (!rec || !rec.angler) continue;
     rec.angler.update(dt, t);
