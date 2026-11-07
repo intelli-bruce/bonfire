@@ -12,7 +12,8 @@
   (새끼 거미는 idle · walk · attack · die).
 """
 import bpy, bmesh, math, sys, os, random
-from mathutils import Vector, Matrix, Quaternion, Euler
+import numpy as np
+from mathutils import Vector, Matrix, Quaternion, Euler, noise
 
 FPS = 24
 BOSS_K = 3.8      # 보스 배율(원본 0.85 의 약 4.5배)
@@ -37,10 +38,10 @@ def lin(h):
     return tuple(((x + 0.055) / 1.055) ** 2.4 if x > 0.04045 else x / 12.92 for x in c)
 
 PALETTE = {   # name: (hex, roughness, metallic, emissive hex or None, emissive strength)
-    'chitin':   ('#6b4d9a', 0.5, 0.0, None, 0),        # 껍질: 말랑한 보라(밤 장면에서도 보이도록 밝게, 금속성 0)
-    'chitin2':  ('#8a5b9c', 0.55, 0.0, None, 0),       # 복부 바탕
+    'chitin':   ('#7a5aae', 0.3, 0.0, None, 0),        # 껍질: 말랑한 보라 + 옻칠 광택(코팅층)        # 껍질: 말랑한 보라(밤 장면에서도 보이도록 밝게, 금속성 0)
+    'chitin2':  ('#9a68ad', 0.34, 0.0, None, 0),       # 복부 바탕
     'joint':    ('#e8863a', 0.5, 0.0, '#ff8a2a', 0.2),  # 관절 구: 따뜻한 주황
-    'fur':      ('#d9b27c', 0.9, 0.0, None, 0),        # 잔털: 밝은 살구빛
+    'fur':      ('#e6c08c', 0.85, 0.0, None, 0),        # 잔털: 밝은 살구빛
     'skin':     ('#ffe6d2', 0.6, 0.0, None, 0),        # 얼굴: 복숭아 크림색
     'skin2':    ('#e3b9a0', 0.6, 0.0, None, 0),
     'lip':      ('#8e3a4c', 0.5, 0.0, None, 0),        # 웃는 입선
@@ -52,7 +53,58 @@ PALETTE = {   # name: (hex, roughness, metallic, emissive hex or None, emissive 
     'fang':     ('#fff4dc', 0.35, 0.0, None, 0),       # 작은 송곳니
     'mouth':    ('#3a0b18', 0.7, 0.0, '#40060c', 0.3),
     'mark':     ('#ff8fb1', 0.45, 0.0, '#ff6f9c', 0.5),  # 등의 분홍 물방울 무늬
+    'claw':     ('#2a1a30', 0.25, 0.0, None, 0),       # 발톱·가시·실젖: 짙은 자주 각질
 }
+
+# ----------------------------------------------------------------------------------------------------------------------
+# 이음매 없는(tileable) numpy 텍스처 — 외부 이미지 없음
+# ----------------------------------------------------------------------------------------------------------------------
+TEX_N = 1024
+def tex_fbm(n, beta, seed, lo=2, hi=None):
+    rng = np.random.default_rng(seed); F = np.fft.fft2(rng.standard_normal((n, n)))
+    fx = np.fft.fftfreq(n)[:, None] * n; fy = np.fft.fftfreq(n)[None, :] * n
+    f = np.sqrt(fx * fx + fy * fy); f[0, 0] = 1; amp = f ** (-beta); amp[f < lo] = 0
+    if hi: amp[f > hi] = 0
+    h = np.real(np.fft.ifft2(F * amp)); h -= h.min(); return h / (h.max() + 1e-9)
+
+def tex_cells(n, count, seed):
+    rng = np.random.default_rng(seed); pts = rng.random((count, 2)); yy, xx = np.mgrid[0:n, 0:n] / n
+    F1 = np.full((n, n), 9.0); F2 = np.full((n, n), 9.0)
+    for q in pts:
+        dx = np.abs(xx - q[0]); dx = np.minimum(dx, 1 - dx); dy = np.abs(yy - q[1]); dy = np.minimum(dy, 1 - dy)
+        d = np.sqrt(dx * dx + dy * dy); F2 = np.where(d < F1, F1, np.minimum(F2, d)); F1 = np.minimum(F1, d)
+    return F1, F2
+
+def height_to_normal(h, k):
+    dx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) * 0.5 * k; dy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) * 0.5 * k
+    l = np.sqrt(dx * dx + dy * dy + 1)
+    return np.stack([(-dx / l) * 0.5 + 0.5, (-dy / l) * 0.5 + 0.5, (1 / l) * 0.5 + 0.5], -1)
+
+def make_image(name, rgb, non_color=False):
+    n = rgb.shape[0]; img = bpy.data.images.new(name, n, n, alpha=False)
+    px = np.ones((n, n, 4), dtype=np.float32); px[..., :3] = np.clip(rgb, 0, 1); img.pixels.foreach_set(px.reshape(-1))
+    if non_color: img.colorspace_settings.name = 'Non-Color'
+    img.file_format = 'JPEG'; img.pack(); return img
+
+_TEX = {}
+def spider_textures():
+    """껍질(작은 비늘 판 + 미세 오돌토돌 + 털구멍) · 털(결 방향 줄) 색·노멀 한 쌍씩."""
+    if _TEX: return _TEX
+    n = TEX_N
+    F1, F2 = tex_cells(n, 900, 41)                         # 비늘 판(각질 판 경계 홈)
+    seam = np.clip(1 - (F2 - F1) * 140, 0, 1) ** 2
+    dome = np.clip(1 - F1 * 32, 0, 1) ** 0.6                # 판마다 볼록
+    pores = (tex_fbm(n, 0.05, 42) > 0.86).astype(float)    # 털구멍(작은 점)
+    fine = tex_fbm(n, 1.0, 43); mott = tex_fbm(n, 1.9, 44, lo=2, hi=40)
+    h = dome * 0.35 + fine * 0.25 + mott * 0.3 - seam * 0.5 - pores * 0.35
+    alb = (0.80 + 0.14 * mott + 0.08 * fine - 0.22 * seam - 0.18 * pores)[..., None] * np.array([1.0, 0.98, 1.02])
+    _TEX['chitin'] = (make_image('sp_chitin_albedo', alb), make_image('sp_chitin_normal', height_to_normal(h, 14.0), True))
+    # 털: 세로로 길게 늘린 노이즈 = 결
+    rng = np.random.default_rng(45); w = rng.standard_normal((n, n))
+    F = np.fft.fft2(w); fx = np.fft.fftfreq(n)[:, None] * n; fy = np.fft.fftfreq(n)[None, :] * n
+    amp = 1.0 / (1 + (fx / 3.0) ** 2 + (fy / 60.0) ** 2); hs = np.real(np.fft.ifft2(F * amp)); hs -= hs.min(); hs /= hs.max() + 1e-9
+    _TEX['fur'] = (make_image('sp_fur_albedo', (0.72 + 0.28 * hs)[..., None] * np.ones(3)), make_image('sp_fur_normal', height_to_normal(hs, 10.0), True))
+    return _TEX
 
 def make_materials(names):
     out = {}
@@ -67,6 +119,20 @@ def make_materials(names):
         if em:
             b.inputs['Emission Color'].default_value = (*lin(em), 1)
             b.inputs['Emission Strength'].default_value = es
+        if n in ('chitin', 'chitin2', 'joint', 'claw'):     # 옻칠 같은 코팅 광택 → glTF KHR_materials_clearcoat
+            for k_, v_ in (('Coat Weight', 0.7), ('Coat Roughness', 0.12)):
+                if k_ in b.inputs: b.inputs[k_].default_value = v_
+        tex = None
+        if n in ('chitin', 'chitin2', 'joint', 'claw'): tex = spider_textures()['chitin']
+        elif n == 'fur': tex = spider_textures()['fur']
+        if tex:
+            nt = m.node_tree
+            ta = nt.nodes.new('ShaderNodeTexImage'); ta.image = tex[0]
+            mix = nt.nodes.new('ShaderNodeMix'); mix.data_type = 'RGBA'; mix.blend_type = 'MULTIPLY'; mix.inputs['Factor'].default_value = 1.0
+            mix.inputs[6].default_value = (*lin(hexc), 1); nt.links.new(ta.outputs['Color'], mix.inputs[7]); nt.links.new(mix.outputs[2], b.inputs['Base Color'])
+            tn = nt.nodes.new('ShaderNodeTexImage'); tn.image = tex[1]
+            nm = nt.nodes.new('ShaderNodeNormalMap'); nm.inputs['Strength'].default_value = 1.0
+            nt.links.new(tn.outputs['Color'], nm.inputs['Color']); nt.links.new(nm.outputs['Normal'], b.inputs['Normal'])
         m.diffuse_color = (*lin(hexc), 1)
         out[n] = m
     return out
@@ -88,6 +154,8 @@ class Builder:
     def __init__(self, bones, mats):
         self.bm = bmesh.new()
         self.dl = self.bm.verts.layers.deform.verify()
+        self.band = self.bm.verts.layers.float.new('band')   # 다리 마디 안 위치(0..1, 무늬용), 털 끝은 2, 그 밖은 0
+        self.cur_band = None
         self.gi = {b: i for i, b in enumerate(bones)}
         self.mi = {m: i for i, m in enumerate(mats)}
 
@@ -121,6 +189,8 @@ class Builder:
                 u = (prev_u - ax.normalized() * prev_u.dot(ax.normalized())).normalized(); w = ax.normalized().cross(u).normalized()
             prev_u = u
             ring = [bm.verts.new(p + (u * math.cos(2 * math.pi * k / sides) + w * math.sin(2 * math.pi * k / sides)) * radii[i]) for k in range(sides)]
+            if self.cur_band is not None:
+                for v in ring: v[self.band] = 0.001 + 0.998 * i / max(1, len(pts) - 1)
             rings.append(ring)
         faces = []
         for i in range(len(rings) - 1):
@@ -141,6 +211,7 @@ class Builder:
         u, w = perp_basis(tip - base)
         ring = [bm.verts.new(base + (u * math.cos(2 * math.pi * k / sides) + w * math.sin(2 * math.pi * k / sides)) * r) for k in range(sides)]
         ap = bm.verts.new(tip)
+        if mat == 'fur': ap[self.band] = 2.0
         gi = self.gi[bone]
         faces = [bm.faces.new((ring[k], ring[(k + 1) % sides], ap)) for k in range(sides)]
         for v in ring + [ap]: v[self.dl][gi] = 1.0
@@ -436,23 +507,93 @@ def sculpt_head(b, K, detail):
 def face_surface_y(c, rx, ry, rz, nx, nz, K):
     return c.y + ry * math.sqrt(max(0.0, 1 - nx * nx - nz * nz))
 
-def hair(b, pos, d, L, r, bone):
-    b.cone(pos, pos + d * L, r, bone, 'fur', sides=4)
+def hair(b, pos, d, L, r, bone, sides=4):
+    b.cone(pos, pos + d * L, r, bone, 'fur', sides=sides)
+
+def sculpt_shell(b, verts, c, rr, kind, K):
+    """껍질 표면 깎기: 흉부 = 가운데 홈(fovea) + 방사형 고랑, 복부 = 가로 주름 + 오돌토돌."""
+    for v in verts:
+        p = v.co - c; nx, ny, nz = p.x / rr[0], p.y / rr[1], p.z / rr[2]
+        nrm = Vector((nx / rr[0], ny / rr[1], nz / rr[2])).normalized()
+        q = Vector((nx, ny, nz)) * 3.0
+        d = 0.012 * K * noise.noise(q * 2.2) + 0.006 * K * noise.noise(q * 6.0)
+        if kind == 'thorax' and nz > 0.15:
+            ang = math.atan2(ny, nx); rad = math.hypot(nx, ny)
+            d -= 0.035 * K * smoothstep(0.86, 0.99, math.cos(ang * 9)) * smoothstep(0.15, 0.45, rad) * smoothstep(0.95, 0.7, rad)
+            d -= 0.06 * K * smoothstep(0.16, 0.0, math.hypot(nx, ny + 0.15))          # 가운데 오목한 홈
+        if kind == 'abd':
+            d += 0.022 * K * math.sin(ny * 19.0) * smoothstep(-0.2, 0.4, nz)                # 가로 주름(마디 흔적)
+        v.co += nrm * d
+
+def paint_spider(me, mats, K):
+    """꼭짓점 색(POINT): 다리 마디 띠(관절 쪽 진하고 가운데 밝은 줄) · 복부 갈매기 무늬 · 흉부 방사 무늬 · 털 뿌리→끝 밝게. 얼굴은 흰색(무늬 없음)."""
+    n = len(me.vertices)
+    co = np.zeros(n * 3); me.vertices.foreach_get('co', co); co = co.reshape(-1, 3)
+    band = np.zeros(n)
+    if 'band' in me.attributes: me.attributes['band'].data.foreach_get('value', band)
+    vmat = np.full(n, -1)
+    for p in me.polygons:
+        for vi in p.vertices: vmat[vi] = p.material_index
+    mi = {m: i for i, m in enumerate(mats)}
+    col = np.ones((n, 4), dtype=np.float32)
+    AC = np.array([0, -2.4, 2.65]) * K; AR = np.array([1.3, 1.95, 1.3]) * K
+    TC = np.array([0, 0.1, 2.35]) * K
+    for i in range(n):
+        m = vmat[i]; c = co[i]; bd = band[i]; k = 1.0; tint = (1.0, 1.0, 1.0)
+        if m == mi.get('fur'):
+            k = 0.55 + 0.45 * (1.0 if bd > 1.5 else 0.0)
+        elif m in (mi.get('chitin'), mi.get('joint'), mi.get('claw')):
+            if 0.0 < bd < 1.0:   # 다리 마디: 양 끝 어둡게, 0.7 부근 밝은 띠
+                k = 0.62 + 0.25 * math.sin(math.pi * bd) + 0.28 * math.exp(-((bd - 0.72) / 0.07) ** 2)
+            else:
+                q = c - TC; ang = math.atan2(q[1], q[0])
+                k = 0.78 + 0.12 * noise.noise(Vector(c / K * 3.0)) - (0.2 if (q[2] > 0.3 * K and math.cos(ang * 9) > 0.8) else 0.0)
+        elif m == mi.get('chitin2'):
+            q = (c - AC) / AR
+            chev = math.sin((q[1] * 5.0 + abs(q[0]) * 3.2) * math.pi)
+            top = smoothstep(0.0, 0.5, q[2])
+            k = 0.86 - 0.32 * top * smoothstep(0.55, 0.95, chev) + 0.1 * noise.noise(Vector(c / K * 4.0))
+            if abs(q[0]) < 0.08 and q[2] > 0.5: k *= 0.8                                       # 등 가운데 진한 줄
+            tint = (1.0, 0.95, 1.0)
+        k = max(0.25, min(1.0, k))
+        col[i, 0], col[i, 1], col[i, 2] = k * tint[0], k * tint[1], k * tint[2]
+    ca = me.color_attributes.new('Col', 'FLOAT_COLOR', 'POINT'); ca.data.foreach_set('color', col.reshape(-1))
+    me.color_attributes.active_color = ca
+    try: me.color_attributes.render_color_index = me.color_attributes.active_color_index
+    except Exception: pass
+    if 'band' in me.attributes: me.attributes.remove(me.attributes['band'])
+
+def box_uv(me, scale):
+    uvl = me.uv_layers.new(name='UVMap') if not me.uv_layers else me.uv_layers[0]
+    co = np.zeros(len(me.vertices) * 3); me.vertices.foreach_get('co', co); co = co.reshape(-1, 3)
+    uv = np.zeros(len(me.loops) * 2, dtype=np.float32)
+    for p in me.polygons:
+        nn = p.normal; ax = max(range(3), key=lambda k: abs(nn[k])); a, bb = [(1, 2), (0, 2), (0, 1)][ax]
+        for li in p.loop_indices:
+            v = co[me.loops[li].vertex_index]; uv[li * 2] = v[a] * scale; uv[li * 2 + 1] = v[bb] * scale
+    uvl.data.foreach_set('uv', uv)
 
 def build_boss_mesh(rig, mats, detail=True):
     K = rig.K; rng = random.Random(11)
     b = Builder(rig.names, mats)
     S = lambda v: Vector(v) * K
-    sides = 10 if detail else 5
+    sides = 14 if detail else 5
     # -- 흉부·복부 ------------------------------------------------------------------------------------------------
     tc, tr = S((0, 0.1, 2.35)), (0.95 * K, 1.2 * K, 0.82 * K)
-    b.sphere(tc, tr, 'body', 'chitin', seg=24 if detail else 10, rings=16 if detail else 6)
+    tv = b.sphere(tc, tr, 'body', 'chitin', seg=56 if detail else 10, rings=36 if detail else 6)
+    if detail: sculpt_shell(b, tv, tc, tr, 'thorax', K)
     b.sphere(S((0, -0.2, 2.75)), (0.55 * K, 0.7 * K, 0.4 * K), 'body', 'chitin', seg=16 if detail else 8, rings=10 if detail else 5)   # 등딱지 융기
     # 복부
     ac, ar = S((0, -2.4, 2.65)), (1.3 * K, 1.95 * K, 1.3 * K)
-    seg_a, rings_a = (40, 26) if detail else (12, 8)
+    seg_a, rings_a = (80, 52) if detail else (12, 8)
     ab = bmesh.ops.create_uvsphere(b.bm, u_segments=seg_a, v_segments=rings_a, radius=1.0, matrix=Matrix.Translation(ac) @ Matrix.Diagonal((ar[0], ar[1], ar[2], 1.0)))['verts']
     b.tag(ab, 'abdomen', 'chitin2')
+    if detail:
+        sculpt_shell(b, ab, ac, ar, 'abd', K)
+        # 꽁무니 실젖(spinneret) 네 개
+        for sx, sz in ((-0.16, 0.0), (0.16, 0.0), (-0.08, -0.14), (0.08, -0.14)):
+            a0 = ac + Vector((sx * K, -ar[1] * 0.96, sz * K - 0.1 * K))
+            b.tube([a0, a0 + Vector((sx * 0.5, -0.22, -0.06)) * K, a0 + Vector((sx * 0.8, -0.36, -0.12)) * K], [0.08 * K, 0.06 * K, 0.02 * K], 'abdomen', 'claw', sides=8)
     # 등 쪽 분홍 물방울 무늬 5개(표면 법선에 맞춘 납작한 타원)
     if detail:
         for nx_, ny_, rr in ((0.0, 0.02, 0.27), (-0.34, 0.40, 0.19), (0.34, 0.40, 0.19), (-0.38, -0.40, 0.2), (0.38, -0.40, 0.2)):
@@ -462,17 +603,17 @@ def build_boss_mesh(rig, mats, detail=True):
             b.sphere(pos, (rr * ar[0], 0.05 * K, rr * ar[0]), 'abdomen', 'mark', seg=16, rings=8, rot=Vector((0, 1, 0)).rotation_difference(n).to_matrix())
     # 잔털: 복부·흉부에 듬성듬성(성능·인상 모두 가볍게)
     if detail:
-        for _ in range(48):                     # 복부
+        for _ in range(560):                    # 복부: 빽빽한 잔털
             th = rng.uniform(0, math.pi * 0.62); ph = rng.uniform(0, 2 * math.pi)
             nrm = Vector((math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), math.cos(th)))
             pos = ac + Vector((nrm.x * ar[0], nrm.y * ar[1], nrm.z * ar[2])) * 0.99
-            hair(b, pos, (nrm + Vector((0, -0.35, 0.1))).normalized(), rng.uniform(0.10, 0.17) * K, 0.026 * K, 'abdomen')
-        for _ in range(16):                     # 흉부(앞쪽은 머리가 가리므로 제외)
+            hair(b, pos, (nrm + Vector((rng.uniform(-0.2, 0.2), -0.45, 0.1))).normalized(), rng.uniform(0.09, 0.24) * K, rng.uniform(0.024, 0.038) * K, 'abdomen', sides=3)
+        for _ in range(170):                    # 흉부(앞쪽은 머리가 가리므로 제외)
             th = rng.uniform(0, math.pi * 0.5); ph = rng.uniform(0, 2 * math.pi)
             nrm = Vector((math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), math.cos(th)))
             if nrm.y > 0.55: continue
             pos = tc + Vector((nrm.x * tr[0], nrm.y * tr[1], nrm.z * tr[2])) * 0.99
-            hair(b, pos, (nrm + Vector((0, -0.2, 0.1))).normalized(), rng.uniform(0.09, 0.15) * K, 0.024 * K, 'body')
+            hair(b, pos, (nrm + Vector((rng.uniform(-0.2, 0.2), -0.3, 0.1))).normalized(), rng.uniform(0.08, 0.18) * K, rng.uniform(0.022, 0.034) * K, 'body', sides=3)
     # -- 머리(둥근 얼굴) --------------------------------------------------------------------------------------------
     c, rx, ry, rz = sculpt_head(b, K, detail)
     def fp(nx, nz, off=0.0):   # 얼굴 좌표 → 3D (표면)
@@ -528,29 +669,45 @@ def build_boss_mesh(rig, mats, detail=True):
         b.tube([h0, h1], [0.17 * k_, 0.15 * k_], f'{leg}_c', 'chitin', sides=sides)
         def seg_pts(a, c_, rs, bone):
             n = len(rs)
+            if detail:   # 반지름을 촘촘히 보간 + 마디 끝 각질 테(살짝 부푼 고리)
+                m_ = 17; rr_ = []
+                for j in range(m_):
+                    t_ = j / (m_ - 1) * (n - 1); i0 = min(int(t_), n - 2); f_ = t_ - i0
+                    r0 = rs[i0] + (rs[i0 + 1] - rs[i0]) * f_; u_ = j / (m_ - 1)
+                    r0 *= 1 + 0.09 * math.exp(-((u_ - 0.06) / 0.05) ** 2) + 0.07 * math.exp(-((u_ - 0.9) / 0.05) ** 2) - 0.03 * math.exp(-((u_ - 0.5) / 0.2) ** 2)
+                    rr_.append(r0)
+                rs = rr_; n = m_
             pts = [a + (c_ - a) * (j / (n - 1)) for j in range(n)]
-            b.tube(pts, rs, bone, 'chitin', sides=sides)
+            b.cur_band = True; b.tube(pts, rs, bone, 'chitin', sides=sides); b.cur_band = None
             return pts
         seg_pts(h1, kk, [0.14 * k_, 0.17 * k_, 0.19 * k_, 0.16 * k_, 0.13 * k_] if detail else [0.14 * k_, 0.18 * k_, 0.13 * k_], f'{leg}_f')
         b.sphere(kk, (0.2 * k_,) * 3, f'{leg}_f', 'joint', seg=10 if detail else 6, rings=7 if detail else 4)                    # 무릎 구
         seg_pts(kk, k2, [0.12 * k_, 0.15 * k_, 0.16 * k_, 0.14 * k_, 0.11 * k_] if detail else [0.12 * k_, 0.16 * k_, 0.11 * k_], f'{leg}_t')
         b.sphere(k2, (0.165 * k_,) * 3, f'{leg}_t', 'joint', seg=10 if detail else 6, rings=7 if detail else 4)
         seg_pts(k2, t, [0.11 * k_, 0.115 * k_, 0.1 * k_, 0.07 * k_, 0.04 * k_, 0.012 * k_] if detail else [0.11 * k_, 0.07 * k_, 0.012 * k_], f'{leg}_m')
-        # 잔털: 마디마다 두세 가닥만
+        # 잔털(마디마다 빽빽) + 굵은 가시 두 줄 + 발끝 갈고리 발톱 두 개
         if detail:
             for (a, c_, bone) in ((h1, kk, f'{leg}_f'), (kk, k2, f'{leg}_t'), (k2, t, f'{leg}_m')):
                 ax = (c_ - a); L = ax.length; axn = ax.normalized(); u, w = perp_basis(axn)
-                for _ in range(3):
+                rad0 = (0.17 if bone.endswith('_f') else 0.15) * k_
+                if not bone.endswith('_f'):
+                    for j in range(4):
+                        for ang in (2.3, 3.9):
+                            tt = 0.18 + 0.18 * j; rad_ = rad0 * (1 - tt * 0.5 if bone.endswith('_m') else 1.0)
+                            dirp = (u * math.cos(ang) + w * math.sin(ang)); p0 = a + axn * (L * tt) + dirp * rad_ * 0.85
+                            b.cone(p0, p0 + (dirp * 0.7 + axn * 0.7).normalized() * 0.22 * k_, 0.035 * k_, bone, 'claw', sides=5)
+                for _ in range(40):
                     tt = rng.uniform(0.15, 0.85); ang = rng.uniform(0, 2 * math.pi)
                     rad_ = (0.17 if bone.endswith('_f') else 0.15 if bone.endswith('_t') else 0.09 * (1 - tt * 0.6)) * k_
                     dirp = (u * math.cos(ang) + w * math.sin(ang))
                     p0 = a + axn * (L * tt) + dirp * rad_ * 0.9
-                    hair(b, p0, (dirp + axn * 0.4).normalized(), rng.uniform(0.10, 0.17) * k_, 0.026 * k_, bone)
-    # 정점 색(COLOR_0): 전부 흰색(그림자 없음)
-    cl = b.bm.loops.layers.color.new('Col')
-    for f in b.bm.faces:
-        for lp in f.loops: lp[cl] = (1.0, 1.0, 1.0, 1.0)
-    return b
+                    hair(b, p0, (dirp + axn * rng.uniform(0.3, 0.8)).normalized(), rng.uniform(0.08, 0.2) * k_, rng.uniform(0.02, 0.03) * k_, bone, sides=3)
+            axn = (t - k2).normalized(); u, w = perp_basis(axn)
+            for sgc in (-1, 1):
+                p0 = t - axn * 0.05 * k_
+                b.tube([p0, p0 + (axn * 0.6 + u * sgc * 0.5) .normalized() * 0.12 * k_, p0 + (axn * 0.2 + u * sgc * 0.9 - w * 0.6).normalized() * 0.2 * k_],
+                       [0.03 * k_, 0.022 * k_, 0.004 * k_], f'{leg}_m', 'claw', sides=6)
+    return b   # 꼭짓점 색·UV 는 메시가 된 뒤 paint_spider · box_uv 에서
 
 def build_mini_mesh(rig, mats):
     return build_boss_mesh(rig, mats, detail=False)
@@ -560,6 +717,7 @@ def build_mini_mesh(rig, mats):
 # ----------------------------------------------------------------------------------------------------------------------
 def reset_scene():
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    _TEX.clear()
     for coll in (bpy.data.meshes, bpy.data.materials, bpy.data.armatures, bpy.data.actions):
         for d in list(coll): coll.remove(d)
 
@@ -569,7 +727,7 @@ def build(kind, out_dir, prev_dir):
     reset_scene()
     scene = bpy.context.scene; scene.render.fps = FPS
     rig = Rig(K, mini)
-    mat_names = ['chitin', 'chitin2', 'joint', 'fur', 'skin', 'lip', 'sclera', 'iris', 'pupil', 'spark', 'blush', 'fang', 'mouth', 'mark']
+    mat_names = ['chitin', 'chitin2', 'joint', 'fur', 'skin', 'lip', 'sclera', 'iris', 'pupil', 'spark', 'blush', 'fang', 'mouth', 'mark', 'claw']
     mats = make_materials(mat_names)
 
     # 1) 뼈대 (휴식 자세 = idle 0프레임)
@@ -598,17 +756,24 @@ def build(kind, out_dir, prev_dir):
     for n in rig.names:
         bn = arm_data.bones[n]; rig.Rm[n] = bn.matrix_local.copy(); rig.bone_rest[n] = (bn.head_local.copy(), bn.tail_local.copy())
 
-    # 2) 메시
-    bld = build_boss_mesh(rig, mat_names, detail=not mini)
-    me = bpy.data.meshes.new('SpiderMesh')
-    bld.bm.normal_update(); bld.bm.to_mesh(me); bld.bm.free()
-    for n in mat_names: me.materials.append(mats[n])
-    obj = bpy.data.objects.new('Spider', me); scene.collection.objects.link(obj)
-    for n in rig.names: obj.vertex_groups.new(name=n)
-    # bmesh 의 deform 층은 to_mesh 로 vertex group 가중치가 된다 (그룹 이름은 위에서 같은 순서로 만들어야 함)
-    obj.parent = arm
-    mod = obj.modifiers.new('Armature', 'ARMATURE'); mod.object = arm
-    print(f'[{kind}] verts={len(me.vertices)} tris={sum(len(p.vertices) - 2 for p in me.polygons)} bones={len(rig.names)}')
+    # 2) 메시 — 보스는 LOD 두 단(`Spider_LOD0` 가까이 고디테일 · `Spider_LOD1` 멀리 저디테일, 같은 뼈대). 새끼는 한 단.
+    objs = []
+    for li, det in ([(None, False)] if mini else [(0, True), (1, False)]):
+        bld = build_boss_mesh(rig, mat_names, detail=det)
+        nm_ = 'Spider' if li is None else f'Spider_LOD{li}'
+        me = bpy.data.meshes.new(nm_)
+        bld.bm.normal_update(); bld.bm.to_mesh(me); bld.bm.free()
+        for n in mat_names: me.materials.append(mats[n])
+        box_uv(me, 0.9 / K); paint_spider(me, mat_names, K)
+        o_ = bpy.data.objects.new(nm_, me); scene.collection.objects.link(o_)
+        for n in rig.names: o_.vertex_groups.new(name=n)
+        # bmesh 의 deform 층은 to_mesh 로 vertex group 가중치가 된다 (그룹 이름은 위에서 같은 순서로 만들어야 함)
+        o_.parent = arm
+        mod = o_.modifiers.new('Armature', 'ARMATURE'); mod.object = arm
+        print(f'[{kind}] {nm_} verts={len(me.vertices)} tris={sum(len(p.vertices) - 2 for p in me.polygons)} bones={len(rig.names)}')
+        objs.append(o_)
+    obj = objs[0]
+    for o_ in objs[1:]: o_.hide_render = True
 
     # 3) 미리보기 (애니메이션 데이터 만들기 전에 포즈만 적용해서 렌더)
     if prev_dir:
@@ -647,12 +812,15 @@ def build(kind, out_dir, prev_dir):
     for o in bpy.context.selected_objects: o.select_set(False)
     kw = dict(filepath=path, export_format='GLB', use_selection=False, export_apply=False, export_animations=True, export_animation_mode='NLA_TRACKS',
               export_yup=True, export_def_bones=False, export_skins=True, export_materials='EXPORT', export_cameras=False, export_lights=False,
-              export_vertex_color='ACTIVE')
+              export_vertex_color='ACTIVE', export_image_format='JPEG', export_jpeg_quality=82,
+              export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=7,
+              export_draco_position_quantization=14, export_draco_normal_quantization=10, export_draco_texcoord_quantization=12,
+              export_draco_color_quantization=10, export_draco_generic_quantization=12)
     try:
         bpy.ops.export_scene.gltf(**kw)
     except TypeError as e:
         print('export kw error', e)
-        kw.pop('export_vertex_color', None)
+        for k_ in ('export_vertex_color', 'export_jpeg_quality'): kw.pop(k_, None)
         bpy.ops.export_scene.gltf(**kw)
     print(f'[{kind}] wrote {path} {os.path.getsize(path) // 1024} KB')
 

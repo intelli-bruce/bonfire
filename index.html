@@ -2536,7 +2536,7 @@ function initBosses(spMod, gMod, cMod) {
   };
   const fx = { poof: (x, y, z, n) => PUFF.poof(x, y, z, n), spark: (x, y, z) => PUFF.spark(x, y, z), thump: (v) => thumpSound(clamp(v, 0, 1)), crown: (x, y, z, n) => PUFF.crown(x, y, z, coarse ? Math.ceil(n / 2) : n) };
   const base = { THREE, scene, baseUrl: new URL('./bf/', location.href).href, myId, heightAt, canStand: bossLandOk, players: bossPlayers, me: meFn, onHitMe, fx };
-  const spider = spMod.createSpiderBoss({ ...base, me: () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2, x: me.x, y: me.y, z: me.z }), pushMe: (x, z) => { if (meRec && !mySeat && bossLandOk(x, z)) meRec.ctrl.teleport(x, z); } });
+  const spider = spMod.createSpiderBoss({ ...base, camPos: () => camera.position, me: () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2, x: me.x, y: me.y, z: me.z }), pushMe: (x, z) => { if (meRec && !mySeat && bossLandOk(x, z)) meRec.ctrl.teleport(x, z); } });
   const gctx = { ...base, canSwim: bossSwimOk, canFly: bossFlyOk, waterLevel: () => WATER.level, camPos: () => camera.position, shake: (a, d) => camShake(a, d), sfx: (k, n, x, z) => bossSound(k, n, x, z) };
   const map = { spider };
   for (const k of ['shark', 'golem', 'seraph']) map[k] = gMod.createGiantBoss(gctx, k);
