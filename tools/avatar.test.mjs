@@ -1,7 +1,8 @@
-// node tools/avatar.test.mjs — bf/kit/appearance.js(목록·코드·옛 클라이언트 매핑·난수) 와 실제 Kenney GLB/부품 GLB 에 대한 메시 분류(THREE 없이)를 확인한다.
+// node tools/avatar.test.mjs — bf/kit/appearance.js(목록·코드·옛 클라이언트 매핑·난수) 와 실제 Kenney GLB/부품 GLB 에 대한 메시 분류(THREE 없이), 입장 화면 미리보기(bf/kit/preview.js)의 정면 고정·드래그 회전(가짜 THREE)을 확인한다.
 import fs from 'node:fs';
 import * as A from '../bf/kit/appearance.js';
 import { parseGLB, accessor } from '../bf/kit/glb.js';
+import { createPreview } from '../bf/kit/preview.js';
 
 let fails = 0, n = 0;
 const ok = (cond, msg) => { n++; if (!cond) { fails++; console.error('FAIL', msg); } };
@@ -145,6 +146,32 @@ const meshOf = (g, mi) => { const p = g.j.meshes[mi].primitives[0]; return { P: 
     }
     ok(tris < 6000, `parts.glb stays small (${tris} triangles)`);
   }
+}
+
+// 4) 입장 화면 미리보기: 정면(yaw 0)으로 서서 방치해도 돌지 않고, 드래그·화살표 키로만 돈다(가짜 THREE·캔버스)
+{
+  const Obj = class { constructor() { this.position = { set() {} }; this.rotation = { y: 0 }; this.children = []; } add(c) { this.children.push(c); } lookAt() {} updateProjectionMatrix() {} };
+  const T = { SRGBColorSpace: 's', ACESFilmicToneMapping: 1, Scene: Obj, Group: Obj, HemisphereLight: Obj, DirectionalLight: Obj, PointLight: Obj, PerspectiveCamera: Obj,
+    WebGLRenderer: class { constructor() { this.domElement = { width: 0, height: 0 }; } setClearColor() {} setPixelRatio() {} setSize() {} render() {} dispose() {} forceContextLoss() {} } };
+  const L = {}, canvas = { clientWidth: 300, clientHeight: 400, addEventListener: (t, f) => { L[t] = f; }, removeEventListener() {}, setPointerCapture() {} };
+  let frameCb = null;
+  globalThis.window = { devicePixelRatio: 1 }; globalThis.document = { hidden: false };
+  globalThis.requestAnimationFrame = (f) => { frameCb = f; return 1; }; globalThis.cancelAnimationFrame = () => {};
+  const mkAv = () => ({ root: new Obj(), headY: 1.6, play() {}, update() {}, setAppearance() {}, dispose() {} });
+  const pv = createPreview(T, canvas, { createAvatar: mkAv });
+  pv.setAppearance(A.defaultAppearance('m'));
+  ok(pv.yaw === 0, `preview starts facing the front (yaw ${pv.yaw})`);
+  pv.start();
+  let t = 1000; frameCb(t);
+  for (let i = 0; i < 700; i++) { t += 16; frameCb(t); }   // ~11 s left alone
+  ok(pv.yaw === 0, `no auto-rotation after ~11 s idle (yaw ${pv.yaw})`);
+  L.pointerdown({ clientX: 100, pointerId: 1 }); L.pointermove({ clientX: 150 }); L.pointerup();
+  ok(Math.abs(pv.yaw - 50 * 0.012) < 1e-9, `drag turns it (yaw ${pv.yaw})`);
+  const y0 = pv.yaw; for (let i = 0; i < 700; i++) { t += 16; frameCb(t); }
+  ok(pv.yaw === y0, `stays where it was dropped, no drift after release (yaw ${pv.yaw})`);
+  L.keydown({ key: 'ArrowRight', preventDefault() {} });
+  ok(Math.abs(pv.yaw - (y0 + 0.25)) < 1e-9, `arrow key turns it (yaw ${pv.yaw})`);
+  pv.dispose();
 }
 
 console.log(`${n - fails}/${n} avatar checks passed`);
