@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boss Thumbs</title>
+<!-- 보스 선택 창 썸네일(bf/thumbs/<종류>.jpg) 렌더러. 게임과 같은 로더(bf/*.js)·같은 밤 조명으로 실제 모델을 그린다.
+     ?boss=spider,shark  종류 선택(생략 = 전부)  ·  ?save=1  렌더가 끝나면 같은 서버의 POST /__thumb?kind= 로 JPEG 를 올림(tools/bosses/make_thumbs.mjs 가 받아 저장)
+     저장 없이 보기만: ?boss=demon (화면에 256px 미리보기)  ·  카메라 즉석 조정: &cam=x,y,z &look=x,y,z &fov=40 -->
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
+<style>html,body{margin:0;background:#12142e;color:#ffe2bd;font:14px system-ui}main{display:flex;flex-wrap:wrap;gap:14px;padding:16px}figure{margin:0;display:grid;gap:6px;text-align:center}canvas{width:256px;height:256px;border-radius:12px;display:block}#st{padding:0 16px 16px}</style>
+</head><body><div id="st">준비 중…</div><main id="out"></main>
+<script type="module">
+import * as THREE from 'three';
+import { THUMB_SPEC, THUMB_SIZE } from './thumb-spec.js';
+const q = new URLSearchParams(location.search), save = q.get('save') === '1';
+const kinds = (q.get('boss') || Object.keys(THUMB_SPEC).join(',')).split(',').filter((k) => THUMB_SPEC[k]);
+const num = (s) => (s ? s.split(',').map(Number) : null);
+const st = document.getElementById('st'), out = document.getElementById('out');
+const S = THUMB_SIZE, R = S * 2;   // 2배로 그려 줄여 담는다(가장자리 부드럽게)
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); renderer.setPixelRatio(1); renderer.setSize(R, R);
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
+const cam = new THREE.PerspectiveCamera(40, 1, 0.1, 500);
+const mods = { spider: () => import('../../bf/spider.js'), bosses: () => import('../../bf/bosses.js'), commander: () => import('../../bf/commander.js'), hydra: () => import('../../bf/hydra.js') };
+const players = [{ id: 'me', x: 0, z: 70, y: 0 }];   // 멀리 둔다: 보스는 공격 없이 선 채로 나를 향함
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function makeScene() {   // 게임·검수 뷰어와 같은 밤 조명
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight('#a9b2ff', '#4a3a52', 0.95));
+  const moon = new THREE.DirectionalLight('#c3cdff', 0.9); moon.position.set(-30, 50, 40); scene.add(moon);
+  const fill = new THREE.DirectionalLight('#ffb070', 0.35); fill.position.set(30, 10, 40); scene.add(fill);   // 모닥불 쪽 따뜻한 보조광
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 48), new THREE.MeshStandardMaterial({ color: '#2b2a3a', roughness: 1 })); ground.rotation.x = -Math.PI / 2; scene.add(ground);
+  return scene;
+}
+async function create(kind, scene) {
+  const ctx = { THREE, scene, baseUrl: new URL('../../bf/', location.href).href, myId: 'me', heightAt: () => 0, canStand: () => true, canSwim: () => true, canFly: () => true, waterLevel: () => -50,
+    players: () => players, me: () => ({ ok: true, ...players[0] }), onHitMe() {}, pushMe() {}, fx: { poof() {}, spark() {}, thump() {}, crown() {} }, sfx() {}, shake() {}, camPos: () => cam.position, audio: () => null };
+  const m = await mods[THUMB_SPEC[kind].mod]();
+  if (kind === 'spider') return m.createSpiderBoss(ctx);
+  if (kind === 'commander') return m.createCommanderBoss(ctx);
+  if (kind === 'hydra') return m.createHydraBoss(ctx);
+  return m.createGiantBoss(ctx, kind);
+}
+async function shot(kind) {
+  const sp = THUMB_SPEC[kind], scene = makeScene(), boss = await create(kind, scene);
+  const meshCount = () => { let n = 0; scene.traverse((o) => { if (o.isMesh) n++; }); return n; };
+  const base = meshCount(), t0 = performance.now();
+  boss.spawn(0, 0, 0);
+  for (let same = 0, last = -1; same < 8;) {   // 1) 모델(GLB·Draco)이 실제로 올라와 메시 수가 0.8초 동안 안 바뀔 때까지 기다린다(시뮬레이션은 멈춘 채)
+    await sleep(100);
+    const n = meshCount(); same = n > base + 2 && n === last ? same + 1 : 0; last = n;
+    if (performance.now() - t0 > 40000) throw new Error(kind + ': 40초 안에 모델이 안 뜸');
+  }
+  let t = 0;   // 2) 등장 연출이 끝나고 자세가 안정될 때까지 고정 간격으로 돌린다
+  for (let i = 0, done = -1; i < 3000; i++) {
+    t += 1 / 60; boss.update(1 / 60, t);
+    const v = boss.view;
+    if (done < 0 && v.active && !(v.spawnT > 0) && !v.dying) done = i;
+    if (done >= 0 && i > done + 90) break;
+    if (i % 30 === 0) await sleep(0);
+  }
+  const v = boss.view, ry = v.ry || 0, c = Math.cos(ry), s = Math.sin(ry);
+  const W = (x, y, z) => [v.x + x * c - z * s, y + (v.y || 0), v.z - x * s - z * c];   // viewer.html 과 같은 지역→세계 변환
+  const [cx, cy, cz] = num(q.get('cam')) || sp.cam, [lx, ly, lz] = num(q.get('look')) || sp.look;
+  cam.fov = Number(q.get('fov')) || sp.fov; cam.updateProjectionMatrix();
+  cam.position.set(...W(cx, cy, cz)); cam.lookAt(...W(lx, ly, lz));
+  renderer.setClearColor(0x000000, 0); renderer.render(scene, cam);
+  const cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d'); g.imageSmoothingQuality = 'high';
+  const bg = g.createRadialGradient(S / 2, S * 0.42, S * 0.05, S / 2, S / 2, S * 0.75);   // 카드 색(밤 남색)과 같은 배경
+  bg.addColorStop(0, '#3b3f94'); bg.addColorStop(1, '#171a42'); g.fillStyle = bg; g.fillRect(0, 0, S, S);
+  g.drawImage(renderer.domElement, 0, 0, S, S);
+  boss.despawn && boss.despawn();
+  return cv;
+}
+async function upload(kind, cv) {
+  const blob = await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.9));
+  const res = await fetch('/__thumb?kind=' + kind, { method: 'POST', body: blob });
+  if (!res.ok) throw new Error(kind + ': 저장 실패 ' + res.status);
+}
+try {
+  for (const kind of kinds) {
+    st.textContent = `${kind} 렌더 중… (${kinds.indexOf(kind) + 1}/${kinds.length})`;
+    const cv = await shot(kind);
+    const fig = document.createElement('figure'); fig.append(cv, Object.assign(document.createElement('figcaption'), { textContent: kind })); out.append(fig);
+    if (save) await upload(kind, cv);
+  }
+  if (save) await fetch('/__done', { method: 'POST' });
+  st.textContent = save ? `완료: ${kinds.length}장 저장` : `완료: ${kinds.length}장(저장 안 함)`;
+  document.title = 'Boss Thumbs DONE';
+} catch (e) { st.textContent = '실패: ' + e.message; document.title = 'Boss Thumbs FAIL'; console.error(e); if (save) fetch('/__done?fail=' + encodeURIComponent(e.message), { method: 'POST' }); }
+</script></body></html>
