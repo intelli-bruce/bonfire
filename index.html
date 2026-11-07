@@ -2515,7 +2515,7 @@ const BOSS_LOG = {
 const BOSS_HURT_NAME = { spider: '거미', shark: '메갈로돈', golem: '바위 골렘', seraph: '반천사·반악마', demon: '대악마' };
 const BOSS_HIT_MSG = {
   swipe: '거미의 앞다리에 맞았습니다.', spit: '독침에 맞았습니다. 잠시 느려집니다.', minion: '새끼 거미에게 물렸습니다.',
-  bite: '메갈로돈에게 물렸습니다!', lunge: '물 밖으로 덮친 메갈로돈에 깔렸습니다!', tail: '꼬리에 얻어맞았습니다.', rush: '돌진하는 메갈로돈에 부딪혔습니다.', ring: '충격파에 휩쓸렸습니다.',
+  bite: '메갈로돈에게 물렸습니다!', swallow: '메갈로돈에게 통째로 삼켜졌다가 뱉어졌습니다!', lunge: '물 밖으로 덮친 메갈로돈에 깔렸습니다!', tail: '꼬리에 얻어맞았습니다.', rush: '돌진하는 메갈로돈에 부딪혔습니다.', ring: '충격파에 휩쓸렸습니다.',
   slam: '골렘의 주먹에 내리찍혔습니다!', wave: '충격파에 넘어졌습니다. (점프로 넘을 수 있습니다)', hurl: '날아온 바위에 맞았습니다!', charge: '돌진하는 골렘에 치였습니다!',
   pillar: '빛 기둥에 맞았습니다!', hellfire: '지옥불에 휩싸였습니다!', burn: '불 장판 위에서 타고 있습니다.', dive: '내리꽂힌 날개에 휩쓸렸습니다!',
 };
@@ -2538,7 +2538,13 @@ function initBosses(spMod, gMod, cMod, hyMod) {
   const fx = { poof: (x, y, z, n) => PUFF.poof(x, y, z, n), spark: (x, y, z) => PUFF.spark(x, y, z), thump: (v) => thumpSound(clamp(v, 0, 1)), crown: (x, y, z, n) => PUFF.crown(x, y, z, coarse ? Math.ceil(n / 2) : n) };
   const base = { THREE, scene, baseUrl: new URL('./bf/', location.href).href, myId, heightAt, canStand: bossLandOk, players: bossPlayers, me: meFn, onHitMe, fx };
   const spider = spMod.createSpiderBoss({ ...base, camPos: () => camera.position, me: () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2, x: me.x, y: me.y, z: me.z }), pushMe: (x, z) => { if (meRec && !mySeat && bossLandOk(x, z)) meRec.ctrl.teleport(x, z); } });
-  const gctx = { ...base, canSwim: bossSwimOk, canFly: bossFlyOk, waterLevel: () => WATER.level, camPos: () => camera.position, shake: (a, d) => camShake(a, d), sfx: (k, n, x, z) => bossSound(k, n, x, z) };
+  const pullMe = (x, z, R, step) => {   // 메갈로돈 삼키기: 입 쪽으로 빨려 든다(내 화면에서만)
+    if (!meRec || mySeat || MYHP.dead) return;
+    const dx = x - me.x, dz = z - me.z, d = Math.hypot(dx, dz); if (d > R || d < 1.5) return;
+    const k = Math.min(d - 1.2, step * (1.4 - d / R)), nx = me.x + dx / d * k, nz = me.z + dz / d * k;
+    meRec.ctrl.teleport(nx, nz); me.x = nx; me.z = nz;
+  };
+  const gctx = { ...base, pullMe, canSwim: bossSwimOk, canFly: bossFlyOk, waterLevel: () => WATER.level, camPos: () => camera.position, shake: (a, d) => camShake(a, d), sfx: (k, n, x, z) => bossSound(k, n, x, z) };
   const map = { spider };
   for (const k of ['shark', 'golem', 'seraph']) map[k] = gMod.createGiantBoss(gctx, k);
   for (const k in gMod.KINDS) { const E = gMod.KINDS[k]; if (!E.ext) continue; map[k] = map[k] || gMod.createGiantBoss(gctx, k); Object.assign(BOSS_HIT_MSG, E.msgs || {}); if (E.ext.sound) BOSS_SFX_EXT[k] = E.ext.sound; }   // 확장 보스(bf/demon.js 등)
@@ -2587,6 +2593,8 @@ function bossSound(kind, name, x, z) {
     case 'snap': noise('bandpass', 2200, 900, 1.2, 0.004, 0.9, 0.18); osc('square', 140, 60, 0.004, 0.4, 0.2); break;
     case 'splash': noise('lowpass', 2400, 300, 0.6, 0.01, 1, 1.4); osc('sine', 90, 40, 0.01, 0.5, 0.6); break;
     case 'bite': case 'tail': case 'rush': case 'lunge': roar(90, 1.0, 11); break;
+    case 'swallow': roar(48, 1.6, 7); break;
+    case 'suck': noise('bandpass', 180, 900, 1.6, 0.4, 0.9, 1.8); osc('sine', 40, 26, 0.3, 0.6, 1.8); break;
     case 'slam': case 'impact': rumble(1.6, 1); noise('bandpass', 900, 200, 1, 0.005, 0.9, 0.5); break;
     case 'step': rumble(0.5, 0.45); break;
     case 'grab': noise('bandpass', 600, 220, 2, 0.05, 0.6, 0.8); break;
@@ -2613,12 +2621,12 @@ function bossCreate(kind = 'spider') {
   let spot = null;
   if (kind === 'shark') {   // the nearest deep water about 20-40 m away, preferring the direction I face
     let bd = 1e9;
-    for (let r = 18; r <= 60; r += 6) for (let i = 0; i < 24; i++) {
+    for (let r = 50; r <= 95; r += 6) for (let i = 0; i < 24; i++) {   // 길이 ~100 m: 몸 가운데가 50 m 넘게 떨어져야 머리가 내 앞에 온다
       const a = (i / 24) * Math.PI * 2, x = me.x - Math.sin(a) * r, z = me.z - Math.cos(a) * r;
       if (!bossSwimOk(x, z) || !bossSwimOk(x + 6, z) || !bossSwimOk(x - 6, z) || !bossSwimOk(x, z - 8)) continue;
       const sc = r + Math.abs(((a - me.ry + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * 6; if (sc < bd) { bd = sc; spot = { x, z }; }
     }
-    if (!spot) spot = { x: 0, z: -40 };
+    if (!spot) spot = { x: 0, z: -70 };
   } else if (kind === 'seraph') {
     for (const r of [26, 20, 32]) { const x = me.x - Math.sin(me.ry) * r, z = me.z - Math.cos(me.ry) * r; if (bossFlyOk(x, z)) { spot = { x, z }; break; } }
     if (!spot) spot = { x: 0, z: 22 };
