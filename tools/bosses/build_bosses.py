@@ -574,17 +574,30 @@ HEART = V((0, 3.15, 10.6))
 
 def build_golem(out, prev):
     reset_scene()
-    n = 1024
+    n = 2048   # 고해상: 2048² 색 + 노멀
     F1, F2 = tex_cells(n, 70, 21)
-    crack = np.clip(1 - (F2 - F1) * 38, 0, 1) ** 2
+    crack = np.clip(1 - (F2 - F1) * 60, 0, 1) ** 2                       # 큰 균열
     F1b, F2b = tex_cells(n, 420, 22)
-    crack2 = np.clip(1 - (F2b - F1b) * 90, 0, 1) ** 2 * 0.5
-    grain = tex_fbm(n, 0.9, 23); lump = tex_fbm(n, 1.8, 24)
-    h = lump * 0.6 + grain * 0.25 - crack * 0.7 - crack2 * 0.4
-    alb = (0.78 + 0.22 * grain - 0.45 * crack - 0.2 * crack2)[..., None] * np.array([1, 1, 1])
+    crack2 = np.clip(1 - (F2b - F1b) * 150, 0, 1) ** 2 * 0.5              # 잔금
+    chip = np.clip(F1b * 14, 0, 1) ** 0.5                                 # 깨진 면(조각마다 볼록)
+    grain = tex_fbm(n, 0.9, 23); lump = tex_fbm(n, 1.8, 24); micro = tex_fbm(n, 0.4, 26)
+    yy = np.mgrid[0:n, 0:n][0] / n
+    strata = 0.5 + 0.5 * np.sin((yy * 18 + lump * 2.2) * 2 * math.pi)        # 퇴적 결(가로 줄무늬)
+    pits = (tex_fbm(n, 0.05, 27) > 0.88).astype(float)                    # 풍화 구멍
+    lich = np.clip((tex_fbm(n, 1.2, 28) - 0.62) * 6, 0, 1)                # 지의류 얼룩
+    h = lump * 0.55 + grain * 0.2 + micro * 0.12 + chip * 0.18 + strata * 0.08 - crack * 0.75 - crack2 * 0.45 - pits * 0.3
+    v = (0.74 + 0.2 * grain + 0.08 * micro + 0.06 * strata - 0.5 * crack - 0.22 * crack2 - 0.25 * pits)[..., None]
+    alb = v * np.array([1.0, 0.98, 0.94])
+    alb = alb * (1 - lich[..., None] * 0.6) + lich[..., None] * 0.6 * np.array([0.78, 0.8, 0.55]) * v   # 연둣빛 지의류
     speck = (tex_fbm(n, 0.2, 25) > 0.82)[..., None] * 0.12
-    A = make_image('golem_albedo', alb + speck); N = make_image('golem_normal', height_to_normal(h, 9.0), True)
-    m_rock = material('golem_rock', rough=0.92, albedo=A, normal=N, nstrength=1.2)
+    A = make_image('golem_albedo', alb + speck); N = make_image('golem_normal', height_to_normal(h, 16.0), True)
+    m_rock = material('golem_rock', rough=0.92, albedo=A, normal=N, nstrength=1.4)
+    nm_ = 1024
+    mf = tex_fbm(nm_, 0.6, 29); mb = tex_fbm(nm_, 1.6, 30); tuft = (tex_fbm(nm_, 0.15, 31) > 0.6).astype(float)
+    hm = mf * 0.5 + mb * 0.3 + tuft * 0.25
+    Am = make_image('golem_moss_albedo', (0.55 + 0.45 * mf + 0.15 * tuft)[..., None] * np.array([0.42, 0.62, 0.22]) + (mb[..., None] - 0.5) * np.array([0.12, 0.05, -0.02]))
+    Nm = make_image('golem_moss_normal', height_to_normal(hm, 20.0), True)
+    m_moss = material('golem_moss', rough=1.0, albedo=Am, normal=Nm, nstrength=1.5)
     m_lava = material('golem_lava', base=(1.0, 0.35, 0.05), rough=0.6, emit=(1.0, 0.38, 0.06), emit_k=3.0)
     m_core = material('golem_core', base=(1.0, 0.55, 0.15), rough=0.2, emit=(1.0, 0.5, 0.12), emit_k=6.0)
     m_eye = material('golem_eye', base=(1.0, 0.6, 0.2), rough=0.3, emit=(1.0, 0.55, 0.15), emit_k=5.0)
@@ -595,6 +608,11 @@ def build_golem(out, prev):
     ell(bm, (0, 0, 6.6), (3.3, 2.3, 1.9)); ell(bm, (0, 0.2, 8.7), (3.1, 2.4, 1.9))
     ell(bm, (0, 0.9, 11.0), (4.7, 3.3, 3.0)); ell(bm, (0, -0.6, 11.8), (3.6, 2.6, 2.4))     # 가슴 + 등 혹
     ell(bm, (0, 2.6, 12.25), (1.55, 1.55, 1.35)); ell(bm, (0, 3.3, 11.9), (1.1, 0.9, 0.7))  # 머리(어깨 사이로 푹 숙임) + 턱
+    # 얼굴 조각: 툭 튀어나온 눈썹뼈 · 넓적한 코 · 광대 · 각진 턱
+    ell(bm, (0, 3.72, 12.82), (1.3, 0.5, 0.36), basis_from(V((0, 1, 0.15))))
+    ell(bm, (0, 4.02, 12.25), (0.32, 0.42, 0.5)); ell(bm, (0, 4.12, 12.0), (0.42, 0.3, 0.2))
+    for sg in (-1, 1):
+        ell(bm, (sg * 0.85, 3.62, 12.05), (0.5, 0.42, 0.34)); ell(bm, (sg * 0.7, 3.55, 11.45), (0.55, 0.55, 0.4))
     for sg in (-1, 1):
         ell(bm, (sg * 5.3, 0.6, 12.0), (2.2, 2.1, 2.0))
         tube(bm, [(sg * 5.6, 0.6, 11.6), (sg * 6.6, 1.2, 7.8)], [1.65, 1.35], step=0.5)
@@ -610,11 +628,20 @@ def build_golem(out, prev):
         rr = rnd.uniform(0.6, 1.3) * (1.6 if bn[0] in ('spine', 'hips') else 1.0)
         ell(bm, p + d * (1.3 if bn[0] not in ('spine',) else 2.6), (rr, rr * rnd.uniform(0.7, 1.2), rr * rnd.uniform(0.6, 1.0)), basis_from(d))
     body = obj_from_bm('golem_body', bm)
-    remesh(body, 0.12, 0.45, 3)
+    remesh(body, 0.085, 0.45, 3)
 
     def carve(c, nr):
         d = 0.45 * (noise.ridged_multi_fractal(c * 0.22, 0.9, 2.1, 4, 1.0, 2.0) - 1.0) * 0.5
-        d += 0.12 * noise.noise(c * 0.9)
+        d += 0.12 * noise.noise(c * 0.9) + 0.045 * noise.noise(c * 3.1) + 0.018 * noise.noise(c * 7.5)
+        d += 0.07 * (abs(math.sin(c.z * 2.6 + 0.8 * noise.noise(c * 0.4))) - 0.6)                 # 퇴적 층 턱(가로 결)
+        cd, cp = noise.voronoi(c * 0.9, distance_metric='DISTANCE')                              # 떨어져 나간 조각 면(평평하게 깎인 자리)
+        d -= 0.06 * smooth(0.25, 0.6, cd[0])
+        if c.y > 3.3 and c.z > 11.0 and abs(c.x) < 1.6:                                         # 얼굴: 눈구멍 · 입 홈
+            for sg in (-1, 1):
+                e_ = (c - V((sg * 0.55, 3.95, 12.45))).length
+                if e_ < 0.55: d -= 0.22 * (1 - e_ / 0.55)
+            mz = abs(c.z - 11.62); mx = abs(c.x)
+            if mz < 0.12 and mx < 0.75: d -= 0.18 * (1 - mz / 0.12) * (1 - (mx / 0.75) ** 4)
         dist, pts = noise.voronoi(c * 0.28, distance_metric='DISTANCE')
         e = dist[1] - dist[0]
         if e < 0.12: d -= 0.32 * (1 - e / 0.12) ** 1.5
@@ -647,15 +674,30 @@ def build_golem(out, prev):
             c = p.center; hd = (c - HEART).length
             dist, pts = noise.voronoi(c * 0.28, distance_metric='DISTANCE'); e = dist[1] - dist[0]
             if (hd < 5.5 and e < 0.022 * (1.6 - hd / 5.5)) or (hd < 1.7 and c.y < HEART.y + 0.1): p.material_index = 1
+            elif c.y > 3.6 and abs(c.z - 11.62) < 0.07 and abs(c.x) < 0.6: p.material_index = 1      # 입 틈 안쪽이 달아오름
         me.update()
 
     def extras_for(li):
         bm = bmesh.new(); bmesh.ops.create_icosphere(bm, subdivisions=2 if li == 0 else 1, radius=1.05, matrix=Matrix.Translation(HEART + V((0, -0.2, 0))))
         for v in bm.verts: v.co = HEART + (v.co - HEART) * (0.85 + 0.3 * random.random())   # 깎인 수정 같은 각
+        if li == 0:   # 심장 둘레 수정 결정(빛나는 가시)
+            r3 = random.Random(5)
+            for k in range(14):
+                d = V((r3.uniform(-1, 1), r3.uniform(0.1, 1.0), r3.uniform(-1, 1))).normalized()
+                cone(bm, HEART + d * 0.7, HEART + d * r3.uniform(1.5, 2.1), r3.uniform(0.12, 0.22), sides=5, rings=2)
         core = obj_from_bm(f'golem_core{li}', bm); set_material(core, m_core)
         bm = bmesh.new()
-        for sg in (-1, 1): ell(bm, (sg * 0.55, 3.9, 12.45), (0.32, 0.12, 0.13), seg=(10, 6))
+        for sg in (-1, 1): ell(bm, (sg * 0.55, 3.86, 12.42), (0.3, 0.12, 0.13), seg=(14, 8) if li == 0 else (10, 6))
+        if li == 0:   # 이마의 빛나는 룬 홈(세 줄) — 눈과 같은 빛
+            for pts in (((-0.6, 4.06, 13.08), (-0.2, 4.12, 13.25), (0.2, 4.12, 13.25), (0.6, 4.06, 13.08)), ((0, 4.12, 13.3), (0, 4.08, 13.6)), ((-0.25, 4.08, 13.5), (0.25, 4.08, 13.5))):
+                tube(bm, pts, [0.05] * len(pts), step=0.5, seg=(8, 6))
         eye = obj_from_bm(f'golem_eye{li}', bm); set_material(eye, m_eye)
+        # 심장을 감싼 바위 갈비(우리처럼 빛이 틈으로 새어 나온다)
+        bm = bmesh.new()
+        for zz in ((HEART.z - 1.0, HEART.z, HEART.z + 1.0) if li == 0 else (HEART.z - 0.8, HEART.z + 0.8)):
+            tube(bm, [(-1.9, HEART.y - 0.6, zz - 0.15), (-1.0, HEART.y + 0.55, zz), (0.0, HEART.y + 0.75, zz + 0.05), (1.0, HEART.y + 0.55, zz), (1.9, HEART.y - 0.6, zz - 0.15)],
+                 [0.3, 0.2, 0.17, 0.2, 0.3], step=0.9, seg=(9, 6) if li == 0 else (6, 4))
+        ribs = obj_from_bm(f'golem_ribs{li}', bm); set_material(ribs, m_rock)
         # 등·어깨에 튀어나온 바위 결정
         bm = bmesh.new(); r2 = random.Random(9)
         for k in range(18 if li == 0 else 8):
@@ -663,9 +705,26 @@ def build_golem(out, prev):
             tip = base + V((sg * r2.uniform(0.2, 1.4), r2.uniform(-1.8, -0.4), r2.uniform(1.2, 2.8)))
             cone(bm, base, tip, r2.uniform(0.35, 0.7), sides=5, rings=2)
         sh = obj_from_bm(f'golem_shards{li}', bm); set_material(sh, m_rock)
-        return [(core, 'spine'), (eye, 'head'), (sh, 'spine')]
+        # 이끼 덩이: 윗면(어깨·머리·팔 윗면·등)에 납작한 방석 + 어깨에서 늘어진 이끼 가닥
+        bm = bmesh.new(); r4 = random.Random(17)
+        for (pp, nn) in (moss_spots if li == 0 else moss_spots[::4]):
+            s_ = r4.uniform(0.35, 0.8)
+            ell(bm, pp + nn * 0.04, (s_ * r4.uniform(1.0, 1.8), s_ * 0.26, s_ * r4.uniform(1.0, 1.8)), basis_from(nn), seg=(9, 5) if li == 0 else (6, 3))   # 법선 쪽으로 납작
+        if li == 0:
+            for k in range(22):
+                sg = r4.choice((-1, 1)); a0 = V((sg * r4.uniform(3.6, 6.4), r4.uniform(-0.6, 1.8), r4.uniform(12.0, 13.2)))
+                L = r4.uniform(1.0, 2.6)
+                tube(bm, [a0, a0 + V((r4.uniform(-0.2, 0.2), r4.uniform(0.0, 0.3), -L * 0.5)), a0 + V((r4.uniform(-0.3, 0.3), r4.uniform(0.0, 0.4), -L))], [0.12, 0.08, 0.03], step=0.7, seg=(6, 4))
+        moss = obj_from_bm(f'golem_moss{li}', bm); set_material(moss, m_moss); shade_smooth(moss.data)
+        set_colors(moss.data, lambda c, nr: (lambda v: (0.75 + 0.25 * v, 0.8 + 0.2 * v, 0.7 + 0.2 * v))(noise.noise(c * 1.3)))
+        return [(core, 'spine'), (eye, 'head'), (sh, 'spine'), (ribs, 'spine'), (moss, tuple(b[0] for b in GOLEM_BONES))]
 
-    lods = finish_lods('Golem', body, [extras_for(0), extras_for(1)], arm, GOLEM_BONES, [46000, 9000], 0.3, golem_color, m_rock, post_lod=lava_faces)
+    # 이끼 놓을 자리: 고해상 몸 표면에서 위를 보는 곳(얼굴·심장 앞은 피한다)
+    co_ = verts_np(body.data); nr_ = normals_np(body.data); rs = np.random.default_rng(12)
+    cand = [i for i in rs.permutation(len(co_))[:20000] if nr_[i][2] > 0.55 and noise.fractal(V(co_[i]) * 0.45, 0.8, 2.0, 3) > 0.05
+            and not (co_[i][1] > 2.4 and co_[i][2] < 13.4 and abs(co_[i][0]) < 2.2)]
+    moss_spots = [(V(co_[i]), V(nr_[i])) for i in cand[:160]]
+    lods = finish_lods('Golem', body, [extras_for(0), extras_for(1)], arm, GOLEM_BONES, [80000, 12000], 0.3, golem_color, m_rock, post_lod=lava_faces)
     finalize(arm, lods, out, 'golem.glb', prev, 'golem', [((14, 26, 11), (0, 0, 8)), ((-6, 9, 11), (0, 3, 10.5))])
 
 # ======================================================================================================================
