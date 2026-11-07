@@ -5,8 +5,11 @@
 // Conventions: avatar.root origin at the feet; rotation.y = ry faces (-sin ry, -cos ry) (ry = 0 faces -Z).
 // Call controller.update() each frame (it drives avatar.update()); without a controller use avatar.play(name) + avatar.update(dt).
 
+import { parseGLB, accessor, cleanName } from './glb.js';
+import { buildCustomKit } from './custom-avatar.js';
+
 let T = null;               // THREE
-let KIT = null;             // { scale, base, chars: Map<id, template>, clips: Map<name, AnimationClip>, shadowGeo, shadowMat }
+let KIT = null;             // { scale, base, chars: Map<id, template>, clips: Map<name, AnimationClip>, shadowGeo, shadowMat, custom }
 
 export const CHARACTERS = [
   { id: 'bun',      name: '주황 똥머리', file: 'character-female-b.glb', accent: '#ffb53d' },
@@ -19,32 +22,7 @@ const MODEL_DIR = 'assets/kenney-mini-characters/';
 const DEFAULT_SCALE = 2.2;  // model is ~0.67 m tall → ~1.5 m chunky avatar
 export const SIT_HIP = 0.026; // model units: bottom of the torso above the root origin in the sit poses (× scale = metres)
 
-// ---------------------------------------------------------------- tiny GLB reader
-const CT = { 5126: Float32Array, 5123: Uint16Array, 5121: Uint8Array, 5125: Uint32Array };
-const NC = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
-function parseGLB(buf) {
-  const dv = new DataView(buf);
-  if (dv.getUint32(0, true) !== 0x46546c67) throw new Error('not a GLB');
-  let off = 12, json = null, bin = null;
-  while (off < buf.byteLength) {
-    const len = dv.getUint32(off, true), type = dv.getUint32(off + 4, true);
-    if (type === 0x4e4f534a) json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, off + 8, len)));
-    else if (type === 0x004e4942) bin = buf.slice(off + 8, off + 8 + len);
-    off += 8 + len;
-  }
-  return { j: json, bin };
-}
-function accessor(g, i) {
-  const a = g.j.accessors[i], bv = g.j.bufferViews[a.bufferView], Arr = CT[a.componentType], n = NC[a.type];
-  const es = Arr.BYTES_PER_ELEMENT, stride = bv.byteStride || es * n, base = (bv.byteOffset || 0) + (a.byteOffset || 0);
-  if (stride === es * n) return { arr: new Arr(g.bin.slice(base, base + a.count * n * es)), n };
-  const out = new Arr(a.count * n), src = new DataView(g.bin);
-  const get = { 5126: 'getFloat32', 5123: 'getUint16', 5121: 'getUint8', 5125: 'getUint32' }[a.componentType];
-  for (let k = 0; k < a.count; k++) for (let c = 0; c < n; c++) out[k * n + c] = src[get](base + k * stride + c * es, true);
-  return { arr: out, n };
-}
-const cleanName = (s) => String(s || '').replace(/\s/g, '_').replace(/[\[\]\.:\/]/g, '');
-
+// ---------------------------------------------------------------- tiny GLB reader: bf/kit/glb.js (shared with the node tests)
 // Parses once into a reusable template; instantiate() builds a fresh node graph sharing geometry.
 function buildTemplate(g) {
   const { j } = g;
@@ -134,7 +112,8 @@ function buildTemplate(g) {
     });
     return scene;
   }
-  return { instantiate, clips, accentCell, top, headBox, imageUri: j.images && j.images[0] && j.images[0].uri };
+  const jointNames = skins.map((sk) => sk.joints.map((k) => cleanName(j.nodes[k].name)));   // per skin: bone names in joint order (the custom builder maps by name)
+  return { instantiate, clips, accentCell, top, headBox, imageUri: j.images && j.images[0] && j.images[0].uri, geos, skins, jointNames };
 }
 
 // ---------------------------------------------------------------- authored clips (same 7-bone rig as the Kenney set)
@@ -374,7 +353,10 @@ export async function loadAvatarKit(THREE, { baseUrl = new URL('./', import.meta
   const shadowGeo = new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
   const charMap = new Map();
   for (const [id, t] of temps) { if (t.accentCell) t.refLum = Math.max(0.02, cellLum(t.accentCell.cx, t.accentCell.cy)); charMap.set(id, t); }
-  KIT = { scale, base, chars: charMap, clips, shadowGeo, shadowMat };
+  KIT = { scale, base, chars: charMap, clips, shadowGeo, shadowMat, custom: null };
+  // the customisable avatar (bf/kit/custom-avatar.js): shares the rig, the colormap and the clips; a failure only turns it off (legacy characters still work)
+  try { KIT.custom = await buildCustomKit(T, { partsUrl: new URL('assets/custom/parts.glb', new URL(baseUrl, location.href)).href, temps: charMap, lum: cellLum }); }
+  catch (e) { console.warn('[bonfire] customisable avatar unavailable:', e && e.message); }
   return KIT;
 }
 
@@ -405,12 +387,17 @@ function accentMaterial(tmpl, hex) {
   return m;
 }
 
-export function createAvatar(charId, accentHex) {
+export const customReady = () => !!(KIT && KIT.custom);
+// createAvatar(charId, accentHex)       -> one of the five stock characters with its clothes tinted (legacy / old peers)
+// createAvatar(null, null, appearance)  -> the customisable avatar (bf/kit/appearance.js); av.setAppearance(ap) changes it live
+export function createAvatar(charId, accentHex, ap) {
   if (!KIT) throw new Error('call loadAvatarKit first');
-  const tmpl = KIT.chars.get(charId) || KIT.chars.values().next().value;
-  const id = KIT.chars.has(charId) ? charId : [...KIT.chars.keys()][0];
-  const mat = accentMaterial(tmpl, accentHex);
+  const cu = ap && KIT.custom ? KIT.custom : null;
+  const tmpl = cu ? cu.base : (KIT.chars.get(charId) || KIT.chars.values().next().value);
+  const id = cu ? 'custom' : (KIT.chars.has(charId) ? charId : [...KIT.chars.keys()][0]);
+  const mat = cu ? cu.makeMaterial(KIT.base) : accentMaterial(tmpl, accentHex);
   const model = tmpl.instantiate(mat);
+  const rig = cu ? cu.createRig(model, mat) : null;
   model.scale.setScalar(KIT.scale); model.rotation.y = Math.PI;   // Kenney models face +Z
   const root = new T.Group(); root.name = 'avatar-' + id; root.add(model);
   const shadow = new T.Mesh(KIT.shadowGeo, KIT.shadowMat); shadow.scale.set(0.95, 1, 0.95); shadow.renderOrder = 1; root.add(shadow);
@@ -461,12 +448,18 @@ export function createAvatar(charId, accentHex) {
     play, update,
     get state() { return curName; },
     weightOf: (name) => { const a = acts.get(name); return a ? (live.get(a) || 0) : 0; },
-    setAccent(hex) { mat.userData.u.uAccent.value.set(hex); mat.userData.u.uOn.value = 1; },
+    setAccent(hex) { if (!rig) { mat.userData.u.uAccent.value.set(hex); mat.userData.u.uOn.value = 1; } },   // custom avatars colour by appearance instead
+    appearance: null,
+    setAppearance(a) {
+      if (!rig) return;
+      rig.set(a); av.appearance = rig.ap; av.headY = rig.top * KIT.scale; av.headBox = rig.headBox;
+    },
     dispose() {
       mixer.stopAllAction(); mixer.uncacheRoot(model);
       root.parent && root.parent.remove(root);
       mat.dispose();   // geometry, texture and clips are shared by the kit
     },
   };
+  if (rig) av.setAppearance(ap);
   return av;
 }
