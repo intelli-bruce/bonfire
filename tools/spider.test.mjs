@@ -92,5 +92,21 @@ const snap = (o = {}) => ({ id: 'aaa', n: 1, b: 1000, ep: 0, hp: 400, mh: 480, x
   ok(sp.hitTest(30.3, 30, 0.85, 0).some((h) => h.kind === 'minion' && h.id === 9), 'punch on a minion hits it');
 }
 
+// 6) giant scale (head ~12.7 m = ~8.5x a 1.5 m player): ranges follow the size; the spit range travels in the snapshot
+{
+  ok(BOSS.k >= 3.5 && BOSS.k * 3.35 / 1.5 >= 8 && BOSS.k * 3.35 / 1.5 <= 10, `model scale puts the head at 8-10x a 1.5 m player (k=${BOSS.k})`);
+  ok(BOSS.swipe.reach > 5 * BOSS.k && BOSS.swipe.maxD < BOSS.swipe.reach && BOSS.hitReach > BOSS.swipe.reach, 'swipe reach covers the front claws (5.6 k ahead); a peer punch may be farther still');
+  ok(BOSS.spit.minD >= BOSS.melee && BOSS.web.minD >= BOSS.spit.minD, 'spit and web are long-range: they start beyond the stand-off distance');
+  ok(BOSS.swipe.contact > 13 / 24 && BOSS.spit.fire > 16 / 24, 'pattern clips play slower, so the timers follow them');
+  const { sp } = make('bbb');
+  sp.spawn(0, 0, 0); sp.debug.B.spawnT = 0;
+  ok(typeof sp.snapshot().sd === 'number', 'owner snapshot carries the spit range');
+  const r = make('ccc');
+  r.sp.applySnapshot(snap({ ac: 0 }), 'aaa');   // the first snapshot only creates the replica; actions start when the counter moves
+  ok(r.sp.applySnapshot(snap({ a: 'sp', ac: 1, sa: 0.4, sd: 55 }), 'aaa') === true && r.sp.debug.B.sd === 55, 'replica takes the spit range with the action');
+  ok(r.sp.applySnapshot(snap({ a: 'sp', ac: 2, sa: 0.4, sd: 1e9 }), 'aaa') === true && r.sp.debug.B.sd === 200, 'an absurd spit range is clamped');
+  ok(r.sp.applySnapshot(snap({ a: 'sp', ac: 3, sa: 0.4 }), 'aaa') === true && r.sp.debug.B.sd === 40, 'a snapshot without it falls back to a mid range');
+}
+
 console.log(`${n - fails}/${n} spider checks passed`);
 process.exit(fails ? 1 : 0);
