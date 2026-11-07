@@ -81,8 +81,56 @@ function chestPos(X) {   // 가슴 균열(앞면) 세계 좌표 — 뼈가 있�
   return { x: B.x + fx * (2.9 + lean * 2.4), y: B.y + 11.1 - lean * 1.2, z: B.z + fz * (2.9 + lean * 2.4) };
 }
 
+// 재질 손질(한 번): 공용 로더는 발광이 없는 재질에 「색 × 0.16」 자가발광을 넣는데, 이게 피부·뿔을 회색으로 평평하게 덮었다.
+// 대악마는 그 발광을 거의 끄고, 대신 셰이더에 「대악마 전용 조명」을 더한다(장면의 다른 물체에는 영향 없음):
+//   key  — 화면 왼쪽 위 앞에서 오는 차가운 달빛 키(노멀맵을 따라 근육·주름·핏줄 음영이 선다)
+//   wrap — 감싸는 붉은 반사광(빛이 피부 밑으로 번지는 서브서피스 느낌: 그늘 경계가 붉다)
+//   rim  — 실루엣 테두리 빛(밤하늘에서도 몸 윤곽이 읽힌다)
+//   spec — 러프니스 맵이 정하는 하이라이트(뿔 끝 광택·핏줄의 젖은 윤기)
+// [key, wrap(r,g,b), rim, spec, 발광색, 발광세기, 발광에 색맵]
+export const SKIN_LOOK = {
+  demon_skin:     [0.95, [0.5, 0.1, 0.07], 0.45, 0.55, '#ff2a14', 0.035, true],
+  demon_horn:     [1.15, [0.18, 0.08, 0.05], 0.45, 0.6, '#ffffff', 0.0, false],
+  demon_horn_tip: [1.0, [0.1, 0.04, 0.03], 0.5, 1.6, '#ffffff', 0.0, false],
+  demon_mane:     [0.9, [0.12, 0.04, 0.04], 0.6, 0.25, '#ffffff', 0.0, false],
+  demon_tooth:    [0.9, [0.2, 0.1, 0.06], 0.3, 0.8, '#ffffff', 0.02, false],
+  demon_claw:     [0.7, [0.05, 0.02, 0.02], 0.4, 1.4, '#ffffff', 0.0, false],
+};
+const KEY_DIR = [-0.45, 0.62, 0.64];   // 보기 공간(카메라 기준) 방향: 왼쪽 위 앞
+export function skinLook(THREE, rig) {
+  for (const m of rig.mats) {
+    if (m.name === 'demon_eye') { m.emissiveIntensity = 1.4; const b = rig.base.get(m); if (b) b.i = 1.4; continue; }
+    const L = SKIN_LOOK[m.name]; if (!L || !m.emissive) continue;
+    const [key, wrap, rim, spec, ec, ei, emap] = L;
+    m.emissive.set(ec); m.emissiveIntensity = ei; if (emap && m.map) m.emissiveMap = m.map;
+    if (m.name === 'demon_skin' && m.normalScale) m.normalScale.setScalar(1.6);
+    const b = rig.base.get(m); if (b) { b.e.copy(m.emissive); b.i = ei; }
+    if (!THREE.Vector3 || typeof m.onBeforeCompile !== 'function') continue;
+    const U = { dKey: { value: key }, dWrap: { value: new THREE.Vector3(...wrap) }, dRim: { value: rim }, dSpec: { value: spec }, dDir: { value: new THREE.Vector3(...KEY_DIR).normalize() } };
+    m.userData.demonLook = U;
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, U);
+      sh.fragmentShader = 'uniform float dKey, dRim, dSpec; uniform vec3 dWrap, dDir;\n' + sh.fragmentShader.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+      {
+        float dn = dot(normal, dDir);
+        vec3 dv = normalize(vViewPosition);
+        float kd = max(dn, 0.0);
+        float wr = clamp((dn + 0.6) / 1.6, 0.0, 1.0) * (1.0 - kd);
+        float fr = pow(1.0 - clamp(dot(normal, dv), 0.0, 1.0), 3.0);
+        vec3 hv = normalize(dDir + dv);
+        float sp = pow(max(dot(normal, hv), 0.0), mix(8.0, 90.0, 1.0 - roughnessFactor)) * (1.0 - roughnessFactor);
+        reflectedLight.directDiffuse += diffuseColor.rgb * (vec3(0.62, 0.66, 0.8) * dKey * kd + dWrap * wr);
+        reflectedLight.directSpecular += vec3(0.8, 0.82, 0.95) * dSpec * sp * kd;
+        reflectedLight.directDiffuse += vec3(0.75, 0.6, 0.85) * dRim * fr * (0.35 + 0.65 * diffuseColor.r);
+      }`);
+    };
+    m.customProgramCacheKey = () => 'demonLook';
+    m.needsUpdate = true;
+  }
+}
+
 const ext = {
-  light(THREE, root) { const l = new THREE.PointLight('#ff2a14', 0, 46, 1.5); root.add(l); l.position.set(0, 11.1, -3.6); return l; },
+  light(THREE, root) { const l = new THREE.PointLight('#ff2a14', 0, 46, 1.5); root.add(l); l.position.set(0, 9.0, -9.0); return l; },
 
   reset(X) { for (const f of X.S.fx || []) drop(X, f); X.S.fx = []; X.S.lean = 0; X.S.charge = 0; },
 
@@ -237,8 +285,8 @@ const ext = {
     if (rig) {
       const hk = dying ? 1 - dk : se, ch = X.S.charge || 0;
       rig.glow = hk * (0.75 + 0.25 * Math.sin(t * 2.6) + 1.6 * ch + (B.rage ? 0.5 : 0));
-      if (rig.light) rig.light.intensity = 16 * rig.glow;
-      if (!rig.eyeFix) { rig.eyeFix = true; for (const m of rig.mats) if (m.name === 'demon_eye') { const bb = rig.base.get(m); m.emissiveIntensity = 1.4; if (bb) bb.i = 1.4; } }
+      if (rig.light) rig.light.intensity = 3.5 * rig.glow;
+      if (!rig.eyeFix) { rig.eyeFix = true; skinLook(X.THREE, rig); }
       if (!(rig.flash > 0)) for (const m of rig.mats) { if (m.name === 'demon_crack' || m.name === 'demon_core') { const b = rig.base.get(m); if (b) m.emissiveIntensity = b.i * (0.4 + 0.7 * rig.glow); } }
     }
   },
