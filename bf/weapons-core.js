@@ -300,10 +300,18 @@ export function spreadDir(dx, dy, dz, spread, r1, r2) {
 }
 
 // ---------- 네트워크 메시지(`wpn`) 검증: 모르는 모양·범위 밖은 버린다 ----------
-// f(발사) {k:'f', w:3|4|5|7, z: 조준 0..1, o:[x,y,z], d:[dx,dy,dz], l: 길이, n: 맞힌 알갱이 수, h:[종류 'b'|'m', id]}
+// f(발사) {k:'f', w:3|4|5|7|8, z: 조준 0..1, o:[x,y,z], d:[dx,dy,dz], l: 길이, n: 맞힌 알갱이 수, h:[종류 'b'|'m', id], v:[[맞은 접속자 id, 알갱이 수], …]}
+// p(접속자 피해) {k:'p', t: 맞은 접속자 id, w:1..8, c, sl:0|1, x:'r'|'u', n(수류탄·로켓 = 폭발 중심까지 거리)}
 // s(검 휘두름) {k:'s', c:0..2, o:[x,y,z], a: 방향각}
 // k(로켓) {k:'k', o, d}   h(피해 보고) {k:'h', w:1..8, c, sl:0|1, x:'r'|'u'(궁극기), n(수류탄 = 거리), h:[종류, id]}   g(수류탄) {k:'g', o, v}   u(궁극기) {k:'u', o, a}
 //   r(장전 시작) {k:'r', w, e:0|1}
+const pid = (v) => (typeof v === 'string' && /^[a-z0-9]{1,24}$/i.test(v) ? v : null);   // 접속자 id (index.html 의 myId 와 같은 모양)
+const pvList = (v) => {   // 사람이 맞은 목록 [[id, 맞은 알갱이 수], …] 최대 3명
+  if (!Array.isArray(v) || v.length < 1 || v.length > 3) return null;
+  const out = [];
+  for (const e of v) { if (!Array.isArray(e) || e.length !== 2) return null; const id = pid(e[0]), n = fin(e[1], 1, 8); if (!id || n === null) return null; out.push([id, Math.round(n)]); }
+  return out;
+};
 const arr3 = (v, lim) => (Array.isArray(v) && v.length === 3 ? v.map((q, i) => fin(q, -lim[i], lim[i])) : null);
 const POS_LIM = [140, 60, 140];
 export function sanitizeWpn(d) {
@@ -320,6 +328,15 @@ export function sanitizeWpn(d) {
     const dl = Math.hypot(dir[0], dir[1], dir[2]); if (dl < 0.5 || dl > 1.5) return null;
     const out = { k, w, o, d: dir.map((q) => q / dl), l: fin(d.l, 0, WEAPONS[w].range + 5) ?? WEAPONS[w].range, n: Math.round(fin(d.n, 0, 8) ?? 0), seed: Math.round(fin(d.seed, 0, 1e9) ?? 0), z: fin(d.z, 0, 1) ?? 0 };
     if (d.h !== undefined) { const h = hit(d.h); if (!h) return null; out.h = h; }
+    if (d.v !== undefined) { const v = pvList(d.v); if (!v) return null; out.v = v; }   // 이 발사가 맞힌 접속자(공격자 판정): 맞은 쪽이 피해 표로 HP 를 깎는다
+    return out;
+  }
+  if (k === 'p') {   // 접속자 피해 보고(검·검기·궁극기·수류탄·RPG): 맞힌 사람 화면이 판정하고, 맞은 사람 화면이 받아서 HP 를 깎는다
+    const t = pid(d.t), w = fin(d.w, 1, SLOT_COUNT); if (!t || w === null) return null;
+    const out = { k, t, w: Math.round(w), c: Math.round(fin(d.c, 0, 2) ?? 0), sl: d.sl ? 1 : 0, n: Math.round(fin(d.n, 1, 8) ?? 1) };
+    if (out.w === 6) out.n = r2(fin(d.n, 0, GREN.r) ?? GREN.r);
+    if (out.w === 8) out.n = r2(fin(d.n, 0, ROCKET.r) ?? ROCKET.r);
+    if (out.w === 2 && (d.x === 'r' || d.x === 'u')) out.x = d.x;
     return out;
   }
   if (k === 's') {
@@ -356,7 +373,8 @@ export function sanitizeWpn(d) {
   return null;
 }
 export const wpnMsg = {   // 보내는 쪽 모양(위 검증과 짝)
-  fire: (w, o, d, l, n, seed, h, z) => { const m = { k: 'f', w, o: o.map(r2), d: d.map((v) => Math.round(v * 1000) / 1000), l: r2(l), n, seed }; if (h) m.h = h; if (z) m.z = r2(z); return m; },
+  fire: (w, o, d, l, n, seed, h, z, v) => { const m = { k: 'f', w, o: o.map(r2), d: d.map((q) => Math.round(q * 1000) / 1000), l: r2(l), n, seed }; if (h) m.h = h; if (z) m.z = r2(z); if (v && v.length) m.v = v.slice(0, 3); return m; },
+  pvp: (t, w, c, sl, n, x) => { const m = { k: 'p', t, w, c: c || 0, sl: sl ? 1 : 0, n: w === 6 || w === 8 ? r2(n) : (n || 1) }; if (x) m.x = x; return m; },
   swing: (c, o, a, p) => ({ k: 's', c, o: o.map(r2), a: r2(a), p: r2(p || 0) }),
   rocket: (o, d) => ({ k: 'k', o: o.map(r2), d: d.map((v) => Math.round(v * 1000) / 1000) }),
   hit: (w, c, sl, h, n, x) => { const m = { k: 'h', w, c, sl: sl ? 1 : 0, n: w === 6 ? r2(n) : (n || 1), h }; if (x) m.x = x; return m; },
@@ -370,9 +388,10 @@ export function reachOk(w, how, dist, bossReach) {
   return dist <= lim;
 }
 
-// ---------- 캐릭터 체력: 내 HP 는 내 화면이 정한다(거미·주먹에 맞으면 깎이고, 0 이면 쓰러졌다가 부활). 남에게는 위치 정보의 hp 칸으로 보낸다 ----------
-export const HP = { max: 100, respawnT: 4, regenDelay: 6, regen: 6, inv: 2.0 };   // 부활 뒤 2 s 무적, 6 s 안 맞으면 초당 6 회복
-export const HURT = { swipe: 22, spit: 12, bite: 7, punch: 8 };
+// ---------- 캐릭터 체력: 내 HP 는 내 화면이 정한다(거미·주먹·다른 접속자의 무기에 맞으면 깎이고, 0 이면 쓰러졌다가 부활). 남에게는 위치 정보의 hp 칸(0..100 %)으로 보낸다 ----------
+// 옛 값(100)의 4배. 쓰러지면 respawnT 초 뒤 자동 부활하고, 「즉시 리스폰」 버튼은 btnDelay 초 뒤부터 눌린다(싸우다 연타한 클릭이 바로 부활로 이어지지 않게).
+export const HP = { max: 400, respawnT: 5, btnDelay: 0.6, regenDelay: 6, regen: 16, inv: 2.5 };   // 부활 뒤 2.5 s 무적, 6 s 안 맞으면 초당 16 회복
+export const HURT = { swipe: 66, spit: 36, bite: 21, punch: 15 };   // 거미 · 새끼 거미 · 주먹(옛 22·12·7·8 의 약 3배, 주먹은 아래 PvP 표와 같은 값)
 export function newHp() { return { hp: HP.max, dead: false, deadAt: -1e9, hitAt: -1e9, invUntil: 0, deaths: 0 }; }
 // 피해를 받는다: 'hit' · 'dead'(이번에 쓰러짐) · null(무적·이미 쓰러짐)
 export function hpHit(h, amount, now) {
@@ -381,11 +400,55 @@ export function hpHit(h, amount, now) {
   if (h.hp <= 0) { h.dead = true; h.deadAt = now; h.deaths++; return 'dead'; }
   return 'hit';
 }
+// 부활: 자동(시간이 되면)과 「즉시 리스폰」 버튼이 같은 길을 쓴다. 쓰러진 상태가 아니면 false
+export function hpRespawn(h, now) {
+  if (!h.dead) return false;
+  h.dead = false; h.hp = HP.max; h.invUntil = now + HP.inv; h.hitAt = -1e9;
+  return true;
+}
+export const respawnLeft = (h, now) => (h.dead ? Math.max(0, HP.respawnT - (now - h.deadAt)) : 0);   // 자동 부활까지 남은 시간(s)
+export const canInstantRespawn = (h, now) => h.dead && now - h.deadAt >= HP.btnDelay;                    // 「즉시 리스폰」 버튼이 눌리는가
 // 매 프레임: 부활할 때면 'respawn', 아니면 자연 회복
 export function hpTick(h, now, dt) {
-  if (h.dead) { if (now - h.deadAt >= HP.respawnT) { h.dead = false; h.hp = HP.max; h.invUntil = now + HP.inv; return 'respawn'; } return null; }
+  if (h.dead) { if (now - h.deadAt >= HP.respawnT) { hpRespawn(h, now); return 'respawn'; } return null; }
   if (h.hp < HP.max && now - h.hitAt >= HP.regenDelay) h.hp = Math.min(HP.max, h.hp + HP.regen * dt);
   return null;
 }
-// 받은 hp 칸: 0..100 정수, 쓰러짐은 dd:1
-export const sanitizeHp = (hp, dd) => ({ hp: Math.round(fin(hp, 0, HP.max) ?? HP.max), dead: dd === 1 });
+// 위치 정보에 싣는 hp: 0..100 정수(%) — 옛 화면도 같은 막대로 읽고, HP.max 가 달라도 맞는다. 0 보다 크면 최소 1
+export const hpPct = (h) => (h.hp > 0 ? Math.max(1, Math.round(clamp(h.hp / HP.max, 0, 1) * 100)) : 0);
+// 받은 hp 칸(0..100 %) → { hp: HP.max 기준 값, pct, dead }. 쓰러짐은 dd:1. 칸이 없으면(옛 화면) 가득
+export function sanitizeHp(pct, dd) {
+  const p = Math.round(fin(pct, 0, 100) ?? 100);
+  return { hp: p / 100 * HP.max, pct: p, dead: dd === 1 };
+}
+
+// ---------- 접속자끼리 싸움(PvP): 모든 무기가 다른 접속자의 HP 를 깎는다 ----------
+// 판정은 공격자 화면(자기 화면에 보이는 상대 몸에 맞았나)이고, 맞은 사람 화면이 이 표로 피해를 정한다(보낸 사람이 말한 값은 믿지 않는다).
+// 보스용 피해(dmgFor·ultDmg)에 무기별 배율을 곱한다. HP 400 기준 대략 — 소총 45발 · 권총 31발 · 산탄 6발(근접) · 저격 4발 · 검 3타×4 · 수류탄 3개 · RPG 2발 · 死 2번.
+export const PVP_MULT = { punch: 1.5, sword: 2.5, slash: 2.5, rush: 3, death: 2.5, rifle: 1.5, shotgun: 2.5, pistol: 1.5, sniper: 1.5, grenade: 2.5, rocket: 3 };
+export function pvpDmgFor(w, how, c, n, x) {
+  const d = w === 2 && (x === 'r' || x === 'u') ? ultDmg(x) : dmgFor(w, how, c, n);
+  if (!d) return null;
+  const amount = Math.round(d.amount * (PVP_MULT[d.key] || 1));
+  return amount > 0 ? { amount, cd: d.cd, key: d.key } : null;
+}
+// 맞은 사람이 받는 밀림(0 = 없음): 무거운 무기일수록 센 밀림
+export const PVP_KNOCK = { punch: 0, sword: 0.35, slash: 0.4, rush: 0.15, death: 1.0, rifle: 0, shotgun: 0.55, pistol: 0, sniper: 0.6, grenade: 1.0, rocket: 1.3 };
+// 몸 판정: 발 위치 (x, y, z) 에서 y..y+BODY.h 의 세운 캡슐
+export const BODY = { r: 0.5, h: 1.75 };
+// 광선(총알)이 몸에 닿는 거리(없으면 -1). pad: 굵기 여유(m)
+export function rayBody(ox, oy, oz, dx, dy, dz, px, py, pz, maxD, pad = 0) {
+  return rayCapsule(ox, oy, oz, dx, dy, dz, px, py + BODY.r, pz, px, py + BODY.h - BODY.r, pz, BODY.r + pad, maxD);
+}
+// 한 점 (cx, cy, cz) 에서 몸 표면까지의 거리(0 = 닿음). 칼날·폭발·검기 판정용
+export function distToBody(cx, cy, cz, px, py, pz) {
+  const y = clamp(cy, py + BODY.r, py + BODY.h - BODY.r);
+  return Math.max(0, Math.hypot(cx - px, cy - y, cz - pz) - BODY.r);
+}
+// 받은 피해 보고가 믿을 만한가(공격자와 나의 거리): 무기별 닿는 거리 + 지연 여유(달리는 사람 약 2 m + 보간 지연)
+export function pvpReachOk(w, how, dist) {
+  const slack = 8;
+  const lim = w === 2 ? (how === 'u' ? ULT.range + ULT.r : how === 'sl' ? SLASH.range + SLASH.r * 1.6 : how === 'r' ? ULT.rushReach + 3 : 6) + slack
+    : w === 1 ? 4 + slack : w === 6 ? 40 + GREN.r + slack : w === 8 ? ROCKET.speed * ROCKET.life + ROCKET.r : WEAPONS[w].range + 12;
+  return dist <= lim;
+}
