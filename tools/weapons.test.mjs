@@ -8,18 +8,18 @@ const ok = (cond, msg) => { n++; if (!cond) { fails++; console.error('FAIL', msg
 const near = (a, b, e = 1e-6) => Math.abs(a - b) <= e;
 console.warn = () => {};
 
-// 1) 슬롯 · 키 배정: 1~7 은 무기(1 맨손 2 검 3 M4A1 4 산탄총 5 권총 6 수류탄 7 저격총), 감정은 8·9·0 으로 옮겼다(컨트롤러 키맵에서 확인)
+// 1) 슬롯 · 키 배정: 1~8 은 무기(1 맨손 2 검 3 M4A1 4 산탄총 5 권총 6 수류탄 7 저격총 8 RPG), 감정은 9·0·- 로 옮겼다(컨트롤러 키맵에서 확인)
 {
-  ok(Object.keys(C.SLOT_KEYS).join() === 'Digit1,Digit2,Digit3,Digit4,Digit5,Digit6,Digit7', 'weapon keys are 1-7');
-  ok(['fist', 'sword', 'rifle', 'shotgun', 'pistol', 'grenade', 'sniper'].every((k, i) => C.WEAPONS[i + 1].key === k), 'slot table 1..7');
-  ok(C.wrapSlot(1, -1) === 7 && C.wrapSlot(7, 1) === 1 && C.wrapSlot(2, 1) === 3 && C.wrapSlot(3, -1) === 2, 'wheel wraps 1..7');
-  ok(C.GUN_SLOTS.join() === '3,4,5,7' && !C.isGun(6) && !C.isGun(2), 'guns are 3 4 5 7');
+  ok(Object.keys(C.SLOT_KEYS).join() === 'Digit1,Digit2,Digit3,Digit4,Digit5,Digit6,Digit7,Digit8', 'weapon keys are 1-8');
+  ok(['fist', 'sword', 'rifle', 'shotgun', 'pistol', 'grenade', 'sniper', 'rpg'].every((k, i) => C.WEAPONS[i + 1].key === k), 'slot table 1..8');
+  ok(C.wrapSlot(1, -1) === 8 && C.wrapSlot(8, 1) === 1 && C.wrapSlot(2, 1) === 3 && C.wrapSlot(3, -1) === 2, 'wheel wraps 1..8');
+  ok(C.GUN_SLOTS.join() === '3,4,5,7,8' && !C.isGun(6) && !C.isGun(2), 'guns are 3 4 5 7 8');
   ok(C.WEAPONS[5].mag === 12 && !Number.isFinite(C.WEAPONS[5].reserve) && C.WEAPONS[7].mag === 5 && !Number.isFinite(C.WEAPONS[7].reserve), 'pistol 12/∞, sniper 5/∞');
   ok(C.WEAPONS[7].dmg >= 5 * C.WEAPONS[5].dmg && C.WEAPONS[7].bolt > 0 && C.WEAPONS[7].interval >= C.WEAPONS[7].bolt, 'sniper: heavy damage, bolt action paces the shots');
   const ctl = fs.readFileSync(new URL('../bf/kit/controller.js', import.meta.url), 'utf8');
   const km = ctl.match(/const KEYMAP = \{([^}]*)\}/)[1];
-  ok(/Digit8: 'dance'/.test(km) && /Digit9: 'cheer'/.test(km) && /Digit0: 'nod'/.test(km), 'emotes moved to 8 9 0');
-  ok(!/Digit[1-7]\b/.test(km), 'controller no longer takes 1-7');
+  ok(/Digit9: 'dance'/.test(km) && /Digit0: 'cheer'/.test(km) && /Minus: 'nod'/.test(km), 'emotes moved to 9 0 -');
+  ok(!/Digit[1-8]\b/.test(km), 'controller no longer takes 1-8');
   ok(C.WEAPONS[3].mag === 30 && C.WEAPONS[3].reserve > 0 && C.WEAPONS[3].auto, 'M4A1: 30-round magazine, reserve, full auto');
 }
 
@@ -271,9 +271,9 @@ console.warn = () => {};
   ok(/window\.addEventListener\('keydown', onGameKey, true\)/.test(html), 'the game key handler runs in the capture phase');
   const fn = html.match(/function onGameKey\(e\) \{([\s\S]*?)\n\}\nwindow\.addEventListener\('keydown', onGameKey, true\)/);
   ok(!!fn && /weaponKey\(e\)\) \{ e\.preventDefault\(\); e\.stopImmediatePropagation\(\);/.test(fn[1]), 'weapon keys get preventDefault + stopImmediatePropagation');
-  ok(/const weaponKey = \(e\) => \(SLOT_KEYS\[e\.code\] \|\| e\.code === 'KeyR'\) && !e\.ctrlKey && !e\.metaKey && !e\.altKey/.test(html), 'weapon keys = 1~7 and R without Ctrl/Meta/Alt (Ctrl+R still reloads the browser)');
+  ok(/const weaponKey = \(e\) => \(SLOT_KEYS\[e\.code\] \|\| e\.code === 'KeyR'\) && !e\.ctrlKey && !e\.metaKey && !e\.altKey/.test(html), 'weapon keys = 1~8 and R without Ctrl/Meta/Alt (Ctrl+R still reloads the browser)');
   ok(/if \(e\.button === 2\) \{ e\.preventDefault\(\); rightDown\(\); \}/.test(html) && /rightDown\(\)/.test(html) && /\$\('altBtn'\)/.test(html), 'right mouse button / mobile button: aim, ultimate');
-  ok(/8 춤 · 9 환호 · 0 끄덕 · 1~7 무기/.test(html), 'help text names the new keys');
+  ok(/9 춤 · 0 환호 · - 끄덕 · 1~8 무기/.test(html), 'help text names the new keys');
   ok(/if \(!text \|\| !netLive\(\)\) \{ chatInput\.blur\(\);/.test(html), 'an empty chat Enter gives the keyboard back to the game');
   ok(/textContent = Number\.isFinite\(g\.reserve\) \? g\.reserve : '∞'/.test(html), 'HUD shows ∞ for the reserve');
 }
@@ -281,13 +281,63 @@ console.warn = () => {};
 // 13) 총구: 모든 총 모델에 muzzle 노드가 있고, 탄·섬광은 그 프레임 자세가 끝난 뒤(poseUpdate → flushShots) 총구에서 나온다
 {
   const nodes = (f) => { const b = fs.readFileSync(new URL('../bf/' + f, import.meta.url)); const len = b.readUInt32LE(12); return JSON.parse(b.slice(20, 20 + len).toString('utf8')).nodes.map((q) => q.name); };
-  for (const [f, need] of [['m4a1.glb', ['muzzle', 'grip_r', 'mag']], ['shotgun.glb', ['muzzle', 'grip_r']], ['pistol.glb', ['muzzle', 'grip_r', 'slide', 'mag']], ['sniper.glb', ['muzzle', 'grip_r', 'bolt', 'mag']], ['grenade.glb', ['grip']]]) {
+  for (const [f, need] of [['m4a1.glb', ['muzzle', 'grip_r', 'mag']], ['shotgun.glb', ['muzzle', 'grip_r']], ['pistol.glb', ['muzzle', 'grip_r', 'slide', 'mag']], ['sniper.glb', ['muzzle', 'grip_r', 'bolt', 'mag']]]) {
     const ns = nodes(f); ok(need.every((k) => ns.includes(k)), `${f} has ${need.join(', ')}`);
   }
   const js = fs.readFileSync(new URL('../bf/weapons.js', import.meta.url), 'utf8');
-  ok(/function afterUpdate\(rec, dt, now\) \{\s*if \(!rec\.wp\) return;\s*poseUpdate\(rec, dt, now\);\s*flushShots\(rec\);/.test(js), 'shots are drawn after this frame\'s pose');
+  ok(/function afterUpdate\(rec, dt, now\) \{\s*footsteps\(rec, dt\);\s*if \(!rec\.wp\) return;\s*poseUpdate\(rec, dt, now\);\s*flushShots\(rec\);/.test(js), 'shots are drawn after this frame\'s pose');
   ok(/function flushShots[\s\S]*?muzzleWorld\(rec, s\.slot, o\)/.test(js) && /queueShot\(rec, m\.w, ends, sent, false\)/.test(js), 'mine and remote shots start at the muzzle seen on this screen');
 }
 
+// 14) v4: RPG · 수류탄 포물선 · 반동 · 상하 조준 · 산탄 무늬 · 캐릭터 체력
+{
+  const w = C.WEAPONS[8];
+  ok(w.gun && w.rocket && w.mag === 1 && !Number.isFinite(w.reserve), 'RPG: one rocket a load, unlimited reserve');
+  const g = C.newGun(8); ok(C.fireOnce(g, 0) && g.mag === 0 && C.needsAutoReload(g, 1), 'RPG fires once then reloads');
+  ok(C.startReload(g, 1) && C.tickReload(g, 1 + w.reloadEmptyT + 0.01) && g.mag === 1, 'RPG reload puts a rocket back');
+  ok(C.rocketDmg(0) === C.ROCKET.dmg && C.rocketDmg(C.ROCKET.r + 0.1) === 0 && C.rocketDmg(3) < C.rocketDmg(1), 'rocket splash falls off with distance');
+  ok(C.dmgFor(8, 'm', 0, 2).key === 'rocket' && C.dmgFor(8, 'm', 0, 2).amount === C.rocketDmg(2), 'damage table knows the rocket');
+  const k = C.sanitizeWpn(C.wpnMsg.rocket([1, 2, 3], [0, 0.6, -0.8]));
+  ok(k && k.k === 'k' && Math.abs(Math.hypot(...k.d) - 1) < 1e-6, 'rocket message survives the guard');
+  ok(C.sanitizeWpn({ k: 'k', o: [0, 0, 0], d: [0, 0, 0] }) === null, 'a rocket without a direction is dropped');
+  ok(C.sanitizeWpn(C.wpnMsg.hit(8, 0, 0, ['b', 0], 3.2)).n === 3.2, 'rocket hit report keeps the blast distance');
+  const p = [0, 2, 0], v = [0, 0, -C.ROCKET.speed]; C.rocketStep(p, v, 0.5); ok(p[2] < -20 && p[1] < 2 && p[1] > 1, 'rocket flies straight with a slight drop');
+  // 수류탄: 위를 볼수록 높이·멀리
+  const flat = () => 0, far = (pitch) => { const r = C.grenadeArc([0, 1.5, 0], C.throwVel(0, pitch), flat); let top = 0; for (const q of r.pts) top = Math.max(top, q[1]); return { d: Math.hypot(r.land[0], r.land[2]), top }; };
+  const down = far(0.4), lvl = far(0), up = far(-0.4);
+  ok(up.d > lvl.d && lvl.d > down.d, `looking up throws farther (${down.d.toFixed(1)} < ${lvl.d.toFixed(1)} < ${up.d.toFixed(1)} m)`);
+  ok(up.top > lvl.top && lvl.top > down.top, 'looking up throws higher');
+  ok(Math.hypot(...C.throwVel(0, -0.5)) <= C.GREN.speed * 1.6, 'the strongest throw still passes the message guard');
+  ok(C.sanitizeWpn(C.wpnMsg.grenade([0, 1, 0], C.throwVel(1, -0.5))) !== null, 'an upward throw is accepted by others');
+  // 반동: 연사로 누적, 조준하면 줄고, 멈추면 돌아온다
+  const a0 = C.recoilKick(3, 0, 0, 0)[0], a9 = C.recoilKick(3, 9, 0, 0)[0], ads = C.recoilKick(3, 9, 1, 0)[0];
+  ok(a9 > a0 && ads < a9, 'recoil grows in a burst and shrinks while aiming');
+  let acc = 0.2; for (let i = 0; i < 60; i++) acc -= C.recoilRecover(acc, 1 / 60, false); ok(acc < 0.01, 'recoil returns within a second after the trigger is released');
+  let acc2 = 0.2; for (let i = 0; i < 10; i++) acc2 -= C.recoilRecover(acc2, 1 / 60, true); ok(acc2 > 0.15, 'while firing the recoil mostly stays');
+  ok(C.GUN_SLOTS.every((s) => C.RECOIL[s]), 'every gun has recoil');
+  ok([3, 4, 5, 7].every((s) => C.CASING[s]) && C.CASING[4].shell, 'every cartridge gun ejects a casing (shotgun: a shell)');
+  // 상하 조준: 위를 보면 위로, 아래를 보면 아래로(땅에 붙지 않음)
+  ok(C.aimDir(0, -0.6)[1] > 0.5 && C.aimDir(0, 0.6)[1] < -0.3 && Math.abs(Math.hypot(...C.aimDir(1, 0.3)) - 1) < 1e-9, 'aim direction follows the camera pitch');
+  const sw = C.sanitizeWpn(C.wpnMsg.swing(1, [0, 0, 0], 0.5, 0.7)); ok(sw && sw.p === 0.7, 'a swing carries its elevation');
+  ok(C.sanitizeWpn({ k: 's', c: 0, o: [0, 0, 0], a: 0 }).p === 0, 'old clients: a level swing');
+  ok(C.sanitizeWpn(C.wpnMsg.ult([0, 0, 0], 0, -0.4)).p === -0.4, 'the ultimate carries its elevation');
+  // 산탄: 같은 seed = 같은 무늬, 알갱이 7개가 퍼짐 안에
+  const mk = (seed) => { let s = seed; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; };
+  const A = C.pelletDirs([0, 0, -1], 0.06, 7, mk(42)), B = C.pelletDirs([0, 0, -1], 0.06, 7, mk(42));
+  ok(A.length === 7 && A.every((d, i) => d.every((q, j) => q === B[i][j])), 'shotgun pattern is the same on both screens');
+  ok(A.slice(1).every((d) => { const ang = Math.acos(-d[2]); return ang > 0.005 && ang < 0.07; }), 'pellets spread around the centre within the cone');
+  // 체력
+  const h = C.newHp(); ok(C.hpHit(h, 30, 0) === 'hit' && h.hp === 70, 'a hit takes HP');
+  ok(C.hpHit(h, 80, 1) === 'dead' && h.dead && h.hp === 0, 'HP 0 = down');
+  ok(C.hpHit(h, 10, 1.5) === null, 'no damage while down');
+  ok(C.hpTick(h, 1 + C.HP.respawnT - 0.1, 0.016) === null && C.hpTick(h, 1 + C.HP.respawnT + 0.01, 0.016) === 'respawn' && h.hp === C.HP.max, 'respawn with full HP');
+  ok(C.hpHit(h, 10, 1 + C.HP.respawnT + 0.5) === null, 'a short shield after respawn');
+  const r = C.newHp(); C.hpHit(r, 50, 0); C.hpTick(r, C.HP.regenDelay + 1, 1); ok(r.hp > 50, 'HP regenerates when out of combat');
+  ok(C.sanitizeHp(250, 0).hp === 100 && C.sanitizeHp(undefined).hp === 100 && C.sanitizeHp(12.4, 1).dead && C.sanitizeHp('x').hp === 100, 'remote hp field is clamped');
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  ok(/hp: Math\.round\(MYHP\.hp\)/.test(html) && /rec\.hpNet = sanitizeHp\(d\.hp, d\.dd\)/.test(html), 'HP rides presence both ways');
+  ok(/SENS = \{ v: [^\n]*: 0\.5; \}\)\(\) \}/.test(html) && /0\.0035 \* SENS\.v/.test(html) && /store\.set\('bonfire\.sens'/.test(html), 'mouse sensitivity: saved, default half of the old one');
+  ok((html.match(/^  [1-8]: '<(path|rect)/gm) || []).length === 8, 'eight weapon silhouettes');
+}
 console.log(`${n - fails}/${n} weapon checks passed`);
-process.exit(fails ? 1 : 0);
+if (fails) process.exit(1);

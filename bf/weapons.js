@@ -1,4 +1,4 @@
-// bf/weapons.js — 무기 슬롯(1 맨손 · 2 검 · 3 M4A1 · 4 산탄총 · 5 권총 · 6 수류탄 · 7 저격총): 모델 장착, 자세·휘두르기·장전 애니메이션, 총구 섬광·탄 궤적·탄피·검기, 내 전투 로직과 네트워크 반영.
+// bf/weapons.js — 무기 슬롯(1 맨손 · 2 검 · 3 M4A1 · 4 산탄총 · 5 권총 · 6 선물상자 수류탄 · 7 저격총 · 8 RPG): 모델 장착, 자세·휘두르기·장전 애니메이션, 총구 섬광·탄 궤적·탄피·검기, 내 전투 로직과 네트워크 반영.
 // 로직(탄약·콤보·피해 표·광선 수학·메시지 검증)은 bf/weapons-core.js 에 있다(node 테스트). 모델은 tools/weapons/build_weapons.py (Blender) 로 만든다.
 //
 //   const W = createWeapons({ THREE, scene, camera, baseUrl, myId, addFill, fx, groundY, heightAt, blocked, waterY, me, camState, others, spider, net, log, audio, canUse, standUp, hud })
@@ -15,13 +15,13 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const lerp3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 
 // 월드에서 무기의 크기(m 배율)와 손에 쥐는 방식(모델 축 → 팔 뼈 축). 모델: 총구/칼끝 -Z, 위 +Y.
-const SCALE = { 2: 1.2, 3: 1.3, 4: 1.15, 5: 1.45, 6: 1.9, 7: 1.25 };
-const MODEL_FILE = { 2: 'sword.glb', 3: 'm4a1.glb', 4: 'shotgun.glb', 5: 'pistol.glb', 6: 'grenade.glb', 7: 'sniper.glb' };
-const MODEL_SLOTS = [2, 3, 4, 5, 6, 7];
+const SCALE = { 2: 1.2, 3: 1.3, 4: 1.15, 5: 1.45, 6: 1.9, 7: 1.25, 8: 1.0 };
+const MODEL_FILE = { 2: 'sword.glb', 3: 'm4a1.glb', 4: 'shotgun.glb', 5: 'pistol.glb', 7: 'sniper.glb' };   // 6 선물상자 수류탄 · 8 RPG 는 코드로 만든다(buildGift · buildRpg)
+const MODEL_SLOTS = [2, 3, 4, 5, 6, 7, 8];
 const MAG_DROP = { 3: 0.24, 5: 0.11, 7: 0.12 };            // 장전 때 탄창이 빠지는 거리(모델 m)
-const FLASH = { 3: 0.55, 4: 0.95, 5: 0.42, 7: 1.0 };       // 총구 섬광 크기(m)
-const KICK = { 3: [0.55, 0.07], 4: [1.2, 0.22], 5: [0.6, 0.05], 7: [1.5, 0.3] };   // [팔 반동, 화면 반동]
-const SND = { 3: 'rifle', 4: 'shotgun', 5: 'pistol', 7: 'sniper' };
+const FLASH = { 3: 0.55, 4: 0.95, 5: 0.42, 7: 1.0, 8: 1.4 };       // 총구 섬광 크기(m)
+const KICK = { 3: [0.55, 0.07], 4: [1.2, 0.22], 5: [0.6, 0.05], 7: [1.5, 0.3], 8: [1.6, 0.4] };   // [팔 반동, 화면 반동]
+const SND = { 3: 'rifle', 4: 'shotgun', 5: 'pistol', 7: 'sniper', 8: 'rpg' };
 const isGun = C.isGun;
 // 자세(오일러 도, XYZ — 팔: X -90 = 앞, Z 90 = 아래로 늘어뜨림 기준, 위 바깥쪽은 Z 작게). controller/avatar 의 규약과 같다.
 const POSE = {
@@ -31,9 +31,10 @@ const POSE = {
   5: { r: [-90, 4, 86], l: [-88, -16, -74], torso: [0, -6, 0] },
   6: { r: [-62, -8, 66], l: [-18, 0, -58], torso: [0, 0, 0] },
   7: { r: [-90, 6, 84], l: [-84, -4, -78], torso: [0, -10, 0] },
+  8: { r: [-96, 4, 80], l: [-92, -6, -76], torso: [0, -12, 0] },
 };
 // 쥐는 위치(모델의 grip 빈 노드 이름)와 손끝에서의 추가 이동(m, 무기 좌표)
-const GRIP = { 2: { node: 'grip', off: [0, 0, 0] }, 3: { node: 'grip_r', off: [0, 0, 0] }, 4: { node: 'grip_r', off: [0, 0, 0] }, 5: { node: 'grip_r', off: [0, 0, 0] }, 6: { node: 'grip', off: [0, 0, 0] }, 7: { node: 'grip_r', off: [0, 0, 0] } };
+const GRIP = { 2: { node: 'grip', off: [0, 0, 0] }, 3: { node: 'grip_r', off: [0, 0, 0] }, 4: { node: 'grip_r', off: [0, 0, 0] }, 5: { node: 'grip_r', off: [0, 0, 0] }, 6: { node: 'grip', off: [0, 0, 0] }, 7: { node: 'grip_r', off: [0, 0, 0] }, 8: { node: 'grip_r', off: [0, 0, 0] } };
 // 검: 날이 위로 서도록 쥐는 방향. 날 방향(-Z)이 팔 방향(-X) 대신 위(+Z 뼈 축)쪽으로, 앞으로 tilt 도 기울임
 const SWORD_TILT = 24;
 const BULLET_SCALE = 2.0, HEAD_LEN = 0.285 * BULLET_SCALE;   // 탄두 모델 배율과 길이(m)
@@ -54,7 +55,7 @@ export function createWeapons(ctx) {
       const ld = new GLTFLoader();
       const get = (f) => new Promise((res, rej) => ld.load(new URL(f, ctx.baseUrl).href, res, undefined, rej));
       const slots = MODEL_SLOTS;
-      const gl = await Promise.all(slots.map((s) => get(MODEL_FILE[s])));
+      const gl = await Promise.all(slots.map((s) => (MODEL_FILE[s] ? get(MODEL_FILE[s]) : Promise.resolve({ scene: s === 6 ? buildGift() : buildRpg() }))));
       tpl = {};
       slots.forEach((s, i) => {
         const root = gl[i].scene;
@@ -70,6 +71,42 @@ export function createWeapons(ctx) {
       return tpl;
     })().catch((e) => { console.warn('[bonfire] weapon models not loaded:', e && e.message); throw e; });
     return loadP;
+  }
+
+  // 선물상자 수류탄(크리스마스): 빨간 상자 + 금색 리본 십자 + 위 나비 매듭. 쥐는 곳 grip = 가운데. 모델 m(배율 SCALE[6])
+  function buildGift() {
+    const g = new T.Group(), S = 0.085;
+    const box = new T.Mesh(new T.BoxGeometry(S, S * 0.9, S), new T.MeshStandardMaterial({ color: '#d42a35', roughness: 0.55 }));
+    const gold = new T.MeshStandardMaterial({ color: '#ffd24a', roughness: 0.35, metalness: 0.2 });
+    const r1 = new T.Mesh(new T.BoxGeometry(S * 1.02, S * 0.92, S * 0.2), gold), r2_ = new T.Mesh(new T.BoxGeometry(S * 0.2, S * 0.92, S * 1.02), gold);
+    const bowGeo = new T.TorusGeometry(S * 0.2, S * 0.07, 6, 12);
+    const b1 = new T.Mesh(bowGeo, gold), b2 = new T.Mesh(bowGeo, gold), knot = new T.Mesh(new T.SphereGeometry(S * 0.09, 8, 6), gold);
+    b1.position.set(-S * 0.17, S * 0.58, 0); b1.rotation.set(0, Math.PI / 2, 0.5); b2.position.set(S * 0.17, S * 0.58, 0); b2.rotation.set(0, Math.PI / 2, -0.5); knot.position.y = S * 0.5;
+    const grip = new T.Object3D(); grip.name = 'grip';
+    g.add(box, r1, r2_, b1, b2, knot, grip); g.name = 'gift';
+    return g;
+  }
+  // RPG-7 풍 발사기: 긴 원통(올리브) + 앞 탄두(원뿔·원통) + 뒤 나팔 + 손잡이 둘 + 조준기. 총구(-Z) 앞 · 위 +Y. 탄두 'warhead' 는 쏘면 사라지고 장전하면 다시 끼워진다
+  function buildRpg() {
+    const g = new T.Group();
+    const olive = new T.MeshStandardMaterial({ color: '#4f5a34', roughness: 0.7 }), wood = new T.MeshStandardMaterial({ color: '#7a4a24', roughness: 0.8 });
+    const dark = new T.MeshStandardMaterial({ color: '#2a2a2a', roughness: 0.6, metalness: 0.3 }), war = new T.MeshStandardMaterial({ color: '#6c7a3a', roughness: 0.6 });
+    const cyl = (r0, r1, len, m) => new T.Mesh(new T.CylinderGeometry(r0, r1, len, 14).rotateX(Math.PI / 2), m);
+    const tube = cyl(0.04, 0.04, 1.0, olive); tube.position.z = 0.05;
+    const guard = cyl(0.05, 0.05, 0.3, wood); guard.position.z = -0.05;
+    const flare = cyl(0.04, 0.075, 0.18, dark); flare.position.z = 0.62;
+    const wh = new T.Group(); wh.name = 'warhead';
+    const body = cyl(0.075, 0.075, 0.16, war); body.position.z = -0.6;
+    const cone = new T.Mesh(new T.ConeGeometry(0.075, 0.2, 14).rotateX(-Math.PI / 2), war); cone.position.z = -0.78;
+    const neck = cyl(0.03, 0.04, 0.12, dark); neck.position.z = -0.48;
+    wh.add(body, cone, neck);
+    const gripR = new T.Mesh(new T.BoxGeometry(0.035, 0.12, 0.05), dark); gripR.position.set(0, -0.09, 0.12); gripR.rotation.x = 0.25;
+    const gripF = new T.Mesh(new T.BoxGeometry(0.03, 0.1, 0.04), dark); gripF.position.set(0, -0.08, -0.15);
+    const sight = new T.Mesh(new T.BoxGeometry(0.03, 0.06, 0.08), dark); sight.position.set(0.045, 0.06, -0.1);
+    const gr = new T.Object3D(); gr.name = 'grip_r'; gr.position.set(0, -0.11, 0.12);
+    const mz = new T.Object3D(); mz.name = 'muzzle'; mz.position.set(0, 0, -0.5);
+    g.add(tube, guard, flare, wh, gripR, gripF, sight, gr, mz); g.name = 'rpg';
+    return g;
   }
 
   // ===================================================================== 아바타에 붙이기
@@ -118,7 +155,7 @@ export function createWeapons(ctx) {
     holder.position.set(hand.x - v1.x, hand.y - v1.y, hand.z - v1.z);
     bone.add(holder);
     const part = (n) => { const o = model.getObjectByName(n); return o ? { o, p0: o.position.clone() } : null; };
-    return { slot, holder, model, mag: part('mag'), ch: part('charging_handle'), bolt: part('bolt'), pump: part('pump'), slide: part('slide'), gem: model.getObjectByName('gem'),
+    return { slot, holder, model, warhead: model.getObjectByName('warhead'), mag: part('mag'), ch: part('charging_handle'), bolt: part('bolt'), pump: part('pump'), slide: part('slide'), gem: model.getObjectByName('gem'),
       muzzle: model.getObjectByName('muzzle') || null, eject: model.getObjectByName('eject') || null, sc };
   }
   function wpOf(rec) {
@@ -133,7 +170,7 @@ export function createWeapons(ctx) {
   }
 
   // ===================================================================== 내 상태
-  const my = { slot: 1, guns: { 3: C.newGun(3), 4: C.newGun(4), 5: C.newGun(5), 7: C.newGun(7) }, sword: C.newSword(), gren: { nextAt: 0 }, adsHeld: false, trig: false, noAmmoAt: 0, supply: 0, lastTrigAt: 0, aim: { kind: null, d: 0 }, timeline: [], stat: { fired: 0, hit: 0, sent: 0 } };
+  const my = { slot: 1, recoil: 0, streak: 0, lastShotAt: -1e9, stepAcc: 0, guns: { 3: C.newGun(3), 4: C.newGun(4), 5: C.newGun(5), 7: C.newGun(7), 8: C.newGun(8) }, sword: C.newSword(), gren: { nextAt: 0 }, adsHeld: false, trig: false, noAmmoAt: 0, supply: 0, lastTrigAt: 0, aim: { kind: null, d: 0 }, timeline: [], stat: { fired: 0, hit: 0, sent: 0 } };
   const view = { slot: 1, ammo: '', mag: 0, reserve: 0, reload01: 0, kick: 0, aim: null, combo: -1, reloading: false, shoulder: 0, ads: 0, scope: 0, ult: 0, gren: 0 };
   const now0 = () => performance.now() / 1000;
 
@@ -181,7 +218,7 @@ export function createWeapons(ctx) {
     else if (kind === 'magout') { burst(0.06, 2200, 1200, 2, 0.3); tone(420, 260, 0.06, 0.18, 'triangle'); }
     else if (kind === 'magin') { tone(320, 190, 0.08, 0.35, 'triangle'); burst(0.07, 2600, 1500, 2, 0.28); }
     else if (kind === 'pump') { burst(0.1, 1600, 700, 1.8, 0.3); tone(240, 150, 0.1, 0.2, 'triangle'); }
-    else if (kind === 'equip') { burst(0.05, 2400, 1600, 2.4, 0.24); }
+    else if (kind === 'equip') { burst(0.05, 2400, 1600, 2.4, 0.24); tone(520, 380, 0.05, 0.12, 'triangle'); }
     else if (kind === 'slash') { burst(0.28, 900, 3800, 1.2, 0.3); tone(520, 1500, 0.2, 0.08); }
     else if (kind === 'slashHit') { tone(900, 300, 0.12, 0.3, 'triangle'); burst(0.08, 3500, 1500, 1.4, 0.3); }
     else if (kind === 'whoosh') { burst(0.18, 700, 2600, 1.4, 0.26); }
@@ -192,6 +229,15 @@ export function createWeapons(ctx) {
     else if (kind === 'clink') { tone(1500, 1100, 0.06, 0.12, 'triangle'); }
     else if (kind === 'boom') { burst(0.9, 1400, 60, 0.4, 1.0, 'lowpass'); tone(70, 22, 0.8, 1.0); burst(0.25, 3000, 600, 0.6, 0.4); }
     else if (kind === 'ult') { burst(0.6, 600, 4200, 0.9, 0.35); tone(220, 880, 0.5, 0.18, 'sawtooth'); }
+    else if (kind === 'rpg') { burst(0.55, 1800, 220, 0.5, 0.9, 'lowpass'); tone(160, 40, 0.4, 0.6, 'sawtooth'); burst(0.9, 900, 3000, 0.7, 0.35); }   // 쾅 + 로켓 쉬익
+    else if (kind === 'rocket') { burst(0.35, 1200, 2600, 0.8, 0.22); }
+    else if (kind === 'step') { burst(0.06, 420 + rnd() * 140, 160, 1.4, 0.28, 'lowpass'); tone(90, 60, 0.05, 0.12); }   // 모래 위 발소리
+    else if (kind === 'stepWood') { tone(180 + rnd() * 40, 110, 0.06, 0.25, 'triangle'); burst(0.04, 900, 400, 2, 0.18); }
+    else if (kind === 'shell') { tone(2400 + rnd() * 500, 1700, 0.05, 0.08, 'triangle'); tone(3300, 2600, 0.03, 0.05, 'triangle'); }   // 탄피가 땅에 떨어지는 소리
+    else if (kind === 'hurt') { tone(240, 120, 0.16, 0.45, 'square'); burst(0.12, 1400, 500, 1.2, 0.4); }
+    else if (kind === 'down') { tone(330, 70, 0.7, 0.5, 'sawtooth'); burst(0.4, 800, 150, 0.8, 0.4, 'lowpass'); }
+    else if (kind === 'respawn') { tone(440, 880, 0.25, 0.25); tone(660, 1320, 0.3, 0.18, 'triangle'); }
+    else if (kind === 'ui') { tone(1200, 900, 0.04, 0.12, 'triangle'); }
     else if (kind === 'death') { burst(0.9, 300, 3200, 0.6, 0.6); tone(110, 55, 0.9, 0.7, 'sawtooth'); tone(880, 220, 0.6, 0.2); }
   }
   const dist2me = (x, y, z) => { const m = ctx.me(); return Math.hypot(x - m.x, y - m.y, z - m.z); };
@@ -310,7 +356,7 @@ export function createWeapons(ctx) {
     m.position.copy(v1); m.quaternion.copy(q1); m.scale.copy(v2); m.visible = true; scene.add(m);
     drops.push({ m, v: new T.Vector3((rnd() - 0.5) * 0.8, 0.4, (rnd() - 0.5) * 0.8), life: 1.8 });
   }
-  function spawnSlash(o, yaw, c, mine, ownerRec, mini) {
+  function spawnSlash(o, yaw, c, mine, ownerRec, mini, elev = 0) {
     const sc = COMBO[c].scale, rollZ = [-0.62, 1.5708, 0.18][c];   // 1타 비스듬히 · 2타 가로로 휘어 오른 호 · 3타 크고 곧게
     const g = new T.Group(), core = new T.Mesh(c === 2 ? fxs.crGeoBig : fxs.crGeo, fxs.crMat), glow = new T.Mesh(fxs.crGeo, fxs.crGlow);
     core.scale.setScalar(sc); glow.scale.setScalar(1.22 * sc); glow.position.x = -0.06;
@@ -318,22 +364,23 @@ export function createWeapons(ctx) {
     const holder = new T.Group(); holder.add(g);
     // 판의 법선(Z)이 날아가는 방향을 향하고, 볼록한 쪽(+X)이 몸 앞쪽으로 오게 90° 돌려 세운다
     g.rotation.order = 'ZYX'; g.rotation.set(0, 0, rollZ);
-    holder.position.copy(o); holder.rotation.y = yaw; scene.add(holder);
-    const dx = -Math.sin(yaw), dz = -Math.cos(yaw);
-    slashes.push({ holder, g, o: o.clone(), dx, dz, x: o.x, y: o.y, z: o.z, t: 0, c, sc, mine, rec: ownerRec, hit: new Set(), mini: !!mini });
+    holder.position.copy(o); holder.rotation.order = 'YXZ'; holder.rotation.set(elev, yaw, 0); scene.add(holder);   // 위아래로 겨눈 만큼 판도 기운다
+    const ce = Math.cos(elev), dx = -Math.sin(yaw) * ce, dz = -Math.cos(yaw) * ce, dy = Math.sin(elev);
+    slashes.push({ holder, g, o: o.clone(), dx, dy, dz, x: o.x, y: o.y, z: o.z, t: 0, c, sc, mine, rec: ownerRec, hit: new Set(), mini: !!mini });
     if (mini) { holder.scale.setScalar(0.7); return; }
     my.stat.slashes = (my.stat.slashes || 0) + (mine ? 1 : 0);
     sfx('slash', mine ? 1 : lvlAt(o.x, o.y, o.z));
   }
 
   const deaths = [];
-  function spawnDeath(o, yaw, mine) {   // 「死」 글자 거대 검기: 앞으로 쭉 날아가며 닿는 것마다 한 번씩
+  function spawnDeath(o, yaw, mine, elev = 0) {   // 「死」 글자 거대 검기: 앞으로 쭉 날아가며 닿는 것마다 한 번씩
     const g = new T.Group(), S = C.ULT.size;
     const core = new T.Mesh(fxs.deathGeo, fxs.deathMat); core.scale.set(S, S, 1);
     const glow = new T.Mesh(fxs.deathGeo, fxs.deathMat); glow.scale.set(S * 1.25, S * 1.25, 1); glow.position.z = 0.3;
     const cr = new T.Mesh(fxs.crGeoBig, fxs.crMat); cr.scale.setScalar(S * 0.62); cr.rotation.z = Math.PI / 2; cr.position.z = -0.4;
-    g.add(cr, glow, core); g.position.copy(o); g.rotation.y = yaw; scene.add(g);
-    deaths.push({ g, o: o.clone(), x: o.x, y: o.y, z: o.z, dx: -Math.sin(yaw), dz: -Math.cos(yaw), t: 0, mine, hit: new Set() });
+    g.add(cr, glow, core); g.position.copy(o); g.rotation.order = 'YXZ'; g.rotation.set(elev, yaw, 0); scene.add(g);
+    const ce = Math.cos(elev);
+    deaths.push({ g, o: o.clone(), x: o.x, y: o.y, z: o.z, dx: -Math.sin(yaw) * ce, dy: Math.sin(elev), dz: -Math.cos(yaw) * ce, t: 0, mine, hit: new Set() });
     flashAt(o, 6, true); kickAdd(mine ? 0.6 : 0.2);
     sfx('death', mine ? 1 : lvlAt(o.x, o.y, o.z, 60));
     my.stat.deaths = (my.stat.deaths || 0) + 1;
@@ -396,11 +443,13 @@ export function createWeapons(ctx) {
     ctx.net.send(C.wpnMsg.reload(my.slot, g.reload.empty));
     refreshHud(); return true;
   }
+  function showWarhead(rec) { const inst = rec && rec.wp && rec.wp.inst[8]; if (inst && inst.warhead) inst.warhead.visible = true; }
   function onReloadStart(rec, slot, empty, mine) {
     if (!rec) return;
     const wp = wpOf(rec), W_ = WEAPONS[slot], dur = slot === 4 ? W_.reloadT + W_.shellT * 3 : (empty ? W_.reloadEmptyT : W_.reloadT);
     wp.reload = { t0: now0(), dur, empty: !!empty, slot, ev: 0 };
     if (slot !== 4) { sfx('magout', mine ? 1 : lvlAt(rec.av.root.position.x, 1, rec.av.root.position.z)); }
+    if (slot === 8 && !mine) setTimeout(() => showWarhead(rec), dur * 1000);
   }
 
   // ---- 검: 클릭 한 번 = 베기 한 번 = 검기 한 발(빠른 클릭 = 빠른 검기)
@@ -408,38 +457,44 @@ export function createWeapons(ctx) {
     const c = C.swordSwing(my.sword, now); if (c < 0) return false;
     const rec = ctx.me().rec, m = ctx.me();
     startSwing(rec, c, true);
-    const yaw = ctx.camState().yaw;
-    ctx.net.send(C.wpnMsg.swing(c, [m.x, m.y, m.z], yaw));
-    my.timeline.push({ at: now + C.SWORD_LAUNCH, fn: () => swordStrike(c, yaw) });
+    const yaw = ctx.camState().yaw, elev = aimElev(m.y + 1.0);
+    ctx.net.send(C.wpnMsg.swing(c, [m.x, m.y, m.z], yaw, elev));
+    my.timeline.push({ at: now + C.SWORD_LAUNCH, fn: () => swordStrike(c, yaw, elev) });
     return true;
   }
   function startSwing(rec, c, mine) {   // 앞 동작은 끊고 새 동작을 시작한다(휘두르는 구간부터: 클릭에 바로 반응)
     const wp = wpOf(rec); wp.swing = { c, t: 0, dur: COMBO[c].dur * 0.7, hitDone: false, u0: 0.3 };
     sfx('whoosh', mine ? 1 : lvlAt(rec.av.root.position.x, 1, rec.av.root.position.z));
   }
-  function swordStrike(c, yaw) {   // 접촉 프레임: 눈앞 근접 타격 + 검기 발사
+  // 화면 가운데 조준점을 향한 상하 각도(라디안, 위 +): 높이 fromY 에서 조준점까지. 검기·근접·궁극기가 카메라 상하를 따라간다
+  function aimElev(fromY) {
+    const a = computeAim(), m = ctx.me(), h = Math.hypot(a.x - m.x, a.z - m.z);
+    const e = h > 1.5 ? Math.atan2(a.y - fromY, h) : Math.asin(clamp(a.dir.y, -1, 1));
+    return clamp(e, -1.2, 1.25);
+  }
+  function swordStrike(c, yaw, elev = 0) {   // 접촉 프레임: 눈앞 근접 타격 + 검기 발사(겨눈 상하 각도 그대로)
     const m = ctx.me(); if (!m.rec) return;
-    const sp = ctx.spider(), dx = -Math.sin(yaw), dz = -Math.cos(yaw), P = COMBO[c];
-    const origin = new T.Vector3(m.x + dx * 0.6, m.y + 1.0, m.z + dz * 0.6);
+    const sp = ctx.spider(), ce = Math.cos(elev), dx = -Math.sin(yaw), dz = -Math.cos(yaw), P = COMBO[c];
+    const origin = new T.Vector3(m.x + dx * 0.6 * ce, m.y + 1.0 + Math.sin(elev) * 0.6, m.z + dz * 0.6 * ce);
     if (sp && sp.active) {
-      const cx = m.x + dx * P.reach * 0.55, cz = m.z + dz * P.reach * 0.55;
-      for (const h of sp.hitTest(cx, cz, 1.3 * P.reach / 2.6 + 0.6, m.y)) { reportHit(2, c, false, h.kind, h.id, 1); ctx.fx.spark(cx, m.y + 1.2, cz); sfx('slashHit', 0.8); }
+      const rr = P.reach * 0.55, cx = m.x + dx * rr * ce, cz = m.z + dz * rr * ce, cy = m.y + Math.sin(elev) * rr;
+      for (const h of sp.hitTest(cx, cz, 1.3 * P.reach / 2.6 + 0.6, cy)) { reportHit(2, c, false, h.kind, h.id, 1); ctx.fx.spark(cx, cy + 1.2, cz); sfx('slashHit', 0.8); }
     }
-    spawnSlash(origin, yaw, c, true, m.rec);
+    spawnSlash(origin, yaw, c, true, m.rec, false, elev);
   }
   // ---- 검 궁극기: 아주 빠른 난무(주변 연속 타격) → 「死」 거대 검기
   function ultimate(now) {
     if (!C.ultStart(my.sword, now)) { if (C.ultLeft(my.sword, now) > 0) ctx.log(`궁극기 대기 ${Math.ceil(C.ultLeft(my.sword, now))}초`); return false; }
-    const m = ctx.me(), rec = m.rec, yaw = ctx.camState().yaw;
+    const m = ctx.me(), rec = m.rec, yaw = ctx.camState().yaw, elev = aimElev(m.y + 1.6);
     startUlt(rec, yaw, true);
-    ctx.net.send(C.wpnMsg.ult([m.x, m.y, m.z], yaw));
+    ctx.net.send(C.wpnMsg.ult([m.x, m.y, m.z], yaw, elev));
     const sp = ctx.spider();
     for (let i = 0; i < C.ULT.rushHits; i++) my.timeline.push({ at: now + C.ultHitT(i), fn: () => {
       const mm = ctx.me(); if (!mm.rec) return;
       const dx = -Math.sin(yaw), dz = -Math.cos(yaw), cx = mm.x + dx * 1.6, cz = mm.z + dz * 1.6;
       if (sp && sp.active) for (const h of sp.hitTest(cx, cz, C.ULT.rushReach, mm.y)) { reportHit(2, 0, false, h.kind, h.id, 1, 'r'); ctx.fx.spark(cx + (rnd() - 0.5) * 2, mm.y + 0.8 + rnd() * 1.4, cz + (rnd() - 0.5) * 2); }
     } });
-    my.timeline.push({ at: now + C.ULT.rushT, fn: () => { const mm = ctx.me(); if (mm.rec) spawnDeath(new T.Vector3(mm.x - Math.sin(yaw) * 1.2, mm.y + 1.6, mm.z - Math.cos(yaw) * 1.2), yaw, true); } });
+    my.timeline.push({ at: now + C.ULT.rushT, fn: () => { const mm = ctx.me(); if (mm.rec) spawnDeath(new T.Vector3(mm.x - Math.sin(yaw) * 1.2, mm.y + 1.6, mm.z - Math.cos(yaw) * 1.2), yaw, true, elev); } });
     return true;
   }
   function startUlt(rec, yaw, mine) {
@@ -474,8 +529,19 @@ export function createWeapons(ctx) {
     const seed = (rnd() * 4294967295) >>> 0, rr = rngSeed(seed), sp = ctx.spider();
     let firstDir = null, firstHit = null, hitN = 0, firstLen = W_.range;
     const moving = ctx.me().speed > 0.5, ends = [];
+    recoilShot(slot, now);
+    if (W_.rocket) {   // RPG: 눈에 보이는 로켓이 날아가 닿는 곳에서 폭발(피해는 폭발이 계산)
+      const rd = C.spreadDir(dir.x, dir.y, dir.z, C.spreadFor(slot, view.ads, moving), rr(), rr());
+      spawnRocket([o.x, o.y, o.z], rd, true, rec);
+      ctx.net.send(C.wpnMsg.rocket([o.x, o.y, o.z], rd));
+      sfx('rpg', 1); flashAt(o, FLASH[8], true, { rec, slot });
+      wp.kick = Math.min(1.6, wp.kick + KICK[8][0]); wp.elevT = Math.asin(clamp(dir.y, -0.9, 0.9)); wp.elev = wp.elevT;
+      kickAdd(KICK[8][1]); ctx.me().ctrl.setAim(ctx.camState().yaw); my.aimUntil = now + 2.2;
+      my.stat.fired++; refreshHud(); return true;
+    }
+    const pd = slot === 4 ? C.pelletDirs([dir.x, dir.y, dir.z], C.spreadFor(slot, view.ads, moving), W_.pellets, rr) : null;   // 산탄: seed 로 정해지는 퍼짐 무늬
     for (let p = 0; p < W_.pellets; p++) {
-      const sd = C.spreadDir(dir.x, dir.y, dir.z, C.spreadFor(slot, view.ads, moving) * (p === 0 && slot === 3 ? 0.4 : 1), rr(), rr());
+      const sd = pd ? pd[p] : C.spreadDir(dir.x, dir.y, dir.z, C.spreadFor(slot, view.ads, moving) * (p === 0 && slot === 3 ? 0.4 : 1), rr(), rr());
       const tW = worldRay(o.x, o.y, o.z, sd[0], sd[1], sd[2], W_.range);
       let hit = null;
       if (sp && sp.active) hit = sp.hitRay(o.x, o.y, o.z, sd[0], sd[1], sd[2], Math.min(W_.range, tW), 0.05);
@@ -536,6 +602,48 @@ export function createWeapons(ctx) {
     }
   }
 
+  // ---- 반동: 쏠 때마다 시선이 위로(좌우 살짝) 튀고 연사하면 누적, 멈추면 원래 시선으로 돌아온다
+  function recoilShot(slot, now) {
+    my.streak = now - my.lastShotAt < WEAPONS[slot].interval * 1.9 + 0.05 ? my.streak + 1 : 0; my.lastShotAt = now;
+    const [up, side] = C.recoilKick(slot, my.streak, view.ads, rnd() * 2 - 1);
+    my.recoil += up; if (ctx.kickView) ctx.kickView(-up, side);
+    view.recoil = my.recoil;
+  }
+  function recoilFrame(dt, now) {
+    if (!(my.recoil > 0)) return;
+    const firing = my.trig && now - my.lastShotAt < 0.25, back = C.recoilRecover(my.recoil, dt, firing);
+    my.recoil -= back; if (ctx.kickView) ctx.kickView(back, 0); view.recoil = my.recoil;
+  }
+  // ---- RPG 로켓
+  const rockets = [];
+  function spawnRocket(o, d, mine, rec) {
+    if (!tpl) return;
+    const wh = tpl[8].getObjectByName('warhead').clone(true), g = new T.Group(); wh.position.z += 0.62; g.add(wh);
+    const fl = new T.Mesh(fxs.glowGeo, fxs.glowMat); fl.position.z = 0.25; fl.scale.set(0.9, 0.9, 2.4); g.add(fl);
+    g.position.fromArray(o); g.quaternion.setFromUnitVectors(v2.set(0, 0, -1), v1.fromArray(d)); scene.add(g);
+    rockets.push({ g, p: o.slice(), v: d.map((q) => q * C.ROCKET.speed), t: 0, mine, smoke: 0 });
+    if (rec && rec.wp) { const inst = rec.wp.inst[8]; if (inst && inst.warhead) inst.warhead.visible = false; }
+    sfx('rocket', mine ? 0.8 : lvlAt(o[0], o[1], o[2], 50));
+  }
+  function rocketFrame(dt) {
+    const sp = ctx.spider();
+    for (let i = rockets.length - 1; i >= 0; i--) {
+      const r = rockets[i]; r.t += dt;
+      const sub = Math.max(1, Math.ceil(dt * C.ROCKET.speed / 0.8)), h = dt / sub; let at = null;
+      for (let k = 0; k < sub && !at; k++) {
+        const px = r.p[0], py = r.p[1], pz = r.p[2];
+        C.rocketStep(r.p, r.v, h);
+        const sl = Math.hypot(r.p[0] - px, r.p[1] - py, r.p[2] - pz) || 1e-6;
+        if (sp && sp.active && r.t > 0.03) { const hh = sp.hitRay(px, py, pz, (r.p[0] - px) / sl, (r.p[1] - py) / sl, (r.p[2] - pz) / sl, sl, 0.15); if (hh) { at = [px + (r.p[0] - px) / sl * hh.d, py + (r.p[1] - py) / sl * hh.d, pz + (r.p[2] - pz) / sl * hh.d]; break; } }
+        if (r.p[1] < ctx.groundY(r.p[0], r.p[2], r.p[1] + 0.3) || (r.t > 0.08 && r.p[1] - ctx.heightAt(r.p[0], r.p[2]) < 2 && ctx.blocked(r.p[0], r.p[2], r.p[1] - 0.2))) at = r.p.slice();
+      }
+      if (!at && r.t > C.ROCKET.life) at = r.p.slice();
+      r.g.position.fromArray(r.p); r.g.quaternion.setFromUnitVectors(v2.set(0, 0, -1), v1.fromArray(r.v).normalize());
+      r.smoke -= dt; if (r.smoke <= 0) { r.smoke = 0.035; ctx.fx.poof(r.p[0], r.p[1], r.p[2], 1); }
+      if (at) { scene.remove(r.g); rockets.splice(i, 1); explode(at, r.mine, 8); }
+    }
+  }
+
   // ---- 수류탄: 클릭 = 던지기(쿨 1.1 s). 손에서 떠난 뒤 포물선 · 튕김 · 2.2 s 뒤 폭발
   function throwGrenade(now) {
     if (now < my.gren.nextAt) return false;
@@ -563,9 +671,9 @@ export function createWeapons(ctx) {
     const mesh = tpl[6].clone(true); mesh.scale.setScalar(SCALE[6]); mesh.position.fromArray(o); scene.add(mesh);
     nades.push({ mesh, p: o.slice(), v: v.slice(), t: 0, mine, spin: new T.Vector3(rnd() * 12 - 6, rnd() * 12 - 6, rnd() * 12 - 6) });
   }
-  function explode(p, mine) {
-    const [x, y, z] = p;
-    const b = { t: 0, x, y, z };
+  function explode(p, mine, w = 6) {
+    const [x, y, z] = p, RAD = w === 8 ? C.ROCKET.r : C.GREN.r;
+    const b = { t: 0, x, y, z, R: RAD };
     b.ball = new T.Mesh(fxs.boomGeo, fxs.boomMat.clone()); b.ball.position.set(x, y + 0.3, z); scene.add(b.ball);
     b.ring = new T.Mesh(fxs.ringGeo, fxs.ringMat.clone()); b.ring.rotation.x = -Math.PI / 2; b.ring.position.set(x, ctx.groundY(x, z, y + 0.5) + 0.08, z); scene.add(b.ring);
     b.flash = new T.Sprite(fxs.flashMat.clone()); b.flash.position.set(x, y + 0.6, z); b.flash.scale.setScalar(7); b.flash.renderOrder = 7; scene.add(b.flash);
@@ -580,9 +688,9 @@ export function createWeapons(ctx) {
     if (!mine) return;
     const sp = ctx.spider(); if (!sp || !sp.active) return;
     const seen = new Set();
-    for (const r of [0.8, 1.8, 3, 4.4, 5.5, C.GREN.r]) for (const h of sp.hitTest(x, z, r, y - 0.4)) {   // 가까운 반지름부터: 처음 걸린 반지름 ≈ 거리
+    for (const r of [0.8, 1.8, 3, 4.4, 5.5, RAD].filter((q, i, a) => q <= RAD && a.indexOf(q) === i)) for (const h of sp.hitTest(x, z, r, y - 0.4)) {   // 가까운 반지름부터: 처음 걸린 반지름 ≈ 거리
       const key = h.kind + h.id; if (seen.has(key)) continue; seen.add(key);
-      reportHit(6, 0, false, h.kind, h.id, Math.max(0, r - 0.8));
+      reportHit(w, 0, false, h.kind, h.id, Math.max(0, r - 0.8));
     }
   }
   // ---- 궤적 미리보기(수류탄을 들고 있을 때): 손 → 첫 착지 + 튕김, 착지 원
@@ -608,8 +716,9 @@ export function createWeapons(ctx) {
     for (const s of C.GUN_SLOTS) {
       const g = my.guns[s]; if (!g) continue;
       const done = C.tickReload(g, t);
-      if (done) { if (s === my.slot) { refreshHud(); sfx(s === 4 ? 'pump' : 'magin', 0.8); } if (rec.wp) rec.wp.reload = null; }
+      if (done) { if (s === my.slot) { refreshHud(); sfx(s === 4 ? 'pump' : 'magin', 0.8); } if (rec.wp) rec.wp.reload = null; if (s === 8) showWarhead(rec); }
     }
+    recoilFrame(dt, t);
     // 자동 연사 (소총): 방아쇠를 쥔 채로
     if (my.trig && isGun(my.slot) && WEAPONS[my.slot].auto && canAct()) shoot(t);
     // 총이 올라가 있는 동안(쏜 뒤 2 s · 방아쇠를 쥔 동안 · 조준 중)과 검을 휘두르는 동안 몸이 카메라를 향한다
@@ -660,7 +769,19 @@ export function createWeapons(ctx) {
     return { r: lerp3(a.r, b.r, k), l: lerp3(a.l, b.l, k), tor: lerp3(a.tor, b.tor, k) };
   }
   const KF_THROW = [{ t: 0, r: [-62, -8, 66], l: [-18, 0, -58], tor: [0, 0, 0] }, { t: 0.35, r: [-200, 10, 80], l: [-70, 0, -40], tor: [-10, 24, 0] }, { t: 0.55, r: [-84, -20, 82], l: [-30, 0, -56], tor: [18, -24, 0] }, { t: 1, r: [-62, -8, 66], l: [-18, 0, -58], tor: [0, 0, 0] }];
+  // 발소리: 땅을 디딘 채 움직이면 걸음마다(달리면 더 자주). 남의 발소리는 거리만큼 작게
+  function footsteps(rec, dt) {
+    const st = rec.ctrl && rec.ctrl.state; if (!st || !st.grounded || st.swim === 2 || !(st.speed > 0.6)) { if (rec._step !== undefined) rec._step = 0.3; return; }
+    rec._step = (rec._step || 0) + st.speed * dt;
+    const stride = st.speed > 4.5 ? 1.25 : 0.85;
+    if (rec._step >= stride) {
+      rec._step = 0; const p = rec.av.root.position, mine = rec === ctx.me().rec;
+      const lv = mine ? 0.55 : lvlAt(p.x, p.y, p.z, 14) * 0.5;
+      sfx(p.y > ctx.heightAt(p.x, p.z) + 0.25 ? 'stepWood' : 'step', lv);
+    }
+  }
   function afterUpdate(rec, dt, now) {
+    footsteps(rec, dt);
     if (!rec.wp) return;
     poseUpdate(rec, dt, now);
     flushShots(rec);   // 이번 프레임 자세가 끝난 뒤의 총구에서 탄·섬광을 낸다
@@ -775,6 +896,7 @@ export function createWeapons(ctx) {
       // 총 모델이 반동으로 뒤로 밀림
       inst.holder.position.z = inst._z0 === undefined ? (inst._z0 = inst.holder.position.z) : inst._z0;
       inst.model.position.z = wp.kick * 0.045 / inst.sc * 0.5;
+      inst.model.rotation.x = wp.kick * (slot === 8 || slot === 7 ? 0.22 : 0.14);   // 총구가 위로 튄다(반동이 쌓이면 더 크게)
       if (inst.flashT > 0) inst.flashT -= dt;
     }
     if (wp.draw > 0) { const dr = smooth(clamp(wp.draw, 0, 1)); r[0] += 34 * dr; l[0] += 26 * dr; }   // 꺼내는 동작: 팔이 아래에서 올라온다(0.15 s)
@@ -784,6 +906,7 @@ export function createWeapons(ctx) {
   // ===================================================================== 효과 갱신
   function updateFx(dt) {
     if (!fxs) return;
+    rocketFrame(dt);
     for (const t of trs) {   // 날아가는 탄: 첫 프레임은 총구에 붙은 채로 보이고, 그 뒤부터 날아간다
       if (!t.on) continue;
       if (t.fresh) t.fresh = false; else t.age += dt;
@@ -796,7 +919,7 @@ export function createWeapons(ctx) {
       if (!c.rest) {
         c.v.y -= 16 * dt; c.m.position.addScaledVector(c.v, dt); c.m.rotation.x += c.rot.x * dt; c.m.rotation.y += c.rot.y * dt; c.m.rotation.z += c.rot.z * dt;
         const g = ctx.groundY(c.m.position.x, c.m.position.z, c.m.position.y + 0.2) + 0.012;
-        if (c.m.position.y <= g) { c.m.position.y = g; c.v.multiplyScalar(0.25); c.v.y = 0; c.rest = true; c.life = Math.min(c.life, 1.0); }
+        if (c.m.position.y <= g) { c.m.position.y = g; c.v.multiplyScalar(0.25); c.v.y = 0; c.rest = true; c.life = Math.min(c.life, 1.0); sfx('shell', lvlAt(c.m.position.x, c.m.position.y, c.m.position.z, 12) * 0.8); }
       }
     }
     for (let i = drops.length - 1; i >= 0; i--) {
@@ -818,9 +941,9 @@ export function createWeapons(ctx) {
     }
     for (let i = booms.length - 1; i >= 0; i--) {   // 폭발: 불덩이 0.45 s 커지며 사라짐 · 충격파 고리 0.6 s · 섬광 0.12 s
       const b = booms[i]; b.t += dt;
-      const u = b.t / 0.45, R = 0.6 + C.GREN.r * 0.55 * Math.sqrt(clamp(u, 0, 1));
+      const u = b.t / 0.45, R = 0.6 + b.R * 0.55 * Math.sqrt(clamp(u, 0, 1));
       b.ball.scale.setScalar(R); b.ball.material.opacity = 0.95 * clamp(1 - u, 0, 1); b.ball.material.color.setHSL(0.08 - 0.05 * clamp(u, 0, 1), 1, 0.6 - 0.25 * clamp(u, 0, 1));
-      const ru = b.t / 0.6; b.ring.scale.setScalar(0.5 + C.GREN.r * ru); b.ring.material.opacity = 0.85 * clamp(1 - ru, 0, 1);
+      const ru = b.t / 0.6; b.ring.scale.setScalar(0.5 + b.R * ru); b.ring.material.opacity = 0.85 * clamp(1 - ru, 0, 1);
       b.flash.material.opacity = clamp(1 - b.t / 0.12, 0, 1); b.flash.visible = b.t < 0.12;
       if (b.t > 0.6) { scene.remove(b.ball, b.ring, b.flash); b.ball.material.dispose(); b.ring.material.dispose(); b.flash.material.dispose(); booms.splice(i, 1); }
     }
@@ -829,7 +952,7 @@ export function createWeapons(ctx) {
       const d = deaths[i]; d.t += dt;
       const step = C.ULT.speed * dt, n = Math.max(1, Math.ceil(step / 0.8)), sub = step / n;
       for (let k = 0; k < n; k++) {
-        d.x += d.dx * sub; d.z += d.dz * sub; d.y = Math.max(ctx.groundY(d.x, d.z, d.y + 0.3) + C.ULT.size * 0.42, d.o.y - 0.4);
+        d.x += d.dx * sub; d.z += d.dz * sub; d.y = Math.max(ctx.groundY(d.x, d.z, d.y + 0.3) + C.ULT.size * 0.2, d.y + d.dy * sub);   // 겨눈 상하로(땅 밑으로는 안 들어감)
         if (sp && sp.active) for (const h of sp.hitTest(d.x, d.z, C.ULT.r, d.y - 1.6)) {
           const key = h.kind + h.id; if (d.hit.has(key)) continue; d.hit.add(key);
           for (let q = 0; q < 4; q++) ctx.fx.spark(d.x + (rnd() - 0.5) * 3, d.y - 1 + rnd() * 3, d.z + (rnd() - 0.5) * 3);
@@ -840,7 +963,7 @@ export function createWeapons(ctx) {
       const grow = 1 + d.t * 0.5, fade = clamp((C.ULT.life - d.t) / 0.35, 0, 1);
       d.g.scale.setScalar(grow); d.g.children.forEach((c) => { c.visible = fade > 0.02; });
       d.g.children[2].rotation.z = Math.sin(d.t * 30) * 0.03;
-      if (d.t > C.ULT.life || Math.hypot(d.x - d.o.x, d.z - d.o.z) > C.ULT.range) { scene.remove(d.g); deaths.splice(i, 1); }
+      if (d.t > C.ULT.life || Math.hypot(d.x - d.o.x, d.y - d.o.y, d.z - d.o.z) > C.ULT.range) { scene.remove(d.g); deaths.splice(i, 1); }
     }
     // 검기
     for (let i = slashes.length - 1; i >= 0; i--) {
@@ -852,15 +975,15 @@ export function createWeapons(ctx) {
       }
       const step = SLASH.speed * dt, n = Math.max(1, Math.ceil(step / 0.6)), sub = step / n; let stop = false;
       for (let k = 0; k < n && !stop; k++) {
-        s.x += s.dx * sub; s.z += s.dz * sub;
-        s.y = Math.max(ctx.groundY(s.x, s.z, s.y + 0.3) + 0.9, s.o.y - 0.25);
+        s.x += s.dx * sub; s.z += s.dz * sub; s.y += s.dy * sub;   // 겨눈 상하 각도대로 날아간다(땅에 붙이지 않는다)
+        if (s.y < ctx.groundY(s.x, s.z, s.y + 0.3) + 0.15) { stop = true; ctx.fx.poof(s.x, s.y, s.z, 3); break; }
         if (sp && sp.active) for (const h of sp.hitTest(s.x, s.z, SLASH.r * s.sc, s.y - 0.9)) {
           const key = h.kind + h.id; if (s.hit.has(key)) continue; s.hit.add(key);
           ctx.fx.spark(s.x, s.y, s.z); sfx('slashHit', s.mine ? 0.9 : lvlAt(s.x, s.y, s.z));
           if (s.mine) reportHit(2, s.c, true, h.kind, h.id, 1);
           if (h.kind === 'boss') stop = true;
         }
-        if (s.t > SLASH.life || Math.hypot(s.x - s.o.x, s.z - s.o.z) > SLASH.range) stop = true;   // an energy crescent passes through props
+        if (s.t > SLASH.life || Math.hypot(s.x - s.o.x, s.y - s.o.y, s.z - s.o.z) > SLASH.range) stop = true;   // an energy crescent passes through props
       }
       s.holder.position.set(s.x, s.y, s.z);
       const grow = 1 + s.t * 0.45, fade = clamp((SLASH.life - s.t) / 0.25, 0, 1) * (stop ? 0 : 1);
@@ -889,9 +1012,9 @@ export function createWeapons(ctx) {
       const W_ = WEAPONS[m.w], sent = new T.Vector3(m.o[0], m.o[1], m.o[2]);
       // 탄은 이 화면에서 보이는 총구에서 출발한다(자세가 잡힌 뒤 flushShots 가 계산). 보낸 쪽 총구(sent)에서 겨눈 끝점은 그대로 둔다
       const rr = rngSeed(m.seed), ends = [{ e: new T.Vector3(sent.x + m.d[0] * m.l, sent.y + m.d[1] * m.l, sent.z + m.d[2] * m.l), hit: m.h ? { kind: m.h.kind } : null, ground: !m.h }];
-      for (let p = 1; p < W_.pellets; p++) {
-        const sd = C.spreadDir(m.d[0], m.d[1], m.d[2], W_.spread, rr(), rr()), L = Math.min(W_.range, m.l * (0.7 + rr() * 0.5));
-        ends.push({ e: new T.Vector3(sent.x + sd[0] * L, sent.y + sd[1] * L, sent.z + sd[2] * L), hit: null, ground: false });
+      if (m.w === 4) {   // 산탄: 보낸 쪽과 같은 seed → 같은 퍼짐 무늬(가운데 알갱이 방향 m.d 기준)
+        const pd = C.pelletDirs(m.d, C.spreadFor(4, m.z || 0, false), W_.pellets, rr);
+        for (let p = 1; p < pd.length; p++) { const sd = pd[p], L = Math.min(W_.range, m.l * (0.8 + 0.4 * ((p * 0.37) % 1))); ends.push({ e: new T.Vector3(sent.x + sd[0] * L, sent.y + sd[1] * L, sent.z + sd[2] * L), hit: null, ground: false }); }
       }
       queueShot(rec, m.w, ends, sent, false);
       sfx(SND[m.w], lvlAt(sent.x, sent.y, sent.z, 60));
@@ -906,7 +1029,8 @@ export function createWeapons(ctx) {
         setTimeout(() => {
           if (!rec.av || !rec.av.root.parent) return;
           const p = rec.av.root.position;
-          spawnSlash(new T.Vector3(p.x - Math.sin(yaw) * 0.6, p.y + 1.0, p.z - Math.cos(yaw) * 0.6), yaw, m.c, false, rec);
+          const ce = Math.cos(m.p);
+          spawnSlash(new T.Vector3(p.x - Math.sin(yaw) * 0.6 * ce, p.y + 1.0 + Math.sin(m.p) * 0.6, p.z - Math.cos(yaw) * 0.6 * ce), yaw, m.c, false, rec, false, m.p);
         }, C.SWORD_LAUNCH * 1000);
       }, 90);
     } else if (m.k === 'u') {
@@ -914,8 +1038,13 @@ export function createWeapons(ctx) {
       const yaw = m.a;
       setTimeout(() => {
         startUlt(rec, yaw, false);
-        setTimeout(() => { if (!rec.av || !rec.av.root.parent) return; const p = rec.av.root.position; spawnDeath(new T.Vector3(p.x - Math.sin(yaw) * 1.2, p.y + 1.6, p.z - Math.cos(yaw) * 1.2), yaw, false); }, C.ULT.rushT * 1000);
+        setTimeout(() => { if (!rec.av || !rec.av.root.parent) return; const p = rec.av.root.position; spawnDeath(new T.Vector3(p.x - Math.sin(yaw) * 1.2, p.y + 1.6, p.z - Math.cos(yaw) * 1.2), yaw, false, m.p); }, C.ULT.rushT * 1000);
       }, 90);
+    } else if (m.k === 'k') {   // 남의 RPG: 같은 로켓이 이 화면에서도 날아가 터진다(피해는 쏜 사람 화면이 계산)
+      const wp = wpOf(rec); if (wp.slot !== 8) setRemoteSlot(rec, 8);
+      spawnRocket(m.o, m.d, false, rec); sfx('rpg', lvlAt(m.o[0], m.o[1], m.o[2], 70));
+      flashAt(new T.Vector3(m.o[0], m.o[1], m.o[2]), FLASH[8], true, { rec, slot: 8 });
+      wp.kick = Math.min(1.6, wp.kick + KICK[8][0]); wp.elevT = Math.asin(clamp(m.d[1], -0.9, 0.9)); wp.elev = wp.elevT;
     } else if (m.k === 'g') {
       const wp = wpOf(rec); if (wp.slot !== 6) setRemoteSlot(rec, 6);
       wp.throwT = 0.16; spawnGrenade(m.o, m.v, false); sfx('throw', lvlAt(m.o[0], m.o[1], m.o[2]));
@@ -939,13 +1068,14 @@ export function createWeapons(ctx) {
     for (const d of drops) scene.remove(d.m); drops.length = 0;
     for (const n of nades) scene.remove(n.mesh); nades.length = 0;
     for (const d of deaths) scene.remove(d.g); deaths.length = 0;
+    for (const r of rockets) scene.remove(r.g); rockets.length = 0;
   }
 
   return {
     load, equip, cycle, trigger, alt, reload, frame, afterUpdate, onNet, setRemoteSlot, dispose, attackPress,
     get ads() { return view.ads; }, get scope() { return view.scope; }, fov: (base) => C.adsFov(base, my.slot, view.ads), setRemoteAds: (rec, a) => { const wp = wpOf(rec); wp.ads = a; },
     get slot() { return my.slot; }, get shoulder() { return view.shoulder; }, get view() { return view; }, get ready() { return ready; }, get kick() { return kickCam; }, get guns() { return my.guns; },
-    get sword() { return my.sword; }, kickAdd, attachRec: (rec) => wpOf(rec), instOf,
-    debug: { my, trs, cas, slashes, nades, booms, deaths, shotLog, handCache, POSE, KF, computeAim, worldRay, spawnSlash, flashAt, tracer, muzzleWorld, explode, get fxs() { return fxs; } },
+    get sword() { return my.sword; }, kickAdd, attachRec: (rec) => wpOf(rec), instOf, sfx,
+    debug: { my, trs, cas, slashes, nades, booms, deaths, rockets, spawnRocket, aimElev, shotLog, handCache, POSE, KF, computeAim, worldRay, spawnSlash, flashAt, tracer, muzzleWorld, explode, get fxs() { return fxs; } },
   };
 }
