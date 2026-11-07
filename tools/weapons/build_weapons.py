@@ -10,6 +10,9 @@
     m4a1:    body · mag · charging_handle · bolt · selector,  빈 노드 muzzle · eject · grip_r · grip_l · mag_well
     shotgun: body · pump · shell_gate,                          빈 노드 muzzle · eject · grip_r · grip_l
     sword:   body · gem,                                        빈 노드 grip · tip
+    pistol:  body · slide · mag,                                빈 노드 muzzle · eject · grip_r · grip_l
+    sniper:  body · bolt · mag,                                 빈 노드 muzzle · eject · grip_r · grip_l · scope
+    grenade: body,                                              빈 노드 grip
 """
 import bpy, bmesh, math, sys, os
 from mathutils import Vector, Matrix
@@ -44,6 +47,7 @@ PALETTE = {   # name: (hex, roughness, metallic, emissive hex or None, emissive 
     'guard':    ('#e0b04c', 0.32, 0.9, None, 0),       # 가드·폼멜: 금빛
     'wrap':     ('#5b2c4a', 0.8, 0.0, None, 0),        # 손잡이 감개
     'gem':      ('#ff5a7a', 0.15, 0.0, '#ff4f7a', 1.8), # 폼멜 보석
+    'grenade':  ('#5e6b3a', 0.7, 0.1, None, 0),        # 수류탄 몸통: 올리브
 }
 
 def make_materials(names):
@@ -381,6 +385,105 @@ def build_sword(mats):
     empty('tip', (0, 1.125, 0), root)
     return root
 
+
+# ----------------------------------------------------------------------------------------------------------------------
+# 권총 (폴리머 프레임 + 강철 슬라이드, 12발 복열 탄창). 원점 = 방아쇠 위, 총열 중심선 z = 0.030.
+# ----------------------------------------------------------------------------------------------------------------------
+def build_pistol(mats):
+    names = ['anodized', 'steel', 'polymer', 'polymer2', 'accent', 'brass']
+    root = empty('pistol', (0, 0, 0))
+    B = Part('body', names, mats)
+    B.prism([(-0.045, 0.004), (0.11, 0.004), (0.11, 0.018), (-0.045, 0.018)], -0.0125, 0.0125, 'polymer')                  # 프레임(레일 포함)
+    B.prism([(-0.035, 0.004), (-0.010, 0.004), (-0.040, -0.095), (-0.085, -0.095), (-0.062, 0.010)], -0.0145, 0.0145, 'polymer2')   # 손잡이
+    for k in range(6): B.box((0.0148, -0.040 - 0.006 * k, -0.030 - 0.010 * k), (0.002, 0.024, 0.004), 'polymer', bevel=0)
+    for k in range(6): B.box((-0.0148, -0.040 - 0.006 * k, -0.030 - 0.010 * k), (0.002, 0.024, 0.004), 'polymer', bevel=0)
+    B.prism([(-0.005, 0.004), (0.035, 0.004), (0.038, -0.018), (0.026, -0.034), (0.002, -0.032), (-0.008, -0.014)], -0.003, 0.003, 'polymer')   # 방아쇠울
+    B.box((0, 0.012, -0.012), (0.004, 0.006, 0.016), 'steel')                                                              # 방아쇠
+    B.cyl((0, 0.12, 0.030), 0.0068, 0.0068, 0.012, 'y', 'steel', 14)                                                      # 총구 끝
+    bodyObj = B.build(root)
+    S = Part('slide', ['steel', 'accent'], mats)
+    S.prism([(-0.052, 0.018), (0.122, 0.018), (0.122, 0.044), (0.11, 0.048), (-0.046, 0.048), (-0.052, 0.040)], -0.0135, 0.0135, 'steel')
+    for k in range(5):
+        for sx in (1, -1): S.box((sx * 0.0137, -0.040 + 0.006 * k, 0.033), (0.0012, 0.0025, 0.022), 'accent', bevel=0)   # 뒤 슬라이드 홈(주황)
+    S.box((0, 0.114, 0.052), (0.004, 0.006, 0.008), 'accent')                                                              # 가늠쇠
+    S.box((0, -0.042, 0.052), (0.014, 0.006, 0.008), 'steel')                                                              # 가늠자
+    S.box((0.0137, 0.02, 0.034), (0.0012, 0.020, 0.010), 'steel', bevel=0)                                                 # 배출구 테
+    S.build(root)
+    M = Part('mag', ['polymer', 'brass'], mats)
+    M.prism([(-0.036, -0.004), (-0.022, -0.004), (-0.050, -0.098), (-0.080, -0.098), (-0.058, -0.004)], -0.011, 0.011, 'polymer')
+    M.box((0, -0.065, -0.104), (0.026, 0.040, 0.010), 'polymer')
+    M.build(root)
+    empty('muzzle', (0, 0.128, 0.030), root)
+    empty('eject', (0.016, 0.02, 0.040), root)
+    empty('grip_r', (0, -0.048, -0.040), root)
+    empty('grip_l', (0, -0.040, -0.050), root)
+    return root
+
+# ----------------------------------------------------------------------------------------------------------------------
+# 볼트액션 저격소총 (나무 개머리판, 긴 총열, 큰 망원 조준경, 5발 탄창). 원점 = 방아쇠 위, 총열 중심선 z = 0.055.
+# ----------------------------------------------------------------------------------------------------------------------
+def build_sniper(mats):
+    names = ['anodized', 'steel', 'wood', 'woodDark', 'polymer', 'accent', 'brass']
+    root = empty('sniper', (0, 0, 0))
+    B = Part('body', names, mats)
+    B.prism([(-0.13, 0.036), (0.16, 0.036), (0.16, 0.074), (-0.13, 0.074)], -0.0155, 0.0155, 'anodized')                    # 리시버
+    B.cyl((0, 0.55, 0.055), 0.0125, 0.0095, 0.80, 'y', 'steel', 18)                                                       # 긴 총열(끝으로 가늘게)
+    B.cyl((0, 0.97, 0.055), 0.0165, 0.0165, 0.06, 'y', 'anodized', 16)                                                    # 소음·제퇴기
+    for k in range(4): B.box((0, 0.95 + 0.013 * k, 0.055), (0.036, 0.004, 0.010), 'steel', bevel=0)
+    B.prism([(-0.13, 0.040), (-0.46, 0.050), (-0.50, 0.050), (-0.50, -0.060), (-0.44, -0.060), (-0.26, -0.010), (-0.13, -0.010)], -0.020, 0.020, 'wood')   # 개머리판
+    B.box((0, -0.505, -0.004), (0.044, 0.014, 0.112), 'woodDark')                                                        # 개머리 패드
+    B.prism([(-0.30, 0.050), (-0.20, 0.050), (-0.22, 0.072), (-0.30, 0.070)], -0.016, 0.016, 'woodDark')                  # 뺨 받침
+    B.prism([(-0.13, -0.010), (0.42, 0.020), (0.42, 0.040), (-0.13, 0.040)], -0.021, 0.021, 'wood')                       # 앞 나무 몸통
+    B.prism([(-0.10, -0.006), (-0.08, -0.006), (-0.10, -0.090), (-0.14, -0.090), (-0.13, -0.006)], -0.015, 0.015, 'woodDark')   # 손잡이
+    B.prism([(-0.04, -0.008), (0.03, -0.008), (0.034, -0.03), (0.022, -0.048), (-0.02, -0.046), (-0.04, -0.03)], -0.0035, 0.0035, 'anodized')   # 방아쇠울
+    # 망원 조준경: 받침 2개 + 몸통 + 앞뒤 렌즈 통
+    for y in (-0.06, 0.10): B.box((0, y, 0.084), (0.020, 0.018, 0.022), 'anodized')
+    B.cyl((0, 0.02, 0.110), 0.019, 0.019, 0.26, 'y', 'polymer', 20)
+    B.cyl((0, 0.18, 0.110), 0.019, 0.027, 0.07, 'y', 'polymer', 20)
+    B.cyl((0, -0.13, 0.110), 0.024, 0.019, 0.05, 'y', 'polymer', 20)
+    B.cyl((0, 0.217, 0.110), 0.0245, 0.0245, 0.004, 'y', 'accent', 20)                                                   # 앞 렌즈(빛)
+    B.cyl((0, 0.03, 0.132), 0.010, 0.010, 0.020, 'z', 'anodized', 12)                                                    # 조절 손잡이
+    B.cyl((0.024, 0.03, 0.110), 0.010, 0.010, 0.016, 'x', 'anodized', 12)
+    # 접이식 양각대(접힌 상태)
+    for sx in (-1, 1): B.box((sx * 0.016, 0.50, 0.026), (0.006, 0.18, 0.008), 'anodized')
+    bodyObj = B.build(root)
+    L = Part('bolt', ['steel', 'brass'], mats)   # 노리쇠: 원점 = 노리쇠 축 뒤쪽. 손잡이가 오른쪽으로 튀어나옴(JS 가 돌리고 당긴다)
+    L.cyl((0, 0.06, 0.0), 0.0085, 0.0085, 0.16, 'y', 'steel', 14)
+    L.cyl((0.030, 0.0, -0.004), 0.004, 0.004, 0.06, (1, 0, -0.25), 'steel', 10)
+    L.sphere((0.060, 0.0, -0.012), 0.0095, 'steel', 12)
+    L.build(root, (0, -0.10, 0.062))
+    M = Part('mag', ['polymer', 'brass'], mats)
+    M.box((0, 0.02, 0.010), (0.024, 0.060, 0.046), 'polymer')
+    M.box((0, 0.02, 0.034), (0.010, 0.050, 0.006), 'brass', bevel=0)
+    M.build(root)
+    empty('muzzle', (0, 1.002, 0.055), root)
+    empty('eject', (0.02, -0.02, 0.070), root)
+    empty('grip_r', (0, -0.118, -0.040), root)
+    empty('grip_l', (0, 0.300, 0.010), root)
+    empty('scope', (0, -0.16, 0.110), root)
+    return root
+
+# ----------------------------------------------------------------------------------------------------------------------
+# 수류탄 (파인애플형 몸통 + 안전 손잡이 + 고리). 원점 = 몸통 중심.
+# ----------------------------------------------------------------------------------------------------------------------
+def build_grenade(mats):
+    names = ['grenade', 'steel', 'accent']
+    root = empty('grenade', (0, 0, 0))
+    B = Part('body', names, mats)
+    B.sphere((0, 0, 0), 0.034, 'grenade', 16, (1, 1, 1.18))
+    for k in range(5):   # 홈(가로 띠)
+        z = -0.028 + 0.014 * k; r = 0.034 * math.sqrt(max(0.05, 1 - (z / 0.040) ** 2)) + 0.0012
+        B.cyl((0, 0, z), r, r, 0.0028, 'z', 'steel', 16)
+    for k in range(6):   # 세로 띠
+        a = k / 6 * math.pi
+        B.box((0, 0, 0), (0.0026, 0.0712, 0.06), 'grenade', rot=rot_z(math.degrees(a)), bevel=0)
+    B.cyl((0, 0, 0.046), 0.012, 0.010, 0.016, 'z', 'steel', 14)                                                          # 신관 머리
+    B.box((0.008, 0, 0.040), (0.008, 0.010, 0.036), 'steel', rot=Matrix.Rotation(math.radians(-18), 3, 'Y'), bevel=0)   # 안전 손잡이
+    B.cyl((-0.016, 0, 0.052), 0.009, 0.009, 0.002, 'y', 'accent', 14)                                                    # 고리
+    B.build(root)
+    empty('grip', (0, 0, 0), root)
+    return root
+
 # ----------------------------------------------------------------------------------------------------------------------
 def export(root, path):
     for o in bpy.context.selected_objects: o.select_set(False)
@@ -416,7 +519,7 @@ def render_previews(kind, out, shots):
 
 def main():
     what, out, prev = parse_args()
-    kinds = ['sword', 'm4a1', 'shotgun'] if what == 'all' else [what]
+    kinds = ['sword', 'm4a1', 'shotgun', 'pistol', 'sniper', 'grenade'] if what == 'all' else [what]
     os.makedirs(out, exist_ok=True)
     for kind in kinds:
         reset_scene()
@@ -428,11 +531,20 @@ def main():
             shots = [('side', (1.2, 0.18, 0.08), (0, 0.12, 0.03), 42), ('side_close', (0.55, 0.0, 0.07), (0, -0.02, 0.04), 50), ('three_quarter', (0.75, -0.55, 0.30), (0, 0.12, 0.03), 40),
                      ('front', (0.12, 1.0, 0.18), (0, 0.2, 0.05), 40), ('top', (0.0, 0.1, 0.9), (0, 0.1, 0.05), 40), ('mag_close', (0.45, 0.10, -0.02), (0, 0.04, -0.05), 55),
                      ('receiver_close', (-0.38, -0.22, 0.22), (0, -0.03, 0.06), 50), ('muzzle_close', (0.28, 0.62, 0.13), (0, 0.48, 0.065), 55)]
+        elif kind == 'pistol':
+            mats = make_materials(['anodized', 'steel', 'polymer', 'polymer2', 'accent', 'brass']); root = build_pistol(mats)
+            shots = [('side', (0.55, 0.04, 0.0), (0, 0.03, -0.01), 50), ('three_quarter', (0.40, -0.30, 0.16), (0, 0.03, -0.01), 50)]
+        elif kind == 'sniper':
+            mats = make_materials(['anodized', 'steel', 'wood', 'woodDark', 'polymer', 'accent', 'brass']); root = build_sniper(mats)
+            shots = [('side', (2.0, 0.25, 0.1), (0, 0.25, 0.04), 40), ('three_quarter', (1.2, -0.9, 0.45), (0, 0.25, 0.04), 40), ('bolt_close', (0.30, -0.25, 0.18), (0.02, -0.08, 0.06), 50)]
+        elif kind == 'grenade':
+            mats = make_materials(['grenade', 'steel', 'accent']); root = build_grenade(mats)
+            shots = [('three_quarter', (0.22, -0.18, 0.12), (0, 0, 0.004), 50)]
         else:
             mats = make_materials(['anodized', 'steel', 'wood', 'woodDark', 'brass', 'accent']); root = build_shotgun(mats)
             shots = [('side', (1.5, 0.2, 0.1), (0, 0.2, 0.03), 40), ('three_quarter', (1.0, -0.8, 0.4), (0, 0.2, 0.03), 40)]
         # 정리: 편집용 도구가 아닌 순수 지오메트리 — 스무딩은 면 단위로 이미 지정
-        export(root, os.path.join(out, {'sword': 'sword.glb', 'm4a1': 'm4a1.glb', 'shotgun': 'shotgun.glb'}[kind]))
+        export(root, os.path.join(out, kind + '.glb'))
         if prev: render_previews(kind, prev, shots)
 
 if __name__ == '__main__':
