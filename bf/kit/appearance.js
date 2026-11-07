@@ -6,8 +6,10 @@
 // still carries the legacy { ch, color } (a nearest match) so older clients keep drawing something sensible.
 
 // ---------------------------------------------------------------- roles: which part of the body a vertex is
-export const ROLE = { NONE: 0, SKIN: 1, HAIR: 2, TOP: 3, SLEEVE: 4, BOTTOM: 5, UPLEG: 6, LEGLOW: 7, SHOE: 8, SOLE: 9 };
-export const ROLE_COUNT = 10;
+// TRIM / ACCENT: fixed colours of outfit details (white fur and shirt fronts / gold buckles), marked by their palette cell in parts.glb
+export const ROLE = { NONE: 0, SKIN: 1, HAIR: 2, TOP: 3, SLEEVE: 4, BOTTOM: 5, UPLEG: 6, LEGLOW: 7, SHOE: 8, SOLE: 9, TRIM: 10, ACCENT: 11 };
+export const ROLE_COUNT = 12;
+export const TRIM_CELL = '3,1', ACCENT_CELL = '3,2', DARK_CELL = '3,0';   // parts.glb detail cells (row,col): white, gold, dark (unchanged)
 
 // ---------------------------------------------------------------- catalogue (order is part of the code: only ever append)
 export const GENDERS = [{ id: 'm', name: '남' }, { id: 'f', name: '여' }];
@@ -27,17 +29,27 @@ export const HAIRS = [
   { id: 'afro',   name: '아프로',      g: 'mf', src: { part: 'hair_afro' },  legacy: 'curly' },
   { id: 'mohawk', name: '모히칸',      g: 'm',  src: { part: 'hair_mohawk' }, legacy: 'beard' },
   { id: 'bald',   name: '민머리',      g: 'm',  src: null,                   legacy: 'beard' },
+  { id: 'twoblock', name: '투블럭',   g: 'm',  src: { part: 'hair_twoblock' }, legacy: 'glasses' },
+  { id: 'wave',   name: '웨이브',      g: 'f',  src: { part: 'hair_wave' },  legacy: 'curly' },
 ];
+// g: which genders may wear it. dress: a one-piece (the top colour runs down into its own skirt, the bottom choice is unused)
 export const TOPS = [
-  { id: 'tee',  name: '티셔츠',  parts: [] },
-  { id: 'tank', name: '민소매',  parts: [] },
-  { id: 'hood', name: '후드티',  parts: ['top_hood', 'top_pocket'] },
-  { id: 'coat', name: '코트',    parts: ['top_coat'] },
+  { id: 'tee',    name: '티셔츠', g: 'mf', parts: [] },
+  { id: 'tank',   name: '민소매', g: 'mf', parts: [] },
+  { id: 'hood',   name: '후드티', g: 'mf', parts: ['top_hood', 'top_pocket'] },
+  { id: 'coat',   name: '코트',   g: 'mf', parts: ['top_coat'] },
+  { id: 'shirt',  name: '셔츠',   g: 'm',  parts: ['top_shirt'] },
+  { id: 'suit',   name: '정장',   g: 'm',  parts: ['top_suit'] },
+  { id: 'puffer', name: '패딩',   g: 'mf', parts: ['top_puffer'] },
+  { id: 'santa',  name: '산타 옷', g: 'mf', parts: ['top_santa'] },
+  { id: 'knit',   name: '니트',   g: 'f',  parts: ['top_knit'] },
+  { id: 'dress',  name: '원피스', g: 'f',  parts: ['dress_skirt'], dress: true },
 ];
+// alt: what a gender that may not wear it gets instead (old saved looks: a man in a skirt -> trousers)
 export const BOTTOMS = [
-  { id: 'pants',  name: '긴바지', parts: [] },
-  { id: 'shorts', name: '반바지', parts: [] },
-  { id: 'skirt',  name: '치마',   parts: ['bottom_skirt'] },
+  { id: 'pants',  name: '긴바지', g: 'mf', parts: [] },
+  { id: 'shorts', name: '반바지', g: 'mf', parts: [] },
+  { id: 'skirt',  name: '치마',   g: 'f',  parts: ['bottom_skirt'], alt: 0 },
 ];
 export const SHOES = [
   { id: 'sneaker', name: '운동화', parts: [] },
@@ -46,7 +58,7 @@ export const SHOES = [
 ];
 // where each Blender part rides: the bone it is parented to
 export const PART_BONE = (name) => (name.startsWith('hair_') ? 'head' : name.endsWith('_L') ? 'leg-left' : name.endsWith('_R') ? 'leg-right' : 'torso');
-export const PART_ROLE = (name) => (name.startsWith('hair_') ? ROLE.HAIR : name.startsWith('top_') ? ROLE.TOP : name.startsWith('bottom_') ? ROLE.BOTTOM : ROLE.SHOE);
+export const PART_ROLE = (name) => (name.startsWith('hair_') ? ROLE.HAIR : name.startsWith('top_') || name.startsWith('dress_') ? ROLE.TOP : name.startsWith('bottom_') ? ROLE.BOTTOM : ROLE.SHOE);
 
 export const PALETTES = {
   skin: [
@@ -78,6 +90,13 @@ export const PALETTE_KEYS = ['skin', 'hair', 'top', 'bottom', 'shoe'];   // orde
 const gOk = (g) => (g === 'm' || g === 'f' ? g : null);
 export const hairAllowed = (hi, g) => !!HAIRS[hi] && HAIRS[hi].g.includes(g);
 export const hairsFor = (g) => HAIRS.map((h, i) => ({ ...h, i })).filter((h) => h.g.includes(g));
+export const topAllowed = (ti, g) => !!TOPS[ti] && TOPS[ti].g.includes(g);
+export const bottomAllowed = (bi, g) => !!BOTTOMS[bi] && BOTTOMS[bi].g.includes(g);
+export const topsFor = (g) => TOPS.map((t, i) => ({ ...t, i })).filter((t) => t.g.includes(g));
+export const bottomsFor = (g) => BOTTOMS.map((t, i) => ({ ...t, i })).filter((t) => t.g.includes(g));
+// a top / bottom the gender may not wear -> its stand-in (tops: a tee; bottoms: their alt, else trousers)
+const fitTop = (ti, g) => (topAllowed(ti, g) ? ti : 0);
+const fitBottom = (bi, g) => (bottomAllowed(bi, g) ? bi : BOTTOMS[bi] && Number.isInteger(BOTTOMS[bi].alt) ? BOTTOMS[bi].alt : 0);
 export function defaultAppearance(g = 'f') {
   g = gOk(g) || 'f';
   return g === 'f'
@@ -91,7 +110,7 @@ export function sanitizeAppearance(x) {
   const d = defaultAppearance(g), c = Array.isArray(x.c) ? x.c : [];
   const h = idx(x.h, HAIRS.length, d.h);
   return {
-    g, h: hairAllowed(h, g) ? h : d.h, t: idx(x.t, TOPS.length, d.t), b: idx(x.b, BOTTOMS.length, d.b), s: idx(x.s, SHOES.length, d.s),
+    g, h: hairAllowed(h, g) ? h : d.h, t: fitTop(idx(x.t, TOPS.length, d.t), g), b: fitBottom(idx(x.b, BOTTOMS.length, d.b), g), s: idx(x.s, SHOES.length, d.s),
     c: PALETTE_KEYS.map((k, i) => idx(c[i], PALETTES[k].length, d.c[i])),
   };
 }
@@ -108,13 +127,14 @@ export function decodeAppearance(str) {
   // an out-of-range index means a newer / hostile client: reject instead of guessing
   if (!hairAllowed(a.h, a.g) || a.t >= TOPS.length || a.b >= BOTTOMS.length || a.s >= SHOES.length) return null;
   if (!PALETTE_KEYS.every((k, i) => a.c[i] < PALETTES[k].length)) return null;
+  a.t = fitTop(a.t, a.g); a.b = fitBottom(a.b, a.g);   // saved before the gendered lists (e.g. a man in a skirt): map, don't reject
   return a;
 }
 export function randomAppearance(rand = Math.random, keepG) {
   const pick = (n) => Math.min(n - 1, Math.floor(rand() * n));
   const g = gOk(keepG) || (rand() < 0.5 ? 'm' : 'f'), hs = hairsFor(g);
   return {
-    g, h: hs[pick(hs.length)].i, t: pick(TOPS.length), b: pick(BOTTOMS.length), s: pick(SHOES.length),
+    g, h: hs[pick(hs.length)].i, t: (() => { const l = topsFor(g); return l[pick(l.length)].i; })(), b: (() => { const l = bottomsFor(g); return l[pick(l.length)].i; })(), s: pick(SHOES.length),
     c: PALETTE_KEYS.map((k) => pick(PALETTES[k].length)),
   };
 }
@@ -124,17 +144,18 @@ export const sameAppearance = (a, b) => encodeAppearance(a) === encodeAppearance
 export function roleColors(ap) {
   const a = sanitizeAppearance(ap) || defaultAppearance('f');
   const [sk, hr, tp, bt, sh] = PALETTE_KEYS.map((k, i) => PALETTES[k][a.c[i]].hex);
-  const top = TOPS[a.t].id, bot = BOTTOMS[a.b].id, shoe = SHOES[a.s].id;
+  const top = TOPS[a.t].id, dress = !!TOPS[a.t].dress, bot = dress ? 'dress' : BOTTOMS[a.b].id, shoe = SHOES[a.s].id;
   const rc = new Array(ROLE_COUNT).fill('#ffffff');
   rc[ROLE.SKIN] = sk; rc[ROLE.HAIR] = hr; rc[ROLE.TOP] = tp; rc[ROLE.SLEEVE] = top === 'tank' ? sk : tp;
-  rc[ROLE.BOTTOM] = bt; rc[ROLE.UPLEG] = bot === 'skirt' ? sk : bt; rc[ROLE.LEGLOW] = bot === 'pants' ? bt : sk;
+  rc[ROLE.BOTTOM] = dress ? tp : bt; rc[ROLE.UPLEG] = bot === 'skirt' || dress ? sk : bt; rc[ROLE.LEGLOW] = bot === 'pants' ? bt : sk;
   rc[ROLE.SHOE] = shoe === 'bare' ? sk : sh; rc[ROLE.SOLE] = shoe === 'bare' ? sk : '#34353b';
+  rc[ROLE.TRIM] = '#f4f1ea'; rc[ROLE.ACCENT] = '#e2b23c';
   return rc;
 }
 // every Blender part an appearance needs (hair first)
 export function partNames(ap) {
   const a = sanitizeAppearance(ap) || defaultAppearance('f'), hs = HAIRS[a.h].src;
-  return [...(hs && hs.part ? [hs.part] : []), ...TOPS[a.t].parts, ...BOTTOMS[a.b].parts, ...SHOES[a.s].parts];
+  return [...(hs && hs.part ? [hs.part] : []), ...TOPS[a.t].parts, ...(TOPS[a.t].dress ? [] : BOTTOMS[a.b].parts), ...SHOES[a.s].parts];
 }
 
 // ---------------------------------------------------------------- legacy { ch, color } <-> appearance
@@ -206,7 +227,7 @@ export function classifyBody(an, mesh, skinCell) {
   for (let v = 0; v < n; v++) {
     const c = comps[vertComp[v]]; if (!c) continue;
     const cell = cellKey(mesh.uv[v * 2], mesh.uv[v * 2 + 1]), cx = (c.mn[0] + c.mx[0]) / 2;
-    if (cell === skinCell) roles[v] = ROLE.SKIN;                                                // hands, neck
+    if (cell === skinCell) roles[v] = Math.abs(cx) < 0.12 && c.mn[1] >= 0.15 && mesh.P[v * 3 + 1] < 0.26 ? ROLE.TOP : ROLE.SKIN;   // hands, neck (the base's bare midriff is covered by the top)
     else if (c.mx[1] <= 0.105 && c.mn[1] <= 0.012) roles[v] = cell === '3,0' ? ROLE.SOLE : ROLE.SHOE;   // feet: dark sole + coloured upper
     else if (c.mn[1] >= 0.17 && c.mx[1] <= 0.225 && c.mx[0] - c.mn[0] > 0.25) roles[v] = ROLE.BOTTOM;  // hip band
     else if (Math.abs(cx) < 0.12 && c.mx[1] <= 0.19) roles[v] = c.mn[1] >= 0.065 ? ROLE.UPLEG : ROLE.LEGLOW;  // thigh / shin boxes

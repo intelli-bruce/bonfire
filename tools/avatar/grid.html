@@ -1,0 +1,37 @@
+<!doctype html>
+<!-- 검수용: 성별×상의×헤어 조합을 앞·옆·뒤로 한 장에 그린다. python3 -m http.server 로 저장소 루트를 띄우고 /tools/avatar/grid.html?g=m|f -->
+<meta charset="utf-8"><title>Avatar grid</title>
+<style>body{margin:0;background:#2b2f4a;color:#eee;font:12px sans-serif}canvas{display:block}#lab{position:absolute;inset:0;pointer-events:none}#lab div{position:absolute;padding:2px 4px;background:#0008}</style>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
+<div id="lab"></div>
+<script type="module">
+import * as THREE from 'three';
+import { loadAvatarKit, createAvatar } from '../../bf/kit/avatar.js';
+import * as AP from '../../bf/kit/appearance.js';
+const q = new URLSearchParams(location.search), G = q.get('g') || 'm', CELL = +(q.get('cell') || 260), PER = 3;
+await loadAvatarKit(THREE, { baseUrl: new URL('../../bf/kit/', location.href).href });
+const tops = AP.topsFor(G), hairs = AP.hairsFor(G), bots = AP.bottomsFor(G);
+const n = Math.max(tops.length, hairs.length), combos = [];
+for (let i = 0; i < n; i++) combos.push({ g: G, h: hairs[i % hairs.length].i, t: tops[i % tops.length].i, b: bots[i % bots.length].i, s: i % 3, c: [i % 6, i % 10, (i * 5) % 12, (i * 3) % 8, i % 8] });
+const cols = PER * 3, rows = Math.ceil(combos.length / PER);
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setPixelRatio(1); r.setSize(cols * CELL, rows * CELL); r.setScissorTest(true); document.body.prepend(r.domElement);
+const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffffff, 0x666688, 2.2)); const d = new THREE.DirectionalLight(0xffffff, 1.6); d.position.set(2, 4, 3); sc.add(d);
+const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50), lab = document.getElementById('lab');
+const avs = combos.map((ap) => { const a = createAvatar(null, null, ap); a.play && a.play('idle'); a.update && a.update(0.016); return a; });
+avs.forEach((a, i) => {
+  sc.add(a.root);
+  const ap = a.appearance || combos[i];
+  const el = document.createElement('div'); el.textContent = `${AP.HAIRS[ap.h].name}·${AP.TOPS[ap.t].name}·${AP.TOPS[ap.t].dress ? '' : AP.BOTTOMS[ap.b].name}`;
+  el.style.left = (i % PER) * 3 * CELL + 'px'; el.style.top = Math.floor(i / PER) * CELL + 'px'; lab.appendChild(el);
+});
+const H = 1.0;
+for (let i = 0; i < avs.length; i++) {
+  avs.forEach((a, k) => (a.root.visible = k === i));
+  for (let v = 0; v < 3; v++) {
+    const ang = [0, Math.PI / 2, Math.PI][v], x = ((i % PER) * 3 + v) * CELL, y = (rows - 1 - Math.floor(i / PER)) * CELL;
+    cam.position.set(Math.sin(ang) * -3.3, H + 0.25, Math.cos(ang) * -3.3); cam.lookAt(0, H * 0.85, 0);
+    r.setViewport(x, y, CELL, CELL); r.setScissor(x, y, CELL, CELL); r.setClearColor(v === 1 ? 0x353a5c : 0x2b2f4a); r.render(sc, cam);
+  }
+}
+document.title = 'grid ready ' + combos.length;
+</script>

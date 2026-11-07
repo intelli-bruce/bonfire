@@ -8,7 +8,7 @@
 //            gradient), so changing colours is a uniform write and every part (hair, hood, boots ...) shares the avatar's material.
 // Parts are rigid children of bones (the bone-local geometry is cached once and shared by every avatar).
 import { parseGLB, accessor } from './glb.js';
-import { ROLE, ROLE_COUNT, HAIRS, PART_BONE, PART_ROLE, partNames, roleColors, sanitizeAppearance, analyseMesh, classifyHead, classifyBody, cellKey } from './appearance.js';
+import { ROLE, ROLE_COUNT, HAIRS, PART_BONE, PART_ROLE, partNames, roleColors, sanitizeAppearance, analyseMesh, classifyHead, classifyBody, cellKey, TRIM_CELL, ACCENT_CELL, DARK_CELL } from './appearance.js';
 
 let T = null;
 const lumOfKey = (lum, key) => { const [cy, cx] = key.split(',').map(Number); return lum(cx, cy); };
@@ -115,7 +115,7 @@ export async function buildCustomKit(THREE, { partsUrl, temps, lum }) {
       const m4 = new T.Matrix4();   // the node's own transform (identity for our export, honoured anyway)
       if (nd.matrix) m4.fromArray(nd.matrix); else m4.compose(new T.Vector3(...(nd.translation || [0, 0, 0])), new T.Quaternion(...(nd.rotation || [0, 0, 0, 1])), new T.Vector3(...(nd.scale || [1, 1, 1])));
       const role = PART_ROLE(nd.name);
-      const geo = geoFrom([{ pk: { ...pk, normal: pk.normal || new Float32Array(pk.n * 3) }, roleArr: roleAttr(pk.n, pk.uv, (v, key) => (key === '3,0' ? ROLE.NONE : role), lum) }]);
+      const geo = geoFrom([{ pk: { ...pk, normal: pk.normal || new Float32Array(pk.n * 3) }, roleArr: roleAttr(pk.n, pk.uv, (v, key) => (key === DARK_CELL ? ROLE.NONE : key === TRIM_CELL ? ROLE.TRIM : key === ACCENT_CELL ? ROLE.ACCENT : role), lum) }]);
       if (!pk.normal) geo.computeVertexNormals();
       geo.applyMatrix4(m4);
       parts.set(nd.name, entryOf(geo, PART_BONE(nd.name), topOf({ n: pk.n, position: geo.attributes.position.array })));
@@ -139,7 +139,7 @@ export async function buildCustomKit(THREE, { partsUrl, temps, lum }) {
     if (role > 0) { float l = dot(sampledDiffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)); diffuseColor.rgb = diffuse * uRC[role] * clamp(l / max(vRole.y, 0.02), 0.45, 1.6); } }
 #endif`);
     };
-    m.customProgramCacheKey = () => 'kit-custom-v1';
+    m.customProgramCacheKey = () => 'kit-custom-v2';
     m.userData.uRC = uRC;
     return m;
   }
