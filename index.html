@@ -186,18 +186,31 @@ body.under #uw { opacity: 1; }
 #bossHp .row .track { height: 12px; }
 #bossHp .row.rage .fill { background: linear-gradient(180deg, #ff9a3c, #e0301a); }
 #bossHp .row .x { grid-column: 2; grid-row: 1 / span 2; min-width: 34px; padding: 4px 8px; }
-#bossPick .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-#bossPick .note { font-size: 12px; color: var(--mist); min-height: 1.1em; }
 #bossTags { position: fixed; inset: 0; pointer-events: none; z-index: 9; }
 #bossTags .tag { position: absolute; left: 0; top: 0; width: 120px; margin-left: -60px; display: grid; gap: 2px; font-size: 11px; color: #ffe2bd; text-align: center; text-shadow: 0 1px 3px #000; will-change: transform; }
 #bossTags .tag i { display: block; height: 6px; border-radius: 4px; background: rgba(20, 14, 40, 0.78); border: 1px solid rgba(255, 236, 210, 0.35); overflow: hidden; }
 #bossTags .tag i b { display: block; height: 100%; background: linear-gradient(180deg, #ff6a4a, #c4201e); transform-origin: left center; }
 #setPanel { right: calc(env(safe-area-inset-right, 0px) + 12px); top: calc(env(safe-area-inset-top, 0px) + 58px); width: min(300px, calc(100vw - 188px)); display: grid; gap: 10px; padding: 14px; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
 #setPanel[hidden] { display: none; }
-#bossPick { left: calc(env(safe-area-inset-left, 0px) + 12px); bottom: calc(env(safe-area-inset-bottom, 0px) + 110px); width: min(320px, calc(100vw - 24px)); display: grid; gap: 8px; padding: 12px; background: var(--panel-soft); border: 1px solid rgba(255, 90, 70, 0.5); border-radius: 16px; box-shadow: var(--shadow); z-index: 12; color: var(--sand); font-size: 14px; }
+/* 보스 고르기 = 가운데 모달. 뒤는 반투명 덮개(글자 안 비침)·카드 목록은 모달 안에서만 스크롤. z-index 25 는 HUD(8~13)·무기 칸(10)·채팅 위, 입장 화면(20 — 입장 전엔 안 열림)·셔터 플래시(30)·사진 토스트(31) 아래 */
+#bossPick { position: fixed; inset: 0; z-index: 25; display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) calc(env(safe-area-inset-right, 0px) + 12px) calc(env(safe-area-inset-bottom, 0px) + 12px) calc(env(safe-area-inset-left, 0px) + 12px);
+  background: rgba(8, 7, 30, 0.8); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 #bossPick[hidden] { display: none; }
-#bossPick .btn { text-align: left; display: grid; gap: 2px; }
-#bossPick .btn small { color: var(--mist); font-size: 12px; }
+#bossPick .bp-card { width: min(560px, 100%); max-height: 100%; min-width: 0; min-height: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; padding: 14px; overflow: hidden;
+  background: #25275c; border: 1px solid rgba(255, 90, 70, 0.55); border-radius: 20px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6); color: var(--sand); font-size: 14px; }
+#bossPick .head { display: flex; align-items: center; gap: 8px; flex: none; }
+#bossPick .head b { flex: 1 1 auto; min-width: 0; font-family: var(--f-display); font-size: 17px; color: #ffe2bd; }
+#bossPick .head .btn { padding: 7px 13px; font-size: 14px; flex: none; }
+#bossPick .note { flex: none; font-size: 12.5px; line-height: 1.5; color: var(--mist); min-height: 1.1em; }
+#bossPick .bp-list { flex: 1 1 auto; min-height: 0; display: grid; gap: 8px; align-content: start; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 2px 4px 2px 0; }
+#bossPick .bp-list .btn { width: 100%; min-width: 0; box-sizing: border-box; display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 12px; padding: 8px 14px 8px 8px; border-radius: 16px; text-align: left; white-space: normal; background: rgba(255, 243, 223, 0.07); }
+#bossPick .bp-list .btn:hover:not(:disabled) { background: rgba(255, 243, 223, 0.13); border-color: rgba(255, 150, 120, 0.7); }
+#bossPick .bp-list .btn img { width: 72px; height: 72px; display: block; border-radius: 12px; object-fit: cover; background: #1c2050; box-shadow: 0 0 0 1px rgba(255, 236, 210, 0.2); }
+#bossPick .bp-list .btn span { min-width: 0; display: grid; gap: 3px; }
+#bossPick .bp-list .btn b { font-family: var(--f-display); font-weight: 400; font-size: 16px; color: #ffe2bd; }
+#bossPick .bp-list .btn small { color: var(--mist); font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+@media (max-width: 480px) { #bossPick .bp-card { padding: 12px; } #bossPick .bp-list .btn { grid-template-columns: 60px minmax(0, 1fr); gap: 10px; } #bossPick .bp-list .btn img { width: 60px; height: 60px; } }
 #bossIntro { left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; z-index: 13; opacity: 0; transition: opacity 0.6s; }
 #bossIntro.on { opacity: 1; }
 #bossIntro b { display: block; font-family: var(--f-display); font-size: clamp(28px, 6vw, 56px); color: #ffdcc0; letter-spacing: 0.06em; text-shadow: 0 2px 10px #000, 0 0 24px rgba(255, 60, 30, 0.75); }
@@ -310,16 +323,20 @@ body.coarse #ammo b { font-size: 32px; }
   <input id="sensIn" type="range" min="0.1" max="2" step="0.05" value="0.5">
   <div class="row"><button id="sensReset" class="btn" type="button">기본값(0.5배)</button><button id="setClose" class="btn" type="button">닫기</button></div>
 </div>
-<div id="bossPick" class="hud" role="dialog" aria-label="보스 고르기" hidden>
-  <div class="head"><b id="bossCount">보스 0 / 8</b><button id="bossClear" class="btn" type="button" disabled>전체 삭제</button></div>
-  <div class="note" id="bossNote">종류를 누를 때마다 한 마리씩 나옵니다(같은 종류 여러 마리 가능).</div>
-  <button class="btn" type="button" data-kind="spider"><b>인면 거미</b><small>앞다리 휘두르기 · 독침 · 거미줄 · 새끼 소환</small></button>
-  <button class="btn" type="button" data-kind="shark"><b>메갈로돈</b><small>바다에서 덮침 · 물기 · 꼬리치기 · 수면 돌진</small></button>
-  <button class="btn" type="button" data-kind="golem"><b>초거대 바위 골렘</b><small>내려찍기 충격파 · 바위 던지기 · 돌진</small></button>
-  <button class="btn" type="button" data-kind="seraph"><b>반천사·반악마</b><small>빛 기둥 · 지옥불 · 비행 강하</small></button>
-  <button class="btn" type="button" data-kind="demon"><b>대악마</b><small>붉은 균열 광선 · 손톱 할퀴기 · 지면 균열 폭발</small></button>
-  <button class="btn" type="button" data-kind="commander"><b>대검 지휘관</b><small>대검 수평 베기 · 내려찍기 충격파 · 돌진 찌르기</small></button>
-  <button class="btn" type="button" data-kind="hydra"><b>뼈가면 히드라</b><small>세 머리 화염 브레스 · 물기 · 꼬리 휩쓸기 · 비행 강하 (머리마다 따로 깨짐)</small></button>
+<div id="bossPick" role="dialog" aria-modal="true" aria-label="보스 고르기" hidden>
+  <div class="bp-card">
+    <div class="head"><b id="bossCount">보스 0 / 8</b><button id="bossClear" class="btn" type="button" disabled>전체 삭제</button><button id="bossClose" class="btn" type="button" aria-label="닫기">닫기</button></div>
+    <div class="note" id="bossNote">종류를 누를 때마다 한 마리씩 나옵니다(같은 종류 여러 마리 가능).</div>
+    <div class="bp-list">
+      <button class="btn" type="button" data-kind="spider"><img src="bf/thumbs/spider.jpg" width="72" height="72" alt="" loading="lazy" decoding="async"><span><b>인면 거미</b><small>앞다리 휘두르기 · 독침 · 거미줄 · 새끼 소환</small></span></button>
+      <button class="btn" type="button" data-kind="shark"><img src="bf/thumbs/shark.jpg" width="72" height="72" alt="" loading="lazy" decoding="async"><span><b>메갈로돈</b><small>바다에서 덮침 · 물기 · 꼬리치기 · 수면 돌진</small></span></button>
+      <button class="btn" type="button" data-kind="golem"><img src="bf/thumbs/golem.jpg" width="72" height="72" alt="" loading="lazy" decoding="async"><span><b>초거대 바위 골렘</b><small>내려찍기 충격파 · 바위 던지기 · 돌진</small></span></button>
+      <button class="btn" type="button" data-kind="seraph"><img src="bf/thumbs/seraph.jpg" width="72" height="72" alt="" loading="lazy" decoding="async"><span><b>반천사·반악마</b><small>빛 기둥 · 지옥불 · 비행 강하</small></span></button>
+      <button class="btn" type="button" data-kind="demon"><img src="bf/thumbs/demon.jpg" width="72" height="72" alt="" loading="lazy" decoding="async"><span><b>대악마</b><small>붉은 균열 광선 · 손톱 할퀴기 · 지면 균열 폭발</small></span></button>
+      <button class="btn" type="button" data-kind="commander"><img src="bf/thumbs/commander.jpg" width="72" height="72" alt="" loading="lazy" decoding="async"><span><b>대검 지휘관</b><small>대검 수평 베기 · 내려찍기 충격파 · 돌진 찌르기</small></span></button>
+      <button class="btn" type="button" data-kind="hydra"><img src="bf/thumbs/hydra.jpg" width="72" height="72" alt="" loading="lazy" decoding="async"><span><b>뼈가면 히드라</b><small>세 머리 화염 브레스 · 물기 · 꼬리 휩쓸기 · 비행 강하 (머리마다 따로 깨짐)</small></span></button>
+    </div>
+  </div>
 </div>
 <div id="bossIntro" class="hud" aria-live="polite"><b id="bossIntroName"></b><small id="bossIntroSub"></small></div>
 <div id="myHp" class="hud" hidden><div class="track"><i id="myHpFill"></i></div><span id="myHpTxt">1000</span></div>
@@ -2575,6 +2592,10 @@ function initBosses(spMod, gMod, cMod, hyMod) {
   BOSS_UI.btn.addEventListener('click', () => { initAudio(); $('bossPick').hidden = !$('bossPick').hidden; refreshBossUi(true); canvas.focus({ preventScroll: true }); });
   for (const b of $('bossPick').querySelectorAll('button[data-kind]')) b.addEventListener('click', () => { initAudio(); bossCreate(b.dataset.kind); canvas.focus({ preventScroll: true }); });   // 창은 열어 둔 채 계속 소환
   $('bossClear').addEventListener('click', () => { bossDelete(false); canvas.focus({ preventScroll: true }); });
+  const bossPickClose = () => { if ($('bossPick').hidden) return; $('bossPick').hidden = true; refreshBossUi(true); canvas.focus({ preventScroll: true }); tryLock(); };   // 닫기 버튼 · 덮개 클릭 · Esc
+  $('bossClose').addEventListener('click', bossPickClose);
+  $('bossPick').addEventListener('click', (ev) => { if (ev.target === $('bossPick')) bossPickClose(); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('bossPick').hidden) { e.preventDefault(); e.stopImmediatePropagation(); bossPickClose(); } }, true);
   BOSS_UI.bar.addEventListener('click', (ev) => { const x = ev.target.closest('button[data-born]'); if (x) { bossDelete(false, Number(x.dataset.born)); canvas.focus({ preventScroll: true }); } });
 }
 let introTimer = 0;
