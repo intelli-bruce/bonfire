@@ -2565,7 +2565,7 @@ function initBosses(spMod, gMod, cMod, hyMod) {
     if (evtOk('*', 'bosshitlog:' + h.src, 1500)) netLog(null, BOSS_HIT_MSG[h.src] || '보스에게 맞았습니다.', true);
   };
   const fx = { poof: (x, y, z, n) => PUFF.poof(x, y, z, n), spark: (x, y, z) => PUFF.spark(x, y, z), thump: (v) => thumpSound(clamp(v, 0, 1)), crown: (x, y, z, n) => PUFF.crown(x, y, z, coarse ? Math.ceil(n / 2) : n) };
-  const base = { THREE, scene, baseUrl: new URL('./bf/', location.href).href, myId, heightAt, canStand: bossLandOk, players: bossPlayers, me: meFn, onHitMe, fx };
+  const base = { THREE, scene, renderer, baseUrl: new URL('./bf/', location.href).href, myId, heightAt, canStand: bossLandOk, players: bossPlayers, me: meFn, onHitMe, fx };
   const F = {};   // 종류 -> 새 인스턴스를 만드는 함수(같은 종류도 여러 마리)
   F.spider = () => spMod.createSpiderBoss({ ...base, camPos: () => camera.position, me: () => ({ ok: !!(entered && meRec) && meRec.ctrl.state.swim !== 2, x: me.x, y: me.y, z: me.z }), pushMe: (x, z) => { if (meRec && !mySeat && bossLandOk(x, z)) meRec.ctrl.teleport(x, z); } });
   const pullMe = (x, z, R, step) => {   // 메갈로돈 삼키기: 입 쪽으로 빨려 든다(내 화면에서만)
