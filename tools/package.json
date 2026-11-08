@@ -1,0 +1,13 @@
+{
+  "name": "bonfire-tools",
+  "version": "1.0.0",
+  "description": "보스 디테일 베이크·KTX2 도구(detail_pack.mjs) 전용 개발 의존성",
+  "keywords": [],
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "draco3dgltf": "^1.5.7"
+  },
+  "private": true
+}

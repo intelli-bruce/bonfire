@@ -1,14 +1,15 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Boss Viewer</title>
-<!-- 보스 검수용 뷰어: ?boss=demon|commander|hydra &cam=front|face|side &t=<등장 뒤 초> &near=1(사람을 가까이 둬 공격 패턴을 끌어냄)
+<!-- 보스 검수용 뷰어: ?boss=spider|shark|golem|seraph|demon|commander|hydra &cam=front|face|side &t=<등장 뒤 초> &near=1(사람을 가까이 둬 공격 패턴을 끌어냄)
+     &jpg=1(KTX2 판 대신 JPEG 판) &n=8(같은 보스 8마리 동시 — fps 측정, 원형 배치) &tex=1(HUD 에 텍스처 판 표시)
      게임과 같은 밤 조명(반구광 0.95 + 달빛 0.9)·같은 로더(bf/*.js) 를 쓴다. 우상단에 fps. -->
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }</script>
 <style>html,body{margin:0;height:100%;background:#1c2050;overflow:hidden;font:13px system-ui;color:#fff}#hud{position:fixed;top:8px;right:10px;background:#0008;padding:4px 8px;border-radius:6px}</style>
 </head><body><div id="hud">…</div>
 <script type="module">
 import * as THREE from 'three';
-const q = new URLSearchParams(location.search), kind = q.get('boss') || 'demon', camMode = q.get('cam') || 'front', near = q.get('near') === '1';
+const q = new URLSearchParams(location.search), kind = q.get('boss') || 'demon', camMode = q.get('cam') || 'front', near = q.get('near') === '1', N = Math.max(1, Math.min(8, parseInt(q.get('n') || '1', 10)));
 const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene(); scene.background = new THREE.Color('#1c2050'); scene.fog = new THREE.Fog('#1c2050', 60, 220);
@@ -17,22 +18,29 @@ const moon = new THREE.DirectionalLight('#c3cdff', 0.9); moon.position.set(-30, 
 const ground = new THREE.Mesh(new THREE.CircleGeometry(200, 48), new THREE.MeshStandardMaterial({ color: '#2b2a3a', roughness: 1 })); ground.rotation.x = -Math.PI / 2; scene.add(ground);
 const cam = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 500);
 const players = near ? [{ id: 'me', x: 0, z: 14, y: 0 }] : [{ id: 'me', x: 0, z: 70, y: 0 }];
-const ctx = { THREE, scene, baseUrl: new URL('../../bf/', location.href).href, myId: 'me', heightAt: () => 0, canStand: () => true, canSwim: () => false, canFly: () => true, waterLevel: () => -50,
+const ctx = { THREE, scene, renderer, ktx2: q.get('jpg') !== '1', baseUrl: new URL('../../bf/', location.href).href, myId: 'me', heightAt: () => 0, canStand: () => true, canSwim: () => false, canFly: () => true, waterLevel: () => -50,
   players: () => players, me: () => ({ ok: true, ...players[0] }), onHitMe() {}, pushMe() {}, fx: { poof() {}, spark() {}, thump() {}, crown() {} }, sfx() {}, shake() {}, camPos: () => cam.position, audio: () => null };
-let boss;
-if (kind === 'commander') boss = (await import('../../bf/commander.js')).createCommanderBoss(ctx);
-else if (kind === 'hydra') boss = (await import('../../bf/hydra.js')).createHydraBoss(ctx);
-else boss = (await import('../../bf/bosses.js')).createGiantBoss(ctx, kind);
-boss.spawn(0, 0, 0);
+const make = async () => kind === 'commander' ? (await import('../../bf/commander.js')).createCommanderBoss(ctx)
+  : kind === 'hydra' ? (await import('../../bf/hydra.js')).createHydraBoss(ctx)
+  : kind === 'spider' ? (await import('../../bf/spider.js')).createSpiderBoss(ctx)
+  : (await import('../../bf/bosses.js')).createGiantBoss(ctx, kind);
+const all = [];
+for (let i = 0; i < N; i++) { const b = await make(); const a = i ? (i - 1) / (N - 1) * Math.PI * 2 : 0, r = i ? 46 : 0; b.spawn(Math.sin(a) * r, Math.cos(a) * r, 0); all.push(b); }
+const boss = all[0];
 const C = { demon: { front: [0, 10, 30, 0, 9, 0], face: [0, 13.6, 9, 0, 13.3, 0], side: [24, 9, 16, 0, 8, 0] },
   commander: { front: [0, 8, 26, 0, 7.5, 0], face: [0, 12.9, 4.8, 0, 12.8, 0], side: [-18, 9, -16, 0, 7, 0] },
-  hydra: { front: [0, 12, 40, 0, 8, 0], face: [0, 17, 30, 0, 15, 12], side: [-30, 16, 20, 0, 8, 0] } }[kind] || {};
+  hydra: { front: [0, 12, 40, 0, 8, 0], face: [0, 17, 30, 0, 15, 12], side: [-30, 16, 20, 0, 8, 0] },
+  spider: { front: [0, 12, 40, 0, 8, 0], face: [0, 11, 22, 0, 10, 8], side: [-34, 14, 10, 0, 6, 0] },
+  shark: { front: [0, 6, 30, 0, 2, 0], face: [0, 4, 18, 0, 2, 4], side: [-26, 8, 4, 0, 1, 0] },
+  golem: { front: [0, 10, 34, 0, 9, 0], face: [0, 14, 12, 0, 13.5, 0], side: [26, 10, 16, 0, 8, 0] },
+  seraph: { front: [0, 9, 32, 0, 8, 0], face: [0, 13.5, 8, 0, 13.3, 0], side: [26, 10, 16, 0, 8, 0] } }[kind] || {};
+if (N > 1) C.front = [0, 40, 110, 0, 6, 0];
 const [cx, cy, cz, tx, ty, tz] = C[camMode] || C.front;
 let last = performance.now(), t = 0, frames = 0, acc = 0, fps = 0;
 const skip = parseFloat(q.get('t') || '0');
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
-  boss.update(dt, t);
+  for (const b of all) b.update(dt, t);
   const v = boss.view, ry = v.ry || 0, c = Math.cos(ry), s = Math.sin(ry);
   // 카메라는 보스 앞(지역 -z)을 따라 돈다: 지역 (x, y, -z) → 세계(ry 만큼 회전)
   const W = (x, z) => [v.x + x * c - z * s, v.z - x * s - z * c];
@@ -40,10 +48,14 @@ function frame(now) {
   cam.position.set(px, cy + (v.y || 0), pz); cam.lookAt(lx, ty + (v.y || 0), lz);
   renderer.render(scene, cam);
   frames++; acc += dt; if (acc > 0.5) { fps = frames / acc; frames = 0; acc = 0; }
-  document.getElementById('hud').textContent = `${kind} · ${camMode} · ${fps.toFixed(0)} fps · ${v.act || v.a} · t=${t.toFixed(1)}`;
+  document.getElementById('hud').textContent = `${kind}×${N} · ${camMode} · ${fps.toFixed(0)} fps · ${v.act || v.a} · t=${t.toFixed(1)} · tex=${window.__tex || '?'}`;
+  window.__fps = fps;
   requestAnimationFrame(frame);
 }
-for (let i = 0; i < skip * 60; i++) { t += 1 / 60; boss.update(1 / 60, t); }
+for (let i = 0; i < skip * 60; i++) { t += 1 / 60; for (const b of all) b.update(1 / 60, t); }
+import('../../bf/bossload.js').then(() => {}).catch(() => {});
+const _info = console.info; console.info = (...a) => { if (String(a[0]).includes('boss textures')) window.__tex = 'jpeg'; _info(...a); };
+setTimeout(() => { if (!window.__tex) window.__tex = q.get('jpg') === '1' ? 'jpeg' : 'ktx2?'; }, 4000);
 requestAnimationFrame(frame);
 addEventListener('resize', () => { cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 </script></body></html>

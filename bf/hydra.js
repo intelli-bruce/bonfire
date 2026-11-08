@@ -146,11 +146,8 @@ export function createHydraBoss(ctx) {
     if (assets) return Promise.resolve(assets);
     if (loading) return loading;
     loading = (async () => {
-      const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
-      const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
-      const ld = new GLTFLoader(), dr = new DRACOLoader();
-      dr.setDecoderPath(ctx.dracoPath || 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/'); ld.setDRACOLoader(dr);
-      const g = await new Promise((res, rej) => ld.load(new URL(D.file, ctx.baseUrl).href, res, undefined, rej));
+      const { loadBossGlb } = await import('./bossload.js');   // KTX2 판 먼저, 안 되면 JPEG 판
+      const g = await loadBossGlb(ctx, D.file);
       assets = { g }; return assets;
     })().catch((e) => { loadFailed = true; console.warn('[bonfire] boss assets failed', kind, e && e.message); throw e; });
     return loading;

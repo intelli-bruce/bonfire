@@ -64,13 +64,9 @@ const feet = [];                                   // per leg { k: tibia start, 
     if (assets) return Promise.resolve(assets);
     if (loading) return loading;
     loading = (async () => {
-      const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
       const SU = await import('three/addons/utils/SkeletonUtils.js');
-      const { DRACOLoader } = await import('three/addons/loaders/DRACOLoader.js');
-      const ld = new GLTFLoader();
-      const dr = new DRACOLoader(); dr.setDecoderPath(ctx.dracoPath || 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/gltf/');
-      ld.setDRACOLoader(dr);   // spider.glb · spider_mini.glb 는 Draco 압축(tools/spider/build_spider.py)
-      const get = (f) => new Promise((res, rej) => ld.load(new URL(f, ctx.baseUrl).href, res, undefined, rej));
+      const { loadBossGlb } = await import('./bossload.js');   // spider(.ktx2).glb · spider_mini(.ktx2).glb: Draco + KTX2 판 먼저, 안 되면 JPEG 판
+      const get = (f) => loadBossGlb(ctx, f);
       const [b, m] = await Promise.all([get('spider.glb'), get('spider_mini.glb')]);
       assets = { boss: b, mini: m, SU };
       // shared projectile / web resources
